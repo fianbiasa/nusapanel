@@ -76,13 +76,17 @@ Lalu di `.env` set `AGENT_DRIVER=socket` dan `AGENT_SOCKET` ke path socket di at
 
 ## Instalasi di server (Ubuntu 24.04)
 
-**1. Buat paket rilis** (di Mac atau CI). Server tidak butuh Composer, Node.js, atau Go:
+Di server baru, sebagai root:
 
 ```bash
-installer/build-release.sh 0.1.0
+wget https://github.com/fianbiasa/nusapanel/releases/latest/download/setup.sh
 ```
 
-Hasilnya di `dist/`: `setup.sh` dan `nusapanel-0.1.0-linux-{amd64,arm64}.tar.gz` beserta file `.sha256`.
+```bash
+bash setup.sh --admin-email kamu@domainmu.com
+```
+
+`setup.sh` dari sebuah rilis otomatis mengunduh paket rilis yang sama dari GitHub dan memverifikasi checksum-nya. Versi tertentu: `--version 0.2.0`.
 
 **Syarat sebelum instalasi** (dicek `setup.sh` lewat DNS publik; instalasi berhenti kalau belum terpenuhi):
 
@@ -93,18 +97,6 @@ Hasilnya di `dist/`: `setup.sh` dan `nusapanel-0.1.0-linux-{amd64,arm64}.tar.gz`
 - Port 80 dan 2222 terbuka dari internet.
 
 Dengan syarat itu terpenuhi, `setup.sh` otomatis memasang **SSL Let's Encrypt** untuk hostname (diperpanjang otomatis oleh `certbot.timer`), sehingga panel bisa dibuka normal di `https://<hostname>:2222`, dan `http://<hostname>` diarahkan ke sana.
-
-**2. Pasang di server baru**, sebagai root:
-
-```bash
-scp dist/setup.sh dist/nusapanel-0.1.0-linux-amd64.tar.gz* root@SERVER:/root/
-```
-
-```bash
-bash setup.sh --package nusapanel-0.1.0-linux-amd64.tar.gz --admin-email kamu@domainmu.com
-```
-
-Kalau paketnya sudah di-host di HTTPS, cukup `wget https://<host>/setup.sh` lalu `bash setup.sh --release-url https://<host>/nusapanel-0.1.0-linux-amd64.tar.gz --admin-email ...` (checksum diambil dari `<url>.sha256`).
 
 Di akhir instalasi muncul alamat panel (`https://<hostname>:2222`), username, dan password admin (hanya ditampilkan sekali, tidak masuk log). `setup.sh` aman dijalankan ulang kalau berhenti di tengah. Pilihan lengkap: `bash setup.sh --help`.
 
@@ -125,3 +117,15 @@ runuser -u nusapanel -- php8.4 /usr/local/nusapanel/current/panel/artisan nusapa
 ```
 
 Password baru ditampilkan sekali, dan semua session lama akun itu dikeluarkan.
+
+## Membuat rilis
+
+Rilis dibuat otomatis oleh GitHub Actions (`.github/workflows/release.yml`) setiap kali tag versi di-push:
+
+```bash
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+Workflow menjalankan `installer/build-release.sh`, lalu menerbitkan `setup.sh`, `nusapanel-<versi>-linux-{amd64,arm64}.tar.gz`, dan file `.sha256`-nya di [Releases](https://github.com/fianbiasa/nusapanel/releases). Server tidak butuh Composer, Node.js, atau Go.
+
+Untuk uji tanpa rilis: jalankan `installer/build-release.sh 0.2.0-dev` di Mac, salin isi `dist/` ke server, lalu `bash setup.sh --package nusapanel-0.2.0-dev-linux-amd64.tar.gz`.

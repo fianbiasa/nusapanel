@@ -30,6 +30,12 @@ readonly INSTALL_LOG="/var/log/nusapanel-install.log"
 readonly ACME_DIR="/var/www/nusapanel-acme"
 readonly DKIM_SELECTOR="nusapanel"
 readonly DNS_REPORT="$CONFIG_DIR/dns-records.txt"
+readonly RELEASE_REPO="fianbiasa/nusapanel"
+
+# Stamped by installer/build-release.sh into the setup.sh published with each
+# release, so that script installs its own version by default. Empty in the
+# repository, where setup.sh installs the latest release instead.
+NUSAPANEL_VERSION=""
 
 package_file=""
 release_url=""
@@ -41,6 +47,7 @@ force=0
 public_ip=""
 public_ip_given=0
 skip_dns_check=0
+requested_version=""
 
 # Filled in while installing.
 arch=""
@@ -73,7 +80,9 @@ usage() {
     cat <<'USAGE'
 Pemakaian: bash setup.sh [opsi]
 
-Sumber paket (pilih salah satu):
+Sumber paket (default: rilis dari github.com/fianbiasa/nusapanel):
+  --version X           pasang versi tertentu, misalnya 0.2.0 (default: versi rilis
+                        setup.sh ini, atau rilis terbaru)
   --package FILE        file rilis .tar.gz yang sudah ada di server
   --release-url URL     unduh file rilis (HTTPS); checksum diambil dari URL.sha256
 
@@ -116,6 +125,7 @@ parse_args() {
             --force) force=1; shift ;;
             --public-ip) need_value "$1" "${2:-}"; public_ip="$2"; public_ip_given=1; shift 2 ;;
             --skip-dns-check) skip_dns_check=1; shift ;;
+            --version) need_value "$1" "${2:-}"; requested_version="${2#v}"; shift 2 ;;
             -h | --help) usage; exit 0 ;;
             *) usage >&2; die "opsi tidak dikenal: $1" ;;
         esac
@@ -252,6 +262,32 @@ normalize_ipv6() {
     python3 -c 'import ipaddress, sys; print(ipaddress.ip_address(sys.argv[1]).compressed)' "$1" 2>/dev/null || true
 }
 
+# Without --package or --release-url, install from GitHub releases: the
+# version given with --version, the version this setup.sh was released with,
+# or else the latest release.
+resolve_github_release() {
+    local wanted="${requested_version:-$NUSAPANEL_VERSION}"
+
+    if [[ -z "$wanted" ]]; then
+        wanted="$(latest_release_version)" ||
+            die "tidak bisa mengambil rilis terbaru dari github.com/$RELEASE_REPO; coba lagi, atau pakai --version / --package"
+    fi
+
+    local version_re='^[0-9A-Za-z][0-9A-Za-z._-]*$'
+    [[ "$wanted" =~ $version_re ]] || die "versi tidak valid: $wanted"
+
+    release_url="https://github.com/$RELEASE_REPO/releases/download/v$wanted/nusapanel-$wanted-linux-$arch.tar.gz"
+}
+
+latest_release_version() {
+    local response
+    response="$(curl -fsSL --proto '=https' --max-time 20 -H 'Accept: application/vnd.github+json' \
+        "https://api.github.com/repos/$RELEASE_REPO/releases/latest")" || return 1
+
+    RELEASE_JSON="$response" python3 -c \
+        'import json, os; print(json.loads(os.environ["RELEASE_JSON"])["tag_name"].lstrip("v"))'
+}
+
 cert_expiry() {
     openssl x509 -enddate -noout -in "$1" | cut -d= -f2
 }
@@ -358,9 +394,12 @@ preflight() {
         die "pilih salah satu: --package atau --release-url"
     fi
 
+    if [[ -n "$requested_version" && (-n "$package_file" || -n "$release_url") ]]; then
+        die "--version tidak bisa digabung dengan --package atau --release-url"
+    fi
+
     if [[ -z "$package_file" && -z "$release_url" ]]; then
-        usage >&2
-        die "sumber paket belum diisi: pakai --package atau --release-url"
+        resolve_github_release
     fi
 
     if [[ -n "$package_file" ]]; then

@@ -95,8 +95,19 @@ echo "==> Compiling the agent"
     make linux VERSION="$VERSION" >/dev/null
 )
 
+# The published setup.sh installs exactly this version by default.
+stamp_setup() {
+    sed -e "s/^NUSAPANEL_VERSION=\"\"\$/NUSAPANEL_VERSION=\"$VERSION\"/" "$SRC/installer/setup.sh" >"$1"
+    chmod 0755 "$1"
+
+    if ! grep -q "^NUSAPANEL_VERSION=\"$VERSION\"\$" "$1"; then
+        echo "Could not stamp the version into setup.sh" >&2
+        exit 1
+    fi
+}
+
 mkdir -p "$DIST"
-cp "$SRC/installer/setup.sh" "$DIST/setup.sh"
+stamp_setup "$DIST/setup.sh"
 
 for arch in $ARCHES; do
     name="nusapanel-$VERSION-linux-$arch"
@@ -122,7 +133,7 @@ for arch in $ARCHES; do
     cp "$SRC/installer/files/nginx-panel.conf" "$SRC/installer/files/nginx-hostname.conf" \
         "$SRC/installer/files/php-fpm-panel.conf" \
         "$SRC/installer/files/logrotate.conf" "$stage/config/"
-    cp "$SRC/installer/setup.sh" "$stage/setup.sh"
+    stamp_setup "$stage/setup.sh"
     printf '%s\n' "$VERSION" >"$stage/VERSION"
 
     make_tarball "$WORK" "$name" "$DIST/$name.tar.gz"

@@ -31,8 +31,31 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Setup pnpm
+        run: npm install --global pnpm@12.16.1
+
       - name: Setup Application
         run: composer setup
 
       - name: Run CI Checks
         run: composer ci:check
+
+  agent:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: agent/go.mod
+          cache-dependency-path: agent/go.sum
+
+      # go vet for macOS and Linux, tests with the race detector, gofmt.
+      - name: Run agent checks
+        working-directory: agent
+        run: make check
