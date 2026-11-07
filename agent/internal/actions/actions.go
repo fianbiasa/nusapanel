@@ -1,0 +1,43 @@
+// Package actions registers every method the agent exposes. Each method
+// validates its own params; nothing here runs arbitrary commands.
+package actions
+
+import (
+	"context"
+	"encoding/json"
+
+	"nusapanel/agent/internal/rpc"
+	"nusapanel/agent/internal/sysinfo"
+	"nusapanel/agent/internal/version"
+)
+
+// Register adds all agent methods to registry.
+func Register(registry *rpc.Registry) {
+	registry.Register("agent.ping", rpc.Method{Handler: ping})
+	registry.Register("system.info", rpc.Method{Handler: systemInfo})
+}
+
+// ping lets the panel and the installer check that the agent is up.
+func ping(_ context.Context, params json.RawMessage) (any, error) {
+	if err := rpc.DecodeParams(params, &struct{}{}); err != nil {
+		return nil, err
+	}
+
+	return map[string]any{"pong": true, "version": version.Version}, nil
+}
+
+// systemInfo reports host, CPU, memory, disk and uptime for the dashboard.
+func systemInfo(_ context.Context, params json.RawMessage) (any, error) {
+	if err := rpc.DecodeParams(params, &struct{}{}); err != nil {
+		return nil, err
+	}
+
+	info, err := sysinfo.Collect()
+	if err != nil {
+		return nil, rpc.Errorf(rpc.CodeActionFailed, "could not read system information: %v", err)
+	}
+
+	info.AgentVersion = version.Version
+
+	return info, nil
+}

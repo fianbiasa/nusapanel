@@ -1,0 +1,23 @@
+[Unit]
+Description=nusapanel agent (nusad)
+Documentation=file:///usr/local/nusapanel/docs/04-agent-dan-server.md
+After=network.target
+
+[Service]
+Type=simple
+# nusad must run as root: it is the only component allowed to change the
+# system. Only root and the panel user (nusapanel) may call its socket.
+ExecStart=/usr/local/nusapanel/bin/nusad \
+    --socket /run/nusapanel/agent.sock \
+    --allow-user nusapanel \
+    --socket-group nusapanel
+# /run/nusapanel is world-traversable; the socket itself is 0660 root:nusapanel.
+RuntimeDirectory=nusapanel
+RuntimeDirectoryMode=0755
+Restart=on-failure
+RestartSec=2
+# Give in-flight calls time to finish before systemd kills the agent.
+TimeoutStopSec=15min
+
+[Install]
+WantedBy=multi-user.target
