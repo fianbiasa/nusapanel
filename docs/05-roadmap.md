@@ -26,7 +26,7 @@ nusapanel/
 ├── app/, resources/, routes/, ...   panel Laravel + Inertia + React
 ├── agent/       Go (nusad, nusactl)
 ├── templates/   template config
-├── installer/   install.sh
+├── installer/   setup.sh (installer server), build-release.sh (paket rilis)
 ├── whmcs/       modul WHMCS (P4)
 └── docs/
 ```
@@ -37,7 +37,7 @@ Pekerjaan:
 - VM pengembangan di Mac (OrbStack atau Multipass) dengan Ubuntu 24.04 untuk agent, plus snapshot "bersih" untuk menguji installer berulang kali.
 - Agent: server JSON-RPC di Unix socket, cek `SO_PEERCRED`, kunci per akun, aksi pertama `system.info`.
 - Panel: Laravel + Inertia + React (dari starter kit resmi), login username/email + 2FA, peran admin/reseller/user, tabel `tasks` & `audit_logs`, klien agent (driver `fake` di Mac, `socket` di server).
-- Installer: pasang dependensi dasar, buat user `nusapanel`, pasang panel & agent, buat admin pertama.
+- Installer: `setup.sh` mewajibkan A record & PTR hostname yang benar, lalu memasang Nginx, MariaDB, PHP 8.4, Postfix kirim-saja + DKIM (email panel), SSL Let's Encrypt untuk hostname, user `nusapanel`, panel & agent dari paket rilis (`build-release.sh`), dan membuat admin pertama.
 - CI: test Go & PHP; test integrasi agent di VM.
 
 **Selesai kalau:** install di VM bersih → login admin → dashboard menampilkan info sistem dari agent.

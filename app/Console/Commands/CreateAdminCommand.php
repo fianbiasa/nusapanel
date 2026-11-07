@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Rules\ValidUsername;
 use App\Services\AuditLogger;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
@@ -21,7 +22,7 @@ class CreateAdminCommand extends Command
         {username : Login name, also used as the Linux user name}
         {email : Contact email address}
         {--name= : Display name (defaults to the username)}
-        {--password= : Password; a strong one is generated when omitted}';
+        {--password= : Password; falls back to $NUSAPANEL_ADMIN_PASSWORD, then a generated one}';
 
     /**
      * @var string
@@ -32,8 +33,9 @@ class CreateAdminCommand extends Command
     {
         $username = (string) $this->argument('username');
         $email = Str::lower((string) $this->argument('email'));
-        $generated = $this->option('password') === null;
-        $password = $generated ? Str::password(24) : (string) $this->option('password');
+        $password = $this->option('password') ?? $this->passwordFromEnvironment();
+        $generated = $password === null;
+        $password = $generated ? Str::password(24) : (string) $password;
 
         $validator = Validator::make(
             ['username' => $username, 'email' => $email, 'password' => $password],
@@ -59,13 +61,17 @@ class CreateAdminCommand extends Command
             'password' => $password,
         ]);
 
-        $admin->forceFill([
-            'role' => Role::Admin,
-            'status' => AccountStatus::Active,
-            'email_verified_at' => now(),
-        ])->save();
+        // One transaction, so a failed audit write never leaves an admin behind
+        // that a re-run of the installer would then trip over.
+        DB::transaction(function () use ($admin, $audit): void {
+            $admin->forceFill([
+                'role' => Role::Admin,
+                'status' => AccountStatus::Active,
+                'email_verified_at' => now(),
+            ])->save();
 
-        $audit->record('account.created', $admin, ['role' => Role::Admin->value, 'via' => 'cli']);
+            $audit->record('account.created', $admin, ['role' => Role::Admin->value, 'via' => 'cli']);
+        });
 
         $this->components->info("Admin account [{$admin->username}] created.");
 
@@ -74,5 +80,16 @@ class CreateAdminCommand extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * The installer passes the first password through the environment so it
+     * never appears in the process list, unlike a command-line option.
+     */
+    private function passwordFromEnvironment(): ?string
+    {
+        $password = getenv('NUSAPANEL_ADMIN_PASSWORD');
+
+        return is_string($password) && $password !== '' ? $password : null;
     }
 }

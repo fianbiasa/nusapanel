@@ -36,6 +36,26 @@ class CreateAdminCommandTest extends TestCase
         ]);
     }
 
+    public function test_it_reads_the_password_from_the_environment()
+    {
+        putenv('NUSAPANEL_ADMIN_PASSWORD=env-Strong-pass-456');
+
+        try {
+            $this->artisan('nusapanel:create-admin', [
+                'username' => 'fian',
+                'email' => 'fian@example.com',
+            ])
+                ->doesntExpectOutputToContain('Generated password')
+                ->assertSuccessful();
+        } finally {
+            putenv('NUSAPANEL_ADMIN_PASSWORD');
+        }
+
+        $admin = User::query()->where('username', 'fian')->sole();
+
+        $this->assertTrue(Hash::check('env-Strong-pass-456', $admin->password));
+    }
+
     public function test_it_generates_a_password_when_none_is_given()
     {
         $this->artisan('nusapanel:create-admin', [

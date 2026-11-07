@@ -230,12 +230,25 @@ Konvensi nama: `namespace.aksi`. "Sebagai user" = agent turun ke UID user sebelu
 ├── tmp/                                tmp & session PHP pribadi
 └── .trash/                             tempat sampah file manager
 
-/usr/local/nusapanel/
-├── panel/                              aplikasi Laravel
-├── bin/nusad, bin/nusactl
+/usr/local/nusapanel/                   milik root, tidak bisa ditulis panel
+├── releases/<versi>/                   satu folder per rilis (isi paket)
+│   ├── panel/                          aplikasi Laravel (vendor & aset sudah jadi)
+│   │   ├── .env -> /etc/nusapanel/panel.env
+│   │   └── storage -> /var/lib/nusapanel/storage
+│   ├── bin/nusad, bin/nusactl
+│   ├── systemd/, config/               unit systemd & template config panel
+│   └── VERSION
+├── current -> releases/<versi>         rilis aktif; update = ganti symlink ini
+├── bin -> current/bin
 └── templates/                          template default (ikut ter-update)
 
-/etc/nusapanel/
+/usr/local/bin/nusactl -> /usr/local/nusapanel/bin/nusactl
+
+/etc/nusapanel/                         0750 root:nusapanel
+├── panel.env                           0640 root:nusapanel (APP_KEY, password DB panel)
+├── ssl/panel.{crt,key}                 symlink ke sertifikat Let's Encrypt hostname (self-signed kalau gagal)
+├── dns-records.txt                     rekaman DNS (A, PTR, SPF, DKIM, DMARC) + statusnya
+├── installed, admin-created            penanda instalasi (dipakai setup.sh saat diulang)
 ├── templates/custom/                   override template (tidak tertimpa update)
 ├── php-fpm/<versi>/<user>.conf         pool PHP-FPM per user
 └── ssl/<domain>/{cert,key,chain}.pem   0600 root
@@ -243,30 +256,35 @@ Konvensi nama: `namespace.aksi`. "Sebagai user" = agent turun ke UID user sebelu
 /etc/nginx/nusapanel/<user>/<domain>.conf
 /etc/apache2/nusapanel/<user>/<domain>.conf
 
-/var/log/nusapanel/                     log panel & agent
+/var/log/nusapanel/                     log nginx panel (access/error)
 /var/log/nusapanel/domains/<domain>.{access,error}.log
-/var/lib/nusapanel/                     state agent, backup admin
+/var/log/nusapanel-install.log          log setup.sh (0600, tanpa password)
+/etc/letsencrypt/live/<hostname>/       sertifikat Let's Encrypt hostname (certbot)
+/var/www/nusapanel-acme/                webroot verifikasi Let's Encrypt (port 80)
+/etc/opendkim/keys/<hostname>/          kunci DKIM email panel (0600 opendkim)
+/var/lib/nusapanel/                     home user nusapanel; state agent, backup admin
+/var/lib/nusapanel/storage/             storage Laravel (log, cache view), dipakai semua rilis
 /run/nusapanel/agent.sock
 ```
 
 ## 4.5 Port
 
-| Port            | Layanan        | Terbuka untuk                   |
-| --------------- | -------------- | ------------------------------- |
-| 22              | SSH/SFTP       | Publik (port bisa diganti)      |
-| 21, 35000–35999 | FTP + passive  | Publik                          |
-| 25, 465, 587    | SMTP           | Publik                          |
-| 110, 995        | POP3           | Publik                          |
-| 143, 993        | IMAP           | Publik                          |
-| 4190            | ManageSieve    | Publik (opsional)               |
-| 53 tcp/udp      | DNS            | Publik                          |
-| 80, 443         | Web            | Publik                          |
-| 2222            | Panel          | Publik (bisa dibatasi per IP)   |
-| 8080            | Apache backend | 127.0.0.1                       |
-| 3306            | MariaDB        | Lokal (remote kalau diaktifkan) |
-| 6379            | Redis          | Lokal                           |
-| 8081            | API PowerDNS   | 127.0.0.1                       |
-| 11332–11334     | Rspamd         | 127.0.0.1                       |
+| Port            | Layanan            | Terbuka untuk                                                                    |
+| --------------- | ------------------ | -------------------------------------------------------------------------------- |
+| 22              | SSH/SFTP           | Publik (port bisa diganti)                                                       |
+| 21, 35000–35999 | FTP + passive      | Publik                                                                           |
+| 25, 465, 587    | SMTP               | Publik mulai P2; sampai itu Postfix hanya mendengar di 127.0.0.1:25 (kirim-saja) |
+| 110, 995        | POP3               | Publik                                                                           |
+| 143, 993        | IMAP               | Publik                                                                           |
+| 4190            | ManageSieve        | Publik (opsional)                                                                |
+| 53 tcp/udp      | DNS                | Publik                                                                           |
+| 80, 443         | Web                | Publik                                                                           |
+| 2222            | Panel              | Publik (bisa dibatasi per IP)                                                    |
+| 8080            | Apache backend     | 127.0.0.1                                                                        |
+| 3306            | MariaDB            | Lokal (remote kalau diaktifkan)                                                  |
+| 6379            | Redis (Rspamd, P2) | Lokal, wajib berpassword/socket terkunci                                         |
+| 8081            | API PowerDNS       | 127.0.0.1                                                                        |
+| 11332–11334     | Rspamd             | 127.0.0.1                                                                        |
 
 ## 4.6 Service systemd milik panel
 
@@ -274,6 +292,6 @@ Konvensi nama: `namespace.aksi`. "Sebagai user" = agent turun ke UID user sebelu
 | ---------------------------------- | ---------------------------------------------------- |
 | `nusad.service`                    | Agent                                                |
 | `nusapanel-queue.service`          | Queue worker Laravel                                 |
-| `nusapanel-scheduler.service`      | Scheduler Laravel                                    |
+| `nusapanel-scheduler.timer`        | Menjalankan `schedule:run` Laravel tiap menit        |
 | `nusa-php<versi>@<user>.service`   | PHP-FPM per user (contoh: `nusa-php84@budi.service`) |
 | `nusa.slice` → `nusa-<user>.slice` | Batas resource per user                              |

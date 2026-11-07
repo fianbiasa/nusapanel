@@ -73,3 +73,55 @@ agent/bin/nusad --socket "$PWD/storage/app/nusad.sock" --allow-user "$(whoami)" 
 ```
 
 Lalu di `.env` set `AGENT_DRIVER=socket` dan `AGENT_SOCKET` ke path socket di atas. Kembalikan ke `AGENT_DRIVER=fake` setelah selesai. Cek cepat tanpa panel: `agent/bin/nusactl -socket storage/app/nusad.sock ping`.
+
+## Instalasi di server (Ubuntu 24.04)
+
+**1. Buat paket rilis** (di Mac atau CI). Server tidak butuh Composer, Node.js, atau Go:
+
+```bash
+installer/build-release.sh 0.1.0
+```
+
+Hasilnya di `dist/`: `setup.sh` dan `nusapanel-0.1.0-linux-{amd64,arm64}.tar.gz` beserta file `.sha256`.
+
+**Syarat sebelum instalasi** (dicek `setup.sh` lewat DNS publik; instalasi berhenti kalau belum terpenuhi):
+
+- Ubuntu 24.04 LTS yang masih bersih, akses root.
+- Hostname berupa FQDN, misalnya `server1.domainmu.com`.
+- **A record** hostname → IP publik server (kalau memakai Cloudflare: _DNS only_, bukan proxy). Tidak boleh ada AAAA record yang mengarah ke server lain.
+- **PTR (reverse DNS)** IP publik → hostname, diatur lewat provider VPS.
+- Port 80 dan 2222 terbuka dari internet.
+
+Dengan syarat itu terpenuhi, `setup.sh` otomatis memasang **SSL Let's Encrypt** untuk hostname (diperpanjang otomatis oleh `certbot.timer`), sehingga panel bisa dibuka normal di `https://<hostname>:2222`, dan `http://<hostname>` diarahkan ke sana.
+
+**2. Pasang di server baru**, sebagai root:
+
+```bash
+scp dist/setup.sh dist/nusapanel-0.1.0-linux-amd64.tar.gz* root@SERVER:/root/
+```
+
+```bash
+bash setup.sh --package nusapanel-0.1.0-linux-amd64.tar.gz --admin-email kamu@domainmu.com
+```
+
+Kalau paketnya sudah di-host di HTTPS, cukup `wget https://<host>/setup.sh` lalu `bash setup.sh --release-url https://<host>/nusapanel-0.1.0-linux-amd64.tar.gz --admin-email ...` (checksum diambil dari `<url>.sha256`).
+
+Di akhir instalasi muncul alamat panel (`https://<hostname>:2222`), username, dan password admin (hanya ditampilkan sekali, tidak masuk log). `setup.sh` aman dijalankan ulang kalau berhenti di tengah. Pilihan lengkap: `bash setup.sh --help`.
+
+**Email panel** (verifikasi, reset password) dikirim lewat Postfix kirim-saja (hanya mendengar di `127.0.0.1`) dan ditandatangani DKIM oleh OpenDKIM. Di akhir instalasi, `setup.sh` menampilkan rekaman DNS yang perlu dipasang beserta statusnya (✔/✘), dan menyimpannya di `/etc/nusapanel/dns-records.txt`:
+
+| Rekaman | Nama                                  | Nilai                                               |
+| ------- | ------------------------------------- | --------------------------------------------------- |
+| SPF     | TXT `<hostname>`                      | `v=spf1 a ~all`                                     |
+| DKIM    | TXT `nusapanel._domainkey.<hostname>` | `v=DKIM1; k=rsa; p=…` (kunci dibuat saat instalasi) |
+| DMARC   | TXT `_dmarc.<hostname>`               | `v=DMARC1; p=none; adkim=r; aspf=r`                 |
+
+Jalankan `setup.sh` lagi kapan saja untuk mengecek ulang statusnya.
+
+Lupa password admin? Di server, sebagai root:
+
+```bash
+runuser -u nusapanel -- php8.4 /usr/local/nusapanel/current/panel/artisan nusapanel:reset-password admin
+```
+
+Password baru ditampilkan sekali, dan semua session lama akun itu dikeluarkan.

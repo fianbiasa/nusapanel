@@ -9,7 +9,7 @@
                          │  • login, 2FA, otorisasi, cek limit paket     │
                          │  • setiap perubahan = 1 task di database      │
                          └───────────────┬──────────────────────────────┘
-                                         │ queue worker (Redis)
+                                         │ queue worker (antrean di MariaDB)
                                          ▼
                          /run/nusapanel/agent.sock  (JSON-RPC, cek UID pemanggil)
                                          │
@@ -30,7 +30,7 @@
 | Komponen      | Teknologi                                                                                | Jalan sebagai | Tugas                                                         |
 | ------------- | ---------------------------------------------------------------------------------------- | ------------- | ------------------------------------------------------------- |
 | Panel web     | Laravel + Inertia + React (TypeScript, Tailwind, shadcn/ui), login lewat Laravel Fortify | `nusapanel`   | UI, login, otorisasi, validasi, cek limit paket, membuat task |
-| Queue worker  | Laravel queue (Redis)                                                                    | `nusapanel`   | Mengambil task dan memanggil agent                            |
+| Queue worker  | Laravel queue (driver database, MariaDB)                                                 | `nusapanel`   | Mengambil task dan memanggil agent                            |
 | Scheduler     | Laravel scheduler                                                                        | `nusapanel`   | Jadwal backup, perpanjang SSL, kumpulkan statistik            |
 | Agent `nusad` | Go, satu binary                                                                          | root          | **Satu-satunya** komponen yang mengubah sistem                |
 | CLI `nusactl` | Go                                                                                       | root          | Operasi darurat & otomasi lewat terminal                      |
@@ -72,24 +72,25 @@ UI menampilkan progres task lewat polling Inertia dulu; websocket (Laravel Rever
 
 ## 2.6 Stack layanan
 
-| Fungsi               | Software                               | Catatan                                                                         |
-| -------------------- | -------------------------------------- | ------------------------------------------------------------------------------- |
-| Web (depan)          | Nginx                                  | Port 80/443, terminasi SSL, file statis                                         |
-| Web (belakang)       | Apache 2.4 (event MPM)                 | `127.0.0.1:8080`, supaya `.htaccess` jalan                                      |
-| PHP                  | PHP-FPM, banyak versi                  | Satu proses PHP-FPM per user per versi, jalan sebagai user itu, `pm = ondemand` |
-| Database             | MariaDB LTS                            | + phpMyAdmin                                                                    |
-| DNS                  | PowerDNS Authoritative (backend MySQL) | Dikelola lewat API PowerDNS; siap DNSSEC & cluster                              |
-| Email (kirim/terima) | Postfix                                | Domain/akun/alias dibaca dari view SQL                                          |
-| Email (IMAP/POP3)    | Dovecot                                | + LMTP, SASL, Sieve, quota                                                      |
-| Antispam & DKIM      | Rspamd + Redis                         | Sekaligus pembatas jumlah kirim                                                 |
-| Webmail              | Roundcube                              |                                                                                 |
-| FTP                  | Pure-FTPd (auth MySQL)                 | TLS wajib, passive port 35000–35999                                             |
-| SSL                  | lego (library Go di dalam agent)       | HTTP-01 & DNS-01                                                                |
-| Firewall             | nftables                               | Set IP terblokir dengan timeout                                                 |
-| Statistik situs      | GoAccess                               |                                                                                 |
-| Backup remote        | rclone                                 | FTP, SFTP, S3, Google Drive, dll.                                               |
-| Cache & queue panel  | Redis                                  |                                                                                 |
-| Batas resource       | systemd slice (cgroups v2)             | CPU, RAM, jumlah proses, IO per user                                            |
+| Fungsi                      | Software                               | Catatan                                                                                                                            |
+| --------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Web (depan)                 | Nginx                                  | Port 80/443, terminasi SSL, file statis                                                                                            |
+| Web (belakang)              | Apache 2.4 (event MPM)                 | `127.0.0.1:8080`, supaya `.htaccess` jalan                                                                                         |
+| PHP                         | PHP-FPM, banyak versi                  | Satu proses PHP-FPM per user per versi, jalan sebagai user itu, `pm = ondemand`                                                    |
+| Database                    | MariaDB LTS                            | + phpMyAdmin                                                                                                                       |
+| DNS                         | PowerDNS Authoritative (backend MySQL) | Dikelola lewat API PowerDNS; siap DNSSEC & cluster                                                                                 |
+| Email (kirim/terima)        | Postfix                                | Sejak P0: kirim-saja untuk email panel (hanya 127.0.0.1, IPv4). P2: lengkap untuk customer, domain/akun/alias dibaca dari view SQL |
+| Email (IMAP/POP3)           | Dovecot                                | + LMTP, SASL, Sieve, quota                                                                                                         |
+| Antispam & DKIM             | Rspamd + Redis                         | P2, sekaligus pembatas jumlah kirim. Sebelum itu, DKIM email panel ditangani OpenDKIM (selector `nusapanel`)                       |
+| SSL hostname/panel          | certbot (Let's Encrypt)                | Dipasang `setup.sh` lewat webroot di port 80, diperpanjang `certbot.timer`. SSL domain customer (P1) lewat agent (lego)            |
+| Webmail                     | Roundcube                              |                                                                                                                                    |
+| FTP                         | Pure-FTPd (auth MySQL)                 | TLS wajib, passive port 35000–35999                                                                                                |
+| SSL                         | lego (library Go di dalam agent)       | HTTP-01 & DNS-01                                                                                                                   |
+| Firewall                    | nftables                               | Set IP terblokir dengan timeout                                                                                                    |
+| Statistik situs             | GoAccess                               |                                                                                                                                    |
+| Backup remote               | rclone                                 | FTP, SFTP, S3, Google Drive, dll.                                                                                                  |
+| Cache, queue, session panel | MariaDB (driver database)              | Bukan Redis: PHP customer di server yang sama bisa menyambung ke Redis lokal tanpa password dan membaca session admin              |
+| Batas resource              | systemd slice (cgroups v2)             | CPU, RAM, jumlah proses, IO per user                                                                                               |
 
 ### Mode web server
 
@@ -120,6 +121,7 @@ Mode lain (Nginx saja, OpenLiteSpeed) bisa ditambah di P6, karena semua config d
 - Satu aplikasi Laravel + Inertia + React. UI dibangun sendiri di atas starter kit resmi Laravel, jadi semua komponen (shadcn/ui) adalah kode kita, bukan framework admin siap pakai.
 - Area dipisah lewat middleware peran: `/admin/*` hanya admin, `/reseller/*` admin & reseller, sisanya halaman level user. Menu sidebar menyesuaikan peran.
 - Login satu pintu (username atau email) dengan 2FA dan passkey dari Laravel Fortify. Pendaftaran publik dimatikan; akun hanya dibuat admin/reseller.
+- Verifikasi email hanya diwajibkan kalau panel benar-benar bisa mengirim email (mailer bukan `log`). Selama belum ada SMTP/server email, ganti email tidak mengunci akun; email baru tetap tercatat "belum terverifikasi" dan akan diminta verifikasi begitu email aktif.
 - Port 2222 (sama seperti DirectAdmin, familiar bagi pelanggan lama) dengan SSL milik hostname server.
 - **Props Inertia terlihat di source halaman** (atribut `data-page`), begitu juga bundle JavaScript. Jadi tidak ada data rahasia yang boleh dikirim sebagai props, dan semua izin dicek di server.
 - Lapisan kode:
@@ -131,17 +133,17 @@ Mode lain (Nginx saja, OpenLiteSpeed) bisa ditambah di P6, karena semua config d
 
 ## 2.9 Ringkasan kontrol keamanan
 
-| Ancaman                | Kontrol                                                                                                               |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Injeksi perintah       | Agent menjalankan program tanpa shell, argumen terpisah; tidak ada aksi perintah bebas                                |
-| Injeksi config         | Nilai yang masuk template divalidasi ketat (tanpa newline, karakter kontrol, kutip); kunci php.ini dari daftar putih  |
-| Path traversal         | Path dibersihkan, harus di bawah home user, operasi file dijalankan sebagai UID user                                  |
-| Membaca file user lain | Home `0710` + grup `nusa-access`, PHP-FPM per user, `open_basedir`, proteksi symlink                                  |
-| Pengambilalihan domain | Domain tidak bisa ditambahkan kalau domain itu, atau domain induknya, milik akun lain                                 |
-| Akun panel dibobol     | 2FA, rate limit login, brute force monitor, riwayat login, notifikasi login dari IP baru                              |
-| Panel dibobol          | PHP panel tanpa fungsi exec; agent memeriksa ulang kepemilikan resource                                               |
-| Penyalahgunaan email   | Batas kirim per akun per hari (Rspamd), antrean mail dipantau                                                         |
-| Secret bocor           | Password DB customer tidak disimpan; kredensial backup remote dienkripsi; private key SSL hanya di disk (`0600 root`) |
+| Ancaman                | Kontrol                                                                                                                                                                                                                                                                     |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Injeksi perintah       | Agent menjalankan program tanpa shell, argumen terpisah; tidak ada aksi perintah bebas                                                                                                                                                                                      |
+| Injeksi config         | Nilai yang masuk template divalidasi ketat (tanpa newline, karakter kontrol, kutip); kunci php.ini dari daftar putih                                                                                                                                                        |
+| Path traversal         | Path dibersihkan, harus di bawah home user, operasi file dijalankan sebagai UID user                                                                                                                                                                                        |
+| Membaca file user lain | Home `0710` + grup `nusa-access`, PHP-FPM per user, `open_basedir`, proteksi symlink                                                                                                                                                                                        |
+| Pengambilalihan domain | Domain tidak bisa ditambahkan kalau domain itu, atau domain induknya, milik akun lain                                                                                                                                                                                       |
+| Akun panel dibobol     | 2FA, rate limit login, brute force monitor, riwayat login, notifikasi login dari IP baru                                                                                                                                                                                    |
+| Panel dibobol          | Batas utamanya: panel jalan sebagai user biasa dan agent hanya menerima aksi terdaftar yang memeriksa ulang kepemilikan resource. Fungsi exec/putenv/mail dimatikan di PHP panel hanya sebagai lapisan tambahan. Cache config (berisi APP_KEY) hanya bisa dibaca user panel |
+| Penyalahgunaan email   | Batas kirim per akun per hari (Rspamd), antrean mail dipantau                                                                                                                                                                                                               |
+| Secret bocor           | Password DB customer tidak disimpan; kredensial backup remote dienkripsi; private key SSL hanya di disk (`0600 root`)                                                                                                                                                       |
 
 ## 2.10 Kompatibilitas DirectAdmin
 

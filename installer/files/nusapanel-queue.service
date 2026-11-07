@@ -1,0 +1,20 @@
+[Unit]
+Description=nusapanel queue worker (sends tasks to the agent)
+After=network.target mariadb.service nusad.service
+Wants=nusad.service
+
+[Service]
+Type=simple
+User=nusapanel
+Group=nusapanel
+WorkingDirectory=/usr/local/nusapanel/current/panel
+# Restarts hourly so it always runs the code of the current release.
+ExecStart=/usr/bin/php8.4 artisan queue:work --sleep=1 --max-time=3600
+Restart=always
+RestartSec=3
+# Let a running task finish before stopping.
+KillSignal=SIGTERM
+TimeoutStopSec=15min
+
+[Install]
+WantedBy=multi-user.target
