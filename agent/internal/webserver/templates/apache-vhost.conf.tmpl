@@ -1,0 +1,17 @@
+# {{.Domain}} of account {{.User}}. Written by nusad; changes are overwritten.
+<VirtualHost {{.Backend}}>
+    ServerName {{.Domain}}
+    ServerAlias www.{{.Domain}}
+    DocumentRoot {{.DocumentRoot}}
+
+    # No access log: Nginx in front already logs every request.
+    ErrorLog {{.LogDir}}/{{.Domain}}.apache-error.log
+
+    DirectoryIndex index.php index.html index.htm
+
+    # PHP runs in the account's own pool. Every pool has its own FastCGI
+    # worker name, so Apache never shares a connection between two pools.
+    <FilesMatch "\.(php|phtml)$">
+        SetHandler "proxy:unix:{{.Socket}}|fcgi://{{.PoolName}}"
+    </FilesMatch>
+</VirtualHost>

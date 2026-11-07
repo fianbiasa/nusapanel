@@ -15,16 +15,22 @@ agent/
 │   ├── client/         ✅ klien socket (dipakai nusactl dan test)
 │   ├── actions/        ✅ daftar method; menyusul satu paket per namespace: account, web, php, ssl, dns, db, mail, fs, ...
 │   ├── sysinfo/        ✅ data untuk system.info (Linux; Mac khusus pengembangan)
-│   ├── validate/       ✅ username & domain; menyusul path dan nilai config
+│   ├── validate/       ✅ username, domain, versi PHP; menyusul path dan nilai config
 │   ├── version/        ✅ versi, diisi saat build
-│   ├── render/         render template, tulis atomik, validasi, rollback
-│   ├── runner/         jalankan program tanpa shell, opsi turun ke UID user
+│   ├── runner/         ✅ jalankan program tanpa shell; menyusul: opsi turun ke UID user
+│   ├── sysuser/        ✅ user/grup Linux, folder home & domain tanpa mengikuti symlink
+│   ├── webserver/      ✅ vhost Nginx & Apache, pool PHP-FPM: render template, tulis atomik, validasi, reload, rollback
 │   ├── daemons/        brute force monitor, watchdog
-│   └── services/       wrapper systemd, nginx, apache, postfix, API PowerDNS, MariaDB
+│   └── services/       wrapper postfix, API PowerDNS, MariaDB, ...
 ├── packaging/
 │   └── nusad.service   ✅ unit systemd
-├── templates/          template config default
 └── Makefile            ✅ build (Mac), linux (amd64/arm64 static), test, vet, check
+```
+
+Template config (vhost, pool PHP-FPM, unit systemd, halaman default & suspended) ada di `internal/webserver/templates/` dan ditanam di binary `nusad`, jadi tidak bisa diubah tanpa root. Override template per server (`/etc/nusapanel/templates/custom/`) menyusul di P3.
+
+```
+
 ```
 
 ### Menjalankan nusad
@@ -75,32 +81,32 @@ Konvensi nama: `namespace.aksi`. "Sebagai user" = agent turun ke UID user sebelu
 
 ### account
 
-| Aksi                            | Fungsi                                                                                                                                                             | Fase    |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- |
-| `account.create`                | Buat user & grup Linux (penanda GECOS `nusapanel`), home `0710 <user>:nusa-access`, `domains`/`tmp`/`backups`/`.trash`; quota & slice systemd menyusul             | P1 ✅   |
-| `account.apply_limits`          | Quota disk/inode; batas CPU, RAM, proses, IO                                                                                                                       | P1 / P3 |
-| `account.suspend` / `unsuspend` | ✅ kunci password + akun kedaluwarsa (blok SSH-key/SFTP); menyusul: vhost → halaman suspended, hentikan PHP-FPM & cron. Mail & FTP otomatis ditolak lewat view SQL | P1      |
-| `account.delete`                | ✅ hentikan proses, hapus home & user Linux (akun sistem ditolak); menyusul: hapus config, database, mail, dst.                                                    | P1      |
-| `account.set_password`          | Password Linux (untuk SFTP/SSH)                                                                                                                                    | P1      |
-| `account.rename`                | Ganti username                                                                                                                                                     | P6      |
+| Aksi                            | Fungsi                                                                                                                                                                                                      | Fase    |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| `account.create`                | Buat user & grup Linux (penanda GECOS `nusapanel`), home `0710 <user>:nusa-access`, `domains`/`tmp`/`backups`/`.trash`; quota & slice systemd menyusul                                                      | P1 ✅   |
+| `account.apply_limits`          | Quota disk/inode; batas CPU, RAM, proses, IO                                                                                                                                                                | P1 / P3 |
+| `account.suspend` / `unsuspend` | ✅ kunci password + akun kedaluwarsa (blok SSH-key/SFTP), semua website menampilkan halaman 503, PHP-FPM dihentikan (tetap mati setelah reboot); menyusul: cron. Mail & FTP otomatis ditolak lewat view SQL | P1      |
+| `account.delete`                | ✅ matikan & hapus pool PHP-FPM, hapus vhost & log domain, hentikan proses, hapus home & user Linux (akun sistem ditolak); menyusul: database, mail, dst.                                                   | P1      |
+| `account.set_password`          | Password Linux (untuk SFTP/SSH)                                                                                                                                                                             | P1      |
+| `account.rename`                | Ganti username                                                                                                                                                                                              | P6      |
 
 ### web
 
-| Aksi                | Fungsi                                                                                                                                                              | Fase |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| `web.apply_domain`  | Render ulang semua config satu domain dari state lengkap: vhost Nginx & Apache, subdomain, pointer, redirect, www/HTTPS, proteksi folder, error page, hotlink, MIME | P1   |
-| `web.remove_domain` | Hapus config domain (file di `public_html` tidak dihapus kecuali diminta)                                                                                           | P1   |
-| `web.rebuild_all`   | Render ulang semua domain                                                                                                                                           | P1   |
-| `web.reload`        | Validasi lalu reload Nginx & Apache                                                                                                                                 | P1   |
+| Aksi                | Fungsi                                                                                                                                                                                                                                                                                                                      | Fase |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| `web.apply_domain`  | Render ulang semua config satu domain dari state lengkap. ✅ `{username, domain, php_version}`: folder `domains/<domain>/public_html` (+ `index.html` awal), vhost Nginx (port 80, `www.` ikut) → Apache → pool PHP-FPM akun itu. Menyusul: subdomain, pointer, redirect, HTTPS, proteksi folder, error page, hotlink, MIME | P1   |
+| `web.remove_domain` | ✅ Hapus vhost Nginx & Apache dan log domain itu (supaya pemilik domain berikutnya tidak mewarisi log lama); file di `domains/<domain>` tetap ada                                                                                                                                                                           | P1   |
+| `web.rebuild_all`   | Render ulang semua domain                                                                                                                                                                                                                                                                                                   | P1   |
+| `web.reload`        | Validasi lalu reload Nginx & Apache                                                                                                                                                                                                                                                                                         | P1   |
 
 ### php
 
-| Aksi                                                           | Fungsi                                             | Fase |
-| -------------------------------------------------------------- | -------------------------------------------------- | ---- |
-| `php.apply_pool`                                               | Pool PHP-FPM per user per versi + override php.ini | P1   |
-| `php.remove_pool`                                              |                                                    | P1   |
-| `php.versions`                                                 | Daftar versi PHP terpasang                         | P1   |
-| `php.install_version` / `remove_version` / `install_extension` |                                                    | P6   |
+| Aksi                                                           | Fungsi                                                                                                                                                                  | Fase |
+| -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| `php.apply_pool`                                               | Pool PHP-FPM per user per versi + override php.ini. Sekarang pool dibuat & dijalankan otomatis oleh `web.apply_domain`; aksi tersendiri menyusul bersama pengaturan PHP | P1   |
+| `php.remove_pool`                                              | ✅ `{username, php_version}`: matikan & hapus pool; dilewati kalau masih ada vhost akun itu yang memakainya                                                             | P1   |
+| `php.versions`                                                 | Daftar versi PHP terpasang                                                                                                                                              | P1   |
+| `php.install_version` / `remove_version` / `install_extension` |                                                                                                                                                                         | P6   |
 
 ### ssl
 
@@ -239,8 +245,7 @@ Konvensi nama: `namespace.aksi`. "Sebagai user" = agent turun ke UID user sebelu
 │   ├── systemd/, config/               unit systemd & template config panel
 │   └── VERSION
 ├── current -> releases/<versi>         rilis aktif; update = ganti symlink ini
-├── bin -> current/bin
-└── templates/                          template default (ikut ter-update)
+└── bin -> current/bin
 
 /usr/local/bin/nusactl -> /usr/local/nusapanel/bin/nusactl
 
@@ -253,11 +258,17 @@ Konvensi nama: `namespace.aksi`. "Sebagai user" = agent turun ke UID user sebelu
 ├── php-fpm/<versi>/<user>.conf         pool PHP-FPM per user
 └── ssl/<domain>/{cert,key,chain}.pem   0600 root
 
-/etc/nginx/nusapanel/<user>/<domain>.conf
-/etc/apache2/nusapanel/<user>/<domain>.conf
+/etc/nginx/nusapanel/<user>/<domain>.conf        vhost Nginx (port 80), ditulis nusad
+/etc/nginx/nusapanel/<user>/suspended.inc        hanya ada selama akun di-suspend (halaman 503)
+/etc/nginx/conf.d/nusapanel-sites.conf           include semua vhost di atas
+/etc/nginx/sites-enabled/nusapanel-default.conf  default server port 80: host tak dikenal & IP → 404
+/etc/apache2/nusapanel/<user>/<domain>.conf      vhost Apache (127.0.0.1:8080), ditulis nusad
+/etc/apache2/conf-available/nusapanel.conf       mod_remoteip, HTTPS dari proxy, aturan /home
+/etc/systemd/system/nusa-php<versi>@.service     unit template pool PHP-FPM, ditulis nusad
+/run/nusa-php/php<versi>-<user>.sock             socket pool PHP-FPM (0660 <user>:www-data)
 
 /var/log/nusapanel/                     log nginx panel (access/error)
-/var/log/nusapanel/domains/<domain>.{access,error}.log
+/var/log/nusapanel/domains/<domain>.{access,error,apache-error}.log
 /var/log/nusapanel-install.log          log setup.sh (0600, tanpa password)
 /etc/letsencrypt/live/<hostname>/       sertifikat Let's Encrypt hostname (certbot)
 /var/www/nusapanel-acme/                webroot verifikasi Let's Encrypt (port 80)

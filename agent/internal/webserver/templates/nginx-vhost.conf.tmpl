@@ -1,0 +1,51 @@
+# {{.Domain}} of account {{.User}}. Written by nusad; changes are overwritten.
+server {
+    listen 80;
+{{- if .IPv6}}
+    listen [::]:80;
+{{- end}}
+    server_name {{.Domain}} www.{{.Domain}};
+
+    root {{.DocumentRoot}};
+
+    access_log {{.LogDir}}/{{.Domain}}.access.log;
+    error_log {{.LogDir}}/{{.Domain}}.error.log;
+
+    server_tokens off;
+    # Never serve a file through a symlink that someone else owns, such as a
+    # link to another account's wp-config.php.
+    disable_symlinks if_not_owner from=$document_root;
+    client_max_body_size 256m;
+
+    # Exists only while the account is suspended (the glob makes a missing
+    # file fine).
+    include {{.NginxAccountDir}}/suspended*.inc;
+
+    location ~ /\.ht {
+        deny all;
+    }
+
+    # Static files straight from disk. Missing ones go to Apache, so rewrites
+    # in .htaccess still work.
+    location ~* \.(?:css|js|mjs|map|jpg|jpeg|png|gif|webp|avif|svg|ico|bmp|woff|woff2|ttf|otf|eot|mp4|webm|ogg|mp3|wav|pdf|txt|zip|gz|tgz|rar|7z)$ {
+        try_files $uri @apache;
+    }
+
+    location / {
+{{- template "proxy" .}}
+    }
+
+    location @apache {
+{{- template "proxy" .}}
+    }
+}
+{{define "proxy"}}
+        proxy_pass http://{{.Backend}};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_read_timeout 300s;
+{{- end}}

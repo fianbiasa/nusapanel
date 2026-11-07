@@ -7,14 +7,20 @@ use App\Enums\TaskStatus;
 use App\Events\AgentTaskFinished;
 use App\Models\Task;
 use App\Models\User;
+use App\Services\DomainService;
 
 /**
  * Bring an account's panel record in line with what the agent did on the
  * server. Failed suspend/unsuspend tasks leave the account untouched; the
  * task's error is shown in the task list instead.
+ *
+ * Domains added while the account was being created are set up once it
+ * exists on the server, or fail with it.
  */
 class ApplyAccountTaskResult
 {
+    public function __construct(private DomainService $domains) {}
+
     public function handle(AgentTaskFinished $event): void
     {
         $task = $event->task;
@@ -40,6 +46,8 @@ class ApplyAccountTaskResult
         if ($task->status === TaskStatus::Failed) {
             $account->forceFill(['status' => AccountStatus::Failed])->save();
 
+            $this->domains->failPendingDomains($account);
+
             return;
         }
 
@@ -53,6 +61,8 @@ class ApplyAccountTaskResult
             'status' => AccountStatus::Active,
             'uid' => $uid === false ? $account->uid : $uid,
         ])->save();
+
+        $this->domains->dispatchPendingDomains($account, $task->actor);
     }
 
     private function applyDelete(User $account, Task $task): void

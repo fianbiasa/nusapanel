@@ -131,6 +131,7 @@ for arch in $ARCHES; do
     cp "$SRC/agent/packaging/nusad.service" "$stage/systemd/"
     cp "$SRC"/installer/files/*.service "$SRC"/installer/files/*.timer "$stage/systemd/"
     cp "$SRC/installer/files/nginx-panel.conf" "$SRC/installer/files/nginx-hostname.conf" \
+        "$SRC/installer/files/nginx-default.conf" "$SRC/installer/files/apache-nusapanel.conf" \
         "$SRC/installer/files/php-fpm-panel.conf" \
         "$SRC/installer/files/logrotate.conf" "$stage/config/"
     stamp_setup "$stage/setup.sh"

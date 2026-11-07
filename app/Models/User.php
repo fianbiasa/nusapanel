@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
@@ -87,6 +88,26 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     public function ownedAccounts(): HasMany
     {
         return $this->hasMany(User::class, 'owner_id');
+    }
+
+    /**
+     * The websites of this hosting account.
+     *
+     * @return HasMany<Domain, $this>
+     */
+    public function domains(): HasMany
+    {
+        return $this->hasMany(Domain::class);
+    }
+
+    /**
+     * The domain the account was created with, if any.
+     *
+     * @return HasOne<Domain, $this>
+     */
+    public function primaryDomain(): HasOne
+    {
+        return $this->hasOne(Domain::class)->where('is_primary', true);
     }
 
     public function hasRole(Role ...$roles): bool

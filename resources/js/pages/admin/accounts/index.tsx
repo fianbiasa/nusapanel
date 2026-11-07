@@ -37,6 +37,7 @@ type AccountRow = {
     status: AccountStatus;
     suspend_reason: string | null;
     owner: string | null;
+    domain: string | null;
     created_at: string | null;
 };
 
@@ -153,6 +154,9 @@ export default function AccountsIndex({ accounts, filters }: Props) {
                                         Email
                                     </th>
                                     <th className="px-4 py-2 font-medium">
+                                        Domain
+                                    </th>
+                                    <th className="px-4 py-2 font-medium">
                                         Role
                                     </th>
                                     <th className="px-4 py-2 font-medium">
@@ -182,6 +186,9 @@ export default function AccountsIndex({ accounts, filters }: Props) {
                                         </td>
                                         <td className="px-4 py-3">
                                             {account.email}
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            {account.domain ?? '—'}
                                         </td>
                                         <td className="px-4 py-3 capitalize">
                                             {account.role}

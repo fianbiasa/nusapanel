@@ -1,5 +1,5 @@
 import { Link, usePage } from '@inertiajs/react';
-import { LayoutGrid, ListChecks, ScrollText, Users } from 'lucide-react';
+import { Globe, LayoutGrid, ListChecks, ScrollText, Users } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
@@ -16,6 +16,7 @@ import { dashboard } from '@/routes';
 import { index as accountsIndex } from '@/routes/admin/accounts';
 import { index as auditLogsIndex } from '@/routes/admin/audit-logs';
 import { index as tasksIndex } from '@/routes/admin/tasks';
+import { index as domainsIndex } from '@/routes/domains';
 import type { NavItem } from '@/types';
 
 const mainNavItems: NavItem[] = [
@@ -23,6 +24,15 @@ const mainNavItems: NavItem[] = [
         title: 'Dashboard',
         href: dashboard(),
         icon: LayoutGrid,
+    },
+];
+
+// Hosting accounts only: admins and resellers have no websites of their own.
+const hostingNavItems: NavItem[] = [
+    {
+        title: 'Domains',
+        href: domainsIndex(),
+        icon: Globe,
     },
 ];
 
@@ -62,7 +72,14 @@ export function AppSidebar() {
             </SidebarHeader>
 
             <SidebarContent>
-                <NavMain label="Panel" items={mainNavItems} />
+                <NavMain
+                    label="Panel"
+                    items={
+                        auth.user.role === 'user'
+                            ? [...mainNavItems, ...hostingNavItems]
+                            : mainNavItems
+                    }
+                />
                 {auth.user.role === 'admin' && (
                     <NavMain
                         label="Server administration"

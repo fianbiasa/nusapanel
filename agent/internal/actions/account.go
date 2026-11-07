@@ -54,6 +54,15 @@ type accountSystem interface {
 	PrepareHome(ctx context.Context, home sysuser.Home) error
 }
 
+// accountWeb is what the account actions need from the web server side:
+// suspending, unsuspending and removing everything web related of an
+// account. *webserver.Manager implements it; tests use a fake.
+type accountWeb interface {
+	SuspendAccount(ctx context.Context, user string) error
+	UnsuspendAccount(ctx context.Context, user string) error
+	RemoveAccount(ctx context.Context, user string) error
+}
+
 // accountParams are the params of every account.* method.
 type accountParams struct {
 	Username string `json:"username"`
@@ -70,12 +79,13 @@ type accountInfo struct {
 // accountActions implements the account.* methods on top of a system.
 type accountActions struct {
 	system accountSystem
+	web    accountWeb
 }
 
 // accountMethods returns the account.* methods by name. Calls for the same
 // username run one at a time.
-func accountMethods(system accountSystem) map[string]rpc.Method {
-	accounts := accountActions{system: system}
+func accountMethods(system accountSystem, web accountWeb) map[string]rpc.Method {
+	accounts := accountActions{system: system, web: web}
 
 	return map[string]rpc.Method{
 		"account.create":    {Handler: accounts.create, LockKey: accountLockKey},
@@ -174,7 +184,8 @@ func (a accountActions) addUser(ctx context.Context, name string) (sysuser.User,
 	return user, err
 }
 
-// suspend locks the account's password and takes away its login shell.
+// suspend locks the account's password, takes away its login shell, shows
+// a "temporarily unavailable" page on all its websites and stops its PHP.
 func (a accountActions) suspend(ctx context.Context, raw json.RawMessage) (any, error) {
 	user, err := a.existingAccount(ctx, raw)
 	if err != nil {
@@ -189,10 +200,15 @@ func (a accountActions) suspend(ctx context.Context, raw json.RawMessage) (any, 
 		return nil, systemError(err)
 	}
 
+	if err := a.web.SuspendAccount(ctx, user.Name); err != nil {
+		return nil, webError(err, "account "+user.Name)
+	}
+
 	return struct{}{}, nil
 }
 
-// unsuspend unlocks the account's password.
+// unsuspend unlocks the account's password, serves its websites again and
+// starts its PHP.
 func (a accountActions) unsuspend(ctx context.Context, raw json.RawMessage) (any, error) {
 	user, err := a.existingAccount(ctx, raw)
 	if err != nil {
@@ -203,12 +219,17 @@ func (a accountActions) unsuspend(ctx context.Context, raw json.RawMessage) (any
 		return nil, systemError(err)
 	}
 
+	if err := a.web.UnsuspendAccount(ctx, user.Name); err != nil {
+		return nil, webError(err, "account "+user.Name)
+	}
+
 	return struct{}{}, nil
 }
 
-// remove implements account.delete: it kills the account's processes, then
-// removes the user and its home. Deleting an account that no longer exists
-// succeeds.
+// remove implements account.delete: it removes the account's websites and
+// PHP pools, kills its processes, then removes the user and its home.
+// Deleting an account that no longer exists succeeds, after removing any
+// web configuration it left behind.
 func (a accountActions) remove(ctx context.Context, raw json.RawMessage) (any, error) {
 	params, err := decodeAccountParams(raw)
 	if err != nil {
@@ -218,6 +239,12 @@ func (a accountActions) remove(ctx context.Context, raw json.RawMessage) (any, e
 	user, found, err := a.findAccount(ctx, params.Username)
 	if err != nil {
 		return nil, err
+	}
+
+	// PHP-FPM pools go first: their master runs as root and would start new
+	// processes for the account right after they are killed.
+	if err := a.web.RemoveAccount(ctx, params.Username); err != nil {
+		return nil, webError(err, "account "+params.Username)
 	}
 
 	if !found {

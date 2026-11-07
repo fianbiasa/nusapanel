@@ -62,7 +62,7 @@
 
 1. User klik **Tambah domain**.
 2. Panel memeriksa izin (policy), validasi input, limit paket (jumlah domain), dan memastikan domain belum dipakai akun lain.
-3. Panel menyimpan domain (status `pending`) dan membuat task `domain.create`.
+3. Panel menyimpan domain (status `pending`) dan membuat task `web.apply_domain`. Kalau akunnya sendiri masih dibuat, task ini baru dikirim setelah `account.create` berhasil.
 4. Queue worker mengirim task ke agent. Ada kunci per akun, jadi tidak ada dua task yang mengubah akun yang sama secara bersamaan.
 5. Agent membuat folder, merender vhost Nginx & Apache dan pool PHP-FPM, lalu reload service.
 6. Panel mengubah status domain menjadi `active`, atau `failed` beserta pesan error.

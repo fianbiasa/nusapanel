@@ -18,6 +18,9 @@ var (
 	// ErrNameTaken means a new user could not be added because a user or
 	// group with that name already exists.
 	ErrNameTaken = errors.New("user or group name already in use")
+	// ErrInTheWay means a symlink or a file is where a directory should be.
+	// Inside a home that is usually the account owner's doing.
+	ErrInTheWay = errors.New("a symlink or file is in the way")
 )
 
 // User is a local account as the system reports it.
@@ -64,6 +67,22 @@ type Home struct {
 type Dir struct {
 	Name string
 	Mode fs.FileMode
+}
+
+// Site describes the folders of a website inside an existing home
+// directory, such as domains/example.com/public_html.
+type Site struct {
+	// Home is the clean absolute path of the home directory.
+	Home string
+	// Dirs are nested: the first is inside Home, every next one inside the
+	// one before it. Each is created when missing and owned by UID:GID.
+	Dirs []Dir
+	UID  int
+	GID  int
+	// Index, when set, is written as index.html (0644, owned by UID:GID)
+	// into the last directory, but only when that directory was just
+	// created, so a site's own files are never replaced.
+	Index []byte
 }
 
 // parsePasswd parses one passwd entry, as printed by `getent passwd`.

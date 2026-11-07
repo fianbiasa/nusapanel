@@ -44,7 +44,12 @@ Pekerjaan:
 
 ## P1 — Hosting inti
 
-**Status:** akun hosting ✅ (buat, suspend, unsuspend, hapus dari panel; teruji di Ubuntu 24.04). Berikutnya: domain & website.
+**Status** (teruji di Ubuntu 24.04):
+
+- akun hosting ✅: buat, suspend, unsuspend, hapus dari panel;
+- domain & website ✅: tambah/hapus domain (halaman Domains user, domain utama saat admin membuat akun), Nginx → Apache → PHP-FPM 8.4 per user, `www.` otomatis, halaman 503 saat suspend, isolasi antar akun & proteksi symlink teruji.
+
+Berikutnya: SSL Let's Encrypt untuk domain customer, lalu subdomain/pointer/redirect dan pilihan versi PHP.
 
 - Akun user & paket user, buat/suspend/hapus akun, quota disk & inode.
 - Domain, subdomain, pointer, redirect, www/HTTPS.

@@ -29,7 +29,7 @@ class AccountController extends Controller
         $search = trim((string) ($validated['search'] ?? ''));
 
         $accounts = User::query()
-            ->with('owner:id,username')
+            ->with(['owner:id,username', 'primaryDomain:id,user_id,name'])
             ->when($search !== '', fn (Builder $query) => $query->where(fn (Builder $query) => $query
                 ->where('username', 'like', "%{$search}%")
                 ->orWhere('name', 'like', "%{$search}%")
@@ -46,6 +46,7 @@ class AccountController extends Controller
                 'status' => $account->status->value,
                 'suspend_reason' => $account->suspend_reason,
                 'owner' => $account->owner?->username,
+                'domain' => $account->primaryDomain?->display_name,
                 'created_at' => $account->created_at?->toIso8601String(),
             ]);
 
@@ -70,7 +71,7 @@ class AccountController extends Controller
      */
     public function store(StoreAccountRequest $request): RedirectResponse
     {
-        /** @var array{username: string, name: string, email: string, password: string} $data */
+        /** @var array{username: string, name: string, email: string, password: string, domain: string|null} $data */
         $data = $request->validated();
 
         $account = $this->accounts->create($data, $request->user());

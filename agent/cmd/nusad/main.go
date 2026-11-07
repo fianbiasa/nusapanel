@@ -43,6 +43,9 @@ func main() {
 	}
 
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
+	// Actions log details that must not reach the panel through the
+	// default logger.
+	slog.SetDefault(logger)
 
 	if err := run(logger, cfg); err != nil {
 		logger.Error("nusad stopped", "error", err)

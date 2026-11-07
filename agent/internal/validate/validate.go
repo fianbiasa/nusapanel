@@ -13,6 +13,7 @@ import (
 var (
 	usernamePattern    = regexp.MustCompile(`^[a-z][a-z0-9]{2,15}$`)
 	domainLabelPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+	phpVersionPattern  = regexp.MustCompile(`^[0-9]\.[0-9]$`)
 )
 
 // reservedUsernames are system and service accounts. Keep in sync with
@@ -74,6 +75,17 @@ func Domain(name string) error {
 
 	if !strings.ContainsAny(labels[len(labels)-1], "abcdefghijklmnopqrstuvwxyz") {
 		return fmt.Errorf("domain %q must end in a top-level domain, not a number", name)
+	}
+
+	return nil
+}
+
+// PHPVersion returns an error unless version is a PHP major.minor version
+// such as "8.4". It only checks the form; whether that version is installed
+// is up to the caller.
+func PHPVersion(version string) error {
+	if !phpVersionPattern.MatchString(version) {
+		return fmt.Errorf("PHP version %q must look like 8.4", version)
 	}
 
 	return nil

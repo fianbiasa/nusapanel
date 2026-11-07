@@ -1,0 +1,41 @@
+; PHP {{.PHPVersion}} pool of account {{.User}}, run by nusa-php{{.PHPTag}}@{{.User}}.service.
+; Written by nusad; changes are overwritten.
+[global]
+pid = {{.RunDir}}/{{.PoolName}}.pid
+error_log = syslog
+syslog.ident = nusa-{{.PoolName}}
+daemonize = no
+
+[{{.User}}]
+user = {{.User}}
+group = {{.User}}
+
+listen = {{.Socket}}
+listen.owner = {{.User}}
+listen.group = www-data
+listen.mode = 0660
+
+pm = ondemand
+pm.max_children = 10
+pm.process_idle_timeout = 30s
+pm.max_requests = 500
+request_terminate_timeout = 300s
+
+chdir = {{.Home}}
+env[TMPDIR] = {{.Home}}/tmp
+env[PATH] = /usr/local/bin:/usr/bin:/bin
+security.limit_extensions = .php .phtml
+
+; Fixed for every site of this account.
+php_admin_value[open_basedir] = {{.Home}}/:/usr/share/php/
+php_admin_value[upload_tmp_dir] = {{.Home}}/tmp
+php_admin_value[session.save_path] = {{.Home}}/tmp
+php_admin_value[sys_temp_dir] = {{.Home}}/tmp
+php_admin_value[disable_functions] = exec,passthru,shell_exec,system,proc_open,popen,pcntl_exec
+php_admin_flag[allow_url_include] = off
+
+; Defaults a site may change (ini_set, .user.ini).
+php_value[memory_limit] = 256M
+php_value[upload_max_filesize] = 64M
+php_value[post_max_size] = 64M
+php_value[max_execution_time] = 120

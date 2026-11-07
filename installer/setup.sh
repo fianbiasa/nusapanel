@@ -31,6 +31,8 @@ readonly ACME_DIR="/var/www/nusapanel-acme"
 readonly DKIM_SELECTOR="nusapanel"
 readonly DNS_REPORT="$CONFIG_DIR/dns-records.txt"
 readonly RELEASE_REPO="fianbiasa/nusapanel"
+readonly POLICY_RC="/usr/sbin/policy-rc.d"
+readonly POLICY_RC_MARKER="# nusapanel setup.sh: temporary"
 
 # Stamped by installer/build-release.sh into the setup.sh published with each
 # release, so that script installs its own version by default. Empty in the
@@ -61,6 +63,8 @@ stale_release=""
 ssl_status=""
 dkim_public_key=""
 dns_report_lines=()
+# Set while our temporary policy-rc.d is in place.
+policy_rc_created=0
 
 if [[ -t 1 ]]; then
     bold=$'\033[1m' green=$'\033[32m' yellow=$'\033[33m' red=$'\033[31m' reset=$'\033[0m'
@@ -139,8 +143,34 @@ on_error() {
 }
 
 cleanup() {
+    remove_policy_rc
+
     if [[ -n "$work_dir" && -d "$work_dir" ]]; then
         rm -rf "$work_dir"
+    fi
+}
+
+# Stop packages from starting services while they install, by answering
+# every request with 101 ("action not allowed"). One left behind by an
+# interrupted earlier run is recognized by its marker and reused.
+block_service_starts() {
+    if [[ ! -e "$POLICY_RC" ]]; then
+        printf '#!/bin/sh\n%s, removed when it finishes.\nexit 101\n' "$POLICY_RC_MARKER" >"$POLICY_RC"
+        chmod 0755 "$POLICY_RC"
+    elif ! grep -qF "$POLICY_RC_MARKER" "$POLICY_RC"; then
+        warn "$POLICY_RC sudah ada dan bukan buatan setup.sh; dibiarkan apa adanya"
+        return
+    fi
+
+    policy_rc_created=1
+}
+
+# Remove our policy-rc.d (never someone else's). Also runs from cleanup, so
+# a failed install never leaves services unable to start.
+remove_policy_rc() {
+    if ((policy_rc_created)); then
+        rm -f "$POLICY_RC"
+        policy_rc_created=0
     fi
 }
 
@@ -479,7 +509,7 @@ confirm() {
     info "Paket    : ${package_file:-$release_url}"
     info "Admin    : $admin_user ${admin_email:+<$admin_email>}"
     info "Panel    : https://$server_hostname:$PANEL_PORT"
-    info "Dipasang : Nginx, MariaDB, PHP $PHP_VERSION (repo ondrej/php), Postfix + DKIM (kirim-saja), agent nusad"
+    info "Dipasang : Nginx + Apache, MariaDB, PHP $PHP_VERSION (repo ondrej/php), Postfix + DKIM (kirim-saja), agent nusad"
     if ((skip_dns_check == 0)); then
         info "SSL      : Let's Encrypt untuk $server_hostname, diperpanjang otomatis"
         info "           (dengan melanjutkan, kamu menyetujui Let's Encrypt Subscriber Agreement)"
@@ -559,10 +589,17 @@ DEBCONF
     quietly "${apt[@]}" install nginx mariadb-server postfix opendkim opendkim-tools certbot python3 \
         "php$PHP_VERSION-fpm" "php$PHP_VERSION-cli" "php$PHP_VERSION-common" "php$PHP_VERSION-mysql" \
         "php$PHP_VERSION-mbstring" "php$PHP_VERSION-xml" "php$PHP_VERSION-curl" "php$PHP_VERSION-intl" \
-        "php$PHP_VERSION-zip" "php$PHP_VERSION-bcmath" "php$PHP_VERSION-opcache" "php$PHP_VERSION-readline"
+        "php$PHP_VERSION-zip" "php$PHP_VERSION-bcmath" "php$PHP_VERSION-opcache" "php$PHP_VERSION-readline" \
+        "php$PHP_VERSION-gd"
+
+    # Apache would start on port 80, which Nginx owns, and fail the install.
+    # It stays stopped until configure_web has moved it to 127.0.0.1:8080.
+    block_service_starts
+    quietly "${apt[@]}" install apache2
+    remove_policy_rc
 
     quietly systemctl enable --now mariadb nginx "php$PHP_VERSION-fpm"
-    info "Nginx, MariaDB, Postfix dan PHP $PHP_VERSION terpasang"
+    info "Nginx, Apache, MariaDB, Postfix dan PHP $PHP_VERSION terpasang"
 }
 
 fetch_release() {
@@ -974,6 +1011,77 @@ configure_nginx() {
     info "Panel dilayani di port $PANEL_PORT"
 }
 
+# Customer websites: Nginx in front (ports 80/443, static files), Apache on
+# 127.0.0.1:8080 behind it so .htaccess works, PHP in a pool per account.
+# The agent writes one Nginx and one Apache file per domain into the
+# directories created here.
+configure_web() {
+    step "Mengatur web server untuk website customer (Nginx -> Apache 127.0.0.1:8080)"
+
+    install -d -m 0755 -o root -g root /etc/nginx/nusapanel /etc/apache2/nusapanel
+    install -d -m 0750 -o root -g adm "$LOG_DIR/domains"
+
+    cat >/etc/apache2/ports.conf <<'CONF'
+# Managed by nusapanel setup.sh. Apache only serves Nginx, on loopback;
+# Nginx owns ports 80 and 443.
+Listen 127.0.0.1:8080
+CONF
+
+    render "$release_dir/config/apache-nusapanel.conf" /etc/apache2/conf-available/nusapanel.conf
+
+    if [[ -e /etc/apache2/sites-enabled/000-default.conf ]]; then
+        quietly a2dissite -q 000-default
+    fi
+
+    # security: loads after nusapanel.conf and would undo its ServerTokens
+    # and ServerSignature (nusapanel.conf carries its settings instead).
+    # other-vhosts-access-log: Nginx already logs every request.
+    # php-fpm: PHP only runs in the per-account pools, never in a shared one.
+    local conf
+    for conf in security other-vhosts-access-log "php$PHP_VERSION-fpm"; do
+        if [[ -e "/etc/apache2/conf-enabled/$conf.conf" ]]; then
+            quietly a2disconf -q "$conf"
+        fi
+    done
+
+    quietly a2dismod -q mpm_prefork mpm_worker
+    quietly a2enmod -q mpm_event proxy_fcgi remoteip rewrite headers setenvif
+    quietly a2enconf -q nusapanel
+
+    {
+        printf '# Managed by nusapanel setup.sh: customer websites, one file per domain,\n'
+        printf '# written by the agent (nusad).\n'
+        printf 'include /etc/nginx/nusapanel/*/*.conf;\n'
+
+        # Room for long domain names (253 characters plus "www.") and many
+        # websites; with the defaults, nginx -t fails on a long name.
+        if ! grep -Eqs '^[[:space:]]*server_names_hash_bucket_size' /etc/nginx/nginx.conf; then
+            printf '\nserver_names_hash_bucket_size 512;\n'
+        fi
+        if ! grep -Eqs '^[[:space:]]*server_names_hash_max_size' /etc/nginx/nginx.conf; then
+            printf 'server_names_hash_max_size 4096;\n'
+        fi
+    } >/etc/nginx/conf.d/nusapanel-sites.conf
+
+    # Host names no website uses get a 404, never a customer's site.
+    local site=/etc/nginx/sites-available/nusapanel-default.conf
+    render "$release_dir/config/nginx-default.conf" "$site"
+
+    if ! grep -q . /proc/net/if_inet6 2>/dev/null; then
+        sed -i '/listen \[::\]/d' "$site"
+    fi
+
+    ln -sfn "$site" /etc/nginx/sites-enabled/nusapanel-default.conf
+
+    quietly apache2ctl configtest
+    quietly nginx -t
+    quietly systemctl enable apache2
+    # Starts Apache on a fresh install; applies config changes on a re-run.
+    quietly systemctl reload-or-restart apache2
+    systemctl reload nginx
+    info "Apache hanya mendengar di 127.0.0.1:8080, di belakang Nginx"
+}
+
 configure_logrotate() {
     render "$release_dir/config/logrotate.conf" /etc/logrotate.d/nusapanel
     info "Rotasi log panel diatur (/etc/logrotate.d/nusapanel)"
@@ -1017,6 +1125,13 @@ verify_install() {
     [[ "$status" == 200 ]] ||
         die "halaman login panel mengembalikan HTTP $status (cek: $LOG_DIR/panel-error.log dan $DATA_DIR/storage/logs/)"
     info "Halaman login panel bisa dibuka"
+
+    systemctl is-active --quiet apache2 || die "Apache tidak berjalan (cek: journalctl -u apache2)"
+    local apache_listen
+    apache_listen="$(ss -ltnpH | awk '/"apache2"/ {print $4}' | sort -u | paste -sd ' ' -)"
+    [[ "$apache_listen" == "127.0.0.1:8080" ]] ||
+        die "Apache harus hanya mendengar di 127.0.0.1:8080, sekarang: ${apache_listen:-tidak mendengar di port mana pun}"
+    info "Apache aktif dan hanya mendengar di 127.0.0.1:8080"
 
     systemctl is-active --quiet postfix || die "Postfix tidak berjalan (cek: journalctl -u postfix)"
     if ss -ltnH 'sport = :25' | grep -vqE '127\.0\.0\.1:25'; then
@@ -1167,6 +1282,7 @@ main() {
     configure_ssl
     configure_php_fpm
     configure_nginx
+    configure_web
     configure_logrotate
     install_services
     verify_install

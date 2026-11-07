@@ -12,6 +12,7 @@ import (
 
 	"nusapanel/agent/internal/rpc"
 	"nusapanel/agent/internal/sysuser"
+	"nusapanel/agent/internal/webserver"
 )
 
 var accountMethodNames = []string{"account.create", "account.suspend", "account.unsuspend", "account.delete"}
@@ -60,7 +61,8 @@ func TestAccountMethodsRejectUnknownParams(t *testing.T) {
 }
 
 func TestAccountMethodsLockTheAccount(t *testing.T) {
-	for name, method := range accountMethods(newFakeSystem()) {
+	system := newFakeSystem()
+	for name, method := range accountMethods(system, system) {
 		if method.LockKey == nil {
 			t.Fatalf("%s has no lock key", name)
 		}
@@ -193,7 +195,7 @@ func TestSuspendLocksTheAccount(t *testing.T) {
 		t.Fatalf("unexpected result %s", result)
 	}
 
-	assertCalls(t, system, "lookup budi", "lock budi", "shell budi /usr/sbin/nologin")
+	assertCalls(t, system, "lookup budi", "lock budi", "shell budi /usr/sbin/nologin", "web suspend budi")
 }
 
 func TestUnsuspendUnlocksTheAccount(t *testing.T) {
@@ -209,7 +211,7 @@ func TestUnsuspendUnlocksTheAccount(t *testing.T) {
 		t.Fatalf("unexpected result %s", result)
 	}
 
-	assertCalls(t, system, "lookup budi", "unlock budi")
+	assertCalls(t, system, "lookup budi", "unlock budi", "web unsuspend budi")
 }
 
 func TestSuspendAndUnsuspendNeedAnExistingAccount(t *testing.T) {
@@ -225,7 +227,7 @@ func TestSuspendAndUnsuspendNeedAnExistingAccount(t *testing.T) {
 	}
 }
 
-func TestDeleteKillsProcessesThenRemovesTheAccount(t *testing.T) {
+func TestDeleteRemovesWebsitesKillsProcessesThenRemovesTheAccount(t *testing.T) {
 	system := newFakeSystem()
 	system.addAccount("budi", 1001)
 
@@ -238,7 +240,7 @@ func TestDeleteKillsProcessesThenRemovesTheAccount(t *testing.T) {
 		t.Fatalf("unexpected result %s", result)
 	}
 
-	assertCalls(t, system, "lookup budi", "kill 1001", "userdel budi")
+	assertCalls(t, system, "lookup budi", "web remove budi", "kill 1001", "userdel budi")
 
 	if _, exists := system.users["budi"]; exists {
 		t.Fatal("the user still exists")
@@ -257,7 +259,46 @@ func TestDeleteOfAMissingAccountSucceeds(t *testing.T) {
 		t.Fatalf("unexpected result %s", result)
 	}
 
-	assertCalls(t, system, "lookup budi")
+	// Web configuration left behind by the account is still removed.
+	assertCalls(t, system, "lookup budi", "web remove budi")
+}
+
+func TestWebFailuresOfAccountMethodsAreReadable(t *testing.T) {
+	failures := map[error]string{
+		webserver.ErrConfigRejected: "the web server rejected the configuration for account budi",
+		errors.ErrUnsupported:       "websites can only be managed on Linux",
+	}
+
+	for _, method := range []string{"account.suspend", "account.unsuspend", "account.delete"} {
+		for failure, message := range failures {
+			system := newFakeSystem()
+			system.addAccount("budi", 1001)
+			system.webFailWith = fmt.Errorf("nginx -t: %w", failure)
+
+			_, err := callAccount(t, system, method, map[string]string{"username": "budi"})
+
+			agentErr := assertCode(t, err, rpc.CodeActionFailed)
+			if agentErr.Message != message {
+				t.Fatalf("%s: unexpected message %q", method, agentErr.Message)
+			}
+		}
+	}
+
+	// A failed web removal stops account.delete before the user is touched.
+	system := newFakeSystem()
+	system.addAccount("budi", 1001)
+	system.webFailWith = errors.New("systemctl disable failed")
+
+	_, err := callAccount(t, system, "account.delete", map[string]string{"username": "budi"})
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+
+	if _, ok := errors.AsType[*rpc.Error](err); ok {
+		t.Fatalf("system details would reach the panel: %v", err)
+	}
+
+	assertCalls(t, system, "lookup budi", "web remove budi")
 }
 
 func TestDeleteRefusesSystemUIDs(t *testing.T) {
@@ -310,7 +351,12 @@ func callAccount(t *testing.T, system accountSystem, method string, params any) 
 		t.Fatal(err)
 	}
 
-	registered, ok := accountMethods(system)[method]
+	web, ok := system.(accountWeb)
+	if !ok {
+		web = unreachableWeb{t}
+	}
+
+	registered, ok := accountMethods(system, web)[method]
 	if !ok {
 		t.Fatalf("unknown method %s", method)
 	}
@@ -366,6 +412,8 @@ type fakeSystem struct {
 	nextID int
 	// failWith, when set, is returned by every change.
 	failWith error
+	// webFailWith, when set, is returned by the web methods.
+	webFailWith error
 }
 
 func newFakeSystem() *fakeSystem {
@@ -485,3 +533,40 @@ func (f *fakeSystem) PrepareHome(_ context.Context, home sysuser.Home) error {
 
 	return nil
 }
+
+func (f *fakeSystem) recordWeb(format string, args ...any) error {
+	if err := f.record(format, args...); err != nil {
+		return err
+	}
+
+	return f.webFailWith
+}
+
+func (f *fakeSystem) SuspendAccount(_ context.Context, user string) error {
+	return f.recordWeb("web suspend %s", user)
+}
+
+func (f *fakeSystem) UnsuspendAccount(_ context.Context, user string) error {
+	return f.recordWeb("web unsuspend %s", user)
+}
+
+func (f *fakeSystem) RemoveAccount(_ context.Context, user string) error {
+	return f.recordWeb("web remove %s", user)
+}
+
+// unreachableWeb fails the test when an account method gets as far as the
+// web server, for systems that must fail before that.
+type unreachableWeb struct {
+	t *testing.T
+}
+
+func (u unreachableWeb) fail(user string) error {
+	u.t.Helper()
+	u.t.Errorf("the web server was reached for %s", user)
+
+	return errors.New("unreachable")
+}
+
+func (u unreachableWeb) SuspendAccount(_ context.Context, user string) error   { return u.fail(user) }
+func (u unreachableWeb) UnsuspendAccount(_ context.Context, user string) error { return u.fail(user) }
+func (u unreachableWeb) RemoveAccount(_ context.Context, user string) error    { return u.fail(user) }

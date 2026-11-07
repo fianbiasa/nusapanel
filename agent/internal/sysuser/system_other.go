@@ -56,3 +56,8 @@ func (System) DeleteUser(context.Context, string) error {
 func (System) PrepareHome(context.Context, Home) error {
 	return unsupported()
 }
+
+// PrepareSite is not supported on this platform.
+func (System) PrepareSite(context.Context, Site) error {
+	return unsupported()
+}

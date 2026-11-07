@@ -52,3 +52,18 @@ func TestDomain(t *testing.T) {
 		}
 	}
 }
+
+func TestPHPVersion(t *testing.T) {
+	for _, version := range []string{"8.4", "7.4", "5.6", "0.0"} {
+		if err := PHPVersion(version); err != nil {
+			t.Errorf("PHPVersion(%q) = %v, want nil", version, err)
+		}
+	}
+
+	invalid := []string{"", "8", "84", "8.", ".4", "8.4.1", "10.0", "8.10", "8,4", "v8.4", "8.4\n", "8.x", "../8.4", "8.4 "}
+	for _, version := range invalid {
+		if err := PHPVersion(version); err == nil {
+			t.Errorf("PHPVersion(%q) = nil, want an error", version)
+		}
+	}
+}

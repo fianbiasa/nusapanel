@@ -5,6 +5,7 @@ namespace App\Http\Requests\Admin;
 use App\Concerns\PasswordValidationRules;
 use App\Concerns\ProfileValidationRules;
 use App\Models\User;
+use App\Rules\ValidDomain;
 use App\Rules\ValidUsername;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -25,6 +26,17 @@ class StoreAccountRequest extends FormRequest
             'username' => ['required', 'string', new ValidUsername, Rule::unique(User::class)],
             ...$this->profileRules(),
             'password' => $this->passwordRules(),
+            'domain' => ['nullable', 'string', new ValidDomain],
         ];
+    }
+
+    /**
+     * Prepare the data for validation.
+     */
+    protected function prepareForValidation(): void
+    {
+        $this->merge([
+            'domain' => ValidDomain::normalize($this->input('domain')),
+        ]);
     }
 }

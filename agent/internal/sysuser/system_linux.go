@@ -206,6 +206,12 @@ func (System) PrepareHome(_ context.Context, home Home) error {
 	return prepareHome(home)
 }
 
+// PrepareSite creates the folders of a website inside a home, and its
+// default index.html, without following symlinks.
+func (System) PrepareSite(_ context.Context, site Site) error {
+	return prepareSite(site)
+}
+
 func (System) lookupGroup(ctx context.Context, name string) (Group, error) {
 	output, err := runner.Run(ctx, getentProgram, "group", "--", name)
 	if runner.ExitCode(err) == getentKeyNotFound {

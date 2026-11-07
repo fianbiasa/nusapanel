@@ -10,6 +10,7 @@ import (
 	"nusapanel/agent/internal/sysinfo"
 	"nusapanel/agent/internal/sysuser"
 	"nusapanel/agent/internal/version"
+	"nusapanel/agent/internal/webserver"
 )
 
 // Register adds all agent methods to registry.
@@ -17,7 +18,13 @@ func Register(registry *rpc.Registry) {
 	registry.Register("agent.ping", rpc.Method{Handler: ping})
 	registry.Register("system.info", rpc.Method{Handler: systemInfo})
 
-	for name, method := range accountMethods(sysuser.System{}) {
+	web := webserver.New(webserver.DefaultConfig())
+
+	for name, method := range accountMethods(sysuser.System{}, web) {
+		registry.Register(name, method)
+	}
+
+	for name, method := range webMethods(sysuser.System{}, web) {
 		registry.Register(name, method)
 	}
 }

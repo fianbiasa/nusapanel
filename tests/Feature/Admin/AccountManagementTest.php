@@ -3,9 +3,11 @@
 namespace Tests\Feature\Admin;
 
 use App\Enums\AccountStatus;
+use App\Enums\DomainStatus;
 use App\Enums\Role;
 use App\Jobs\RunAgentTask;
 use App\Models\AuditLog;
+use App\Models\Domain;
 use App\Models\Task;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -34,6 +36,8 @@ class AccountManagementTest extends TestCase
             'name' => 'Budi Santoso',
             'email' => 'budi@example.com',
         ]);
+        Domain::factory()->for($account, 'account')->primary()->create(['name' => 'xn--bcher-kva.de']);
+        Domain::factory()->for($account, 'account')->create(['name' => 'second.com']);
 
         $response = $this->actingAs($admin)->get(route('admin.accounts.index'));
 
@@ -51,6 +55,7 @@ class AccountManagementTest extends TestCase
                     ->where('status', 'suspended')
                     ->where('suspend_reason', 'Unpaid invoice')
                     ->where('owner', $admin->username)
+                    ->where('domain', 'bücher.de')
                     ->has('created_at')));
 
         $response->assertDontSee($account->password, false);
@@ -133,6 +138,53 @@ class AccountManagementTest extends TestCase
             'actor_id' => $admin->id,
             'subject_id' => $account->id,
         ]);
+    }
+
+    public function test_admins_can_create_an_account_with_a_primary_domain_that_waits_for_the_account()
+    {
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($admin)
+            ->post(route('admin.accounts.store'), $this->validAccountData(['domain' => 'Example.com']))
+            ->assertSessionHasNoErrors()
+            ->assertRedirect(route('admin.accounts.index'));
+
+        $account = User::query()->where('username', 'budi')->sole();
+        $domain = Domain::query()->sole();
+
+        $this->assertSame('example.com', $domain->name);
+        $this->assertSame($account->id, $domain->user_id);
+        $this->assertTrue($domain->is_primary);
+        $this->assertSame(DomainStatus::Pending, $domain->status);
+
+        $this->assertSame('account.create', Task::query()->sole()->action);
+        Queue::assertPushed(RunAgentTask::class, 1);
+    }
+
+    public function test_an_account_is_not_created_when_its_primary_domain_is_in_use()
+    {
+        $admin = User::factory()->admin()->create();
+        Domain::factory()->create(['name' => 'example.com']);
+
+        $this->actingAs($admin)
+            ->post(route('admin.accounts.store'), $this->validAccountData(['domain' => 'example.com']))
+            ->assertSessionHasErrors(['domain' => 'This domain is already in use by another account.']);
+
+        $this->assertDatabaseMissing('users', ['username' => 'budi']);
+        $this->assertDatabaseCount('domains', 1);
+        $this->assertDatabaseCount('tasks', 0);
+    }
+
+    public function test_invalid_primary_domains_are_rejected()
+    {
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($admin)
+            ->post(route('admin.accounts.store'), $this->validAccountData(['domain' => 'www.example.com']))
+            ->assertSessionHasErrors(['domain' => 'Add the domain without "www." — www is served automatically.']);
+
+        $this->assertDatabaseMissing('users', ['username' => 'budi']);
+        Queue::assertNothingPushed();
     }
 
     /**

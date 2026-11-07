@@ -4,12 +4,19 @@ use App\Http\Controllers\Admin\AccountController;
 use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\TaskController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DomainController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard')->name('home');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
+
+    Route::middleware('role:user')->group(function () {
+        Route::get('domains', [DomainController::class, 'index'])->name('domains.index');
+        Route::post('domains', [DomainController::class, 'store'])->name('domains.store');
+        Route::delete('domains/{domain}', [DomainController::class, 'destroy'])->name('domains.destroy');
+    });
 
     Route::middleware('role:admin')->prefix('admin')->name('admin.')->group(function () {
         Route::get('accounts', [AccountController::class, 'index'])->name('accounts.index');

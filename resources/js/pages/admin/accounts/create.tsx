@@ -76,6 +76,26 @@ export default function AccountsCreate({
                             </div>
 
                             <div className="grid gap-2">
+                                <Label htmlFor="domain">
+                                    Primary domain (optional)
+                                </Label>
+                                <Input
+                                    id="domain"
+                                    name="domain"
+                                    autoComplete="off"
+                                    autoCapitalize="none"
+                                    spellCheck={false}
+                                    maxLength={253}
+                                    placeholder="example.com"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    Set up as the account&apos;s first website
+                                    once the account is ready. Leave out www.
+                                </p>
+                                <InputError message={errors.domain} />
+                            </div>
+
+                            <div className="grid gap-2">
                                 <Label htmlFor="password">Password</Label>
                                 <PasswordInput
                                     id="password"

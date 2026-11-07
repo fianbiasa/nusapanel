@@ -1,0 +1,21 @@
+# PHP {{.PHPVersion}} pool of one nusapanel account; the instance name is the
+# username, e.g. nusa-php{{.PHPTag}}@budi.service. Written by nusad; changes are overwritten.
+[Unit]
+Description=PHP {{.PHPVersion}} FastCGI pool of %i (nusapanel)
+After=network.target
+ConditionPathExists={{.PoolDir}}/%i.conf
+# The PHP of a suspended account stays stopped, also after a reboot.
+ConditionPathExists=!{{.NginxDir}}/%i/suspended.inc
+
+[Service]
+Type=notify
+ExecStart={{.Binary}} --nodaemonize --fpm-config {{.PoolDir}}/%i.conf
+ExecReload=/bin/kill -USR2 $MAINPID
+RuntimeDirectory={{.RuntimeDirectory}}
+# Other accounts' sockets live in the same directory.
+RuntimeDirectoryPreserve=yes
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

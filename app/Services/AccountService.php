@@ -21,13 +21,17 @@ class AccountService
     public function __construct(
         private TaskDispatcher $tasks,
         private AuditLogger $audit,
+        private DomainService $domains,
     ) {}
 
     /**
      * Create a pending hosting account owned by the actor and queue its
-     * creation on the server.
+     * creation on the server. A primary domain, if given, is set up once
+     * the account exists on the server.
      *
-     * @param  array{username: string, name: string, email: string, password: string}  $data
+     * @param  array{username: string, name: string, email: string, password: string, domain?: string|null}  $data
+     *
+     * @throws ValidationException When the primary domain cannot be used.
      */
     public function create(array $data, User $actor): User
     {
@@ -47,6 +51,12 @@ class AccountService
                 'username' => $account->username,
                 'role' => Role::User->value,
             ], $actor);
+
+            $domain = $data['domain'] ?? null;
+
+            if ($domain !== null && $domain !== '') {
+                $this->domains->create($account, $domain, $actor, primary: true);
+            }
 
             return $account;
         });
