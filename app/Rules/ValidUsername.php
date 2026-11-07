@@ -23,6 +23,9 @@ class ValidUsername implements ValidationRule
         'pdns', 'polkitd', 'pollinate', 'postfix', 'proxy', 'pureftpd', 'redis', 'root',
         'rspamd', 'sshd', 'staff', 'sudo', 'sync', 'sys', 'syslog', 'systemd', 'tcpdump',
         'tss', 'ubuntu', 'users', 'uucp', 'uuidd', 'vmail',
+        // Privileged groups an account must never share a name with.
+        'audio', 'cdrom', 'crontab', 'dialout', 'disk', 'docker', 'floppy', 'input', 'kmem', 'kvm',
+        'libvirt', 'netdev', 'plugdev', 'render', 'shadow', 'tape', 'tty', 'utmp', 'video', 'wheel', 'www',
     ];
 
     public function validate(string $attribute, mixed $value, Closure $fail): void

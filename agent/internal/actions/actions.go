@@ -8,6 +8,7 @@ import (
 
 	"nusapanel/agent/internal/rpc"
 	"nusapanel/agent/internal/sysinfo"
+	"nusapanel/agent/internal/sysuser"
 	"nusapanel/agent/internal/version"
 )
 
@@ -15,6 +16,10 @@ import (
 func Register(registry *rpc.Registry) {
 	registry.Register("agent.ping", rpc.Method{Handler: ping})
 	registry.Register("system.info", rpc.Method{Handler: systemInfo})
+
+	for name, method := range accountMethods(sysuser.System{}) {
+		registry.Register(name, method)
+	}
 }
 
 // ping lets the panel and the installer check that the agent is up.

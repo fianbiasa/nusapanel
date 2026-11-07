@@ -27,6 +27,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  *
  * @property int $id
  * @property string $username
+ * @property int|null $uid Linux user id, set once the agent has created the account.
  * @property string $name
  * @property string $email
  * @property Carbon|null $email_verified_at
@@ -58,6 +59,7 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     protected function casts(): array
     {
         return [
+            'uid' => 'integer',
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'role' => Role::class,

@@ -75,14 +75,14 @@ Konvensi nama: `namespace.aksi`. "Sebagai user" = agent turun ke UID user sebelu
 
 ### account
 
-| Aksi                            | Fungsi                                                                                                      | Fase    |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------- |
-| `account.create`                | Buat user & grup Linux, home `0710 <user>:nusa-access`, struktur folder, quota, slice systemd               | P1      |
-| `account.apply_limits`          | Quota disk/inode; batas CPU, RAM, proses, IO                                                                | P1 / P3 |
-| `account.suspend` / `unsuspend` | Kunci login, vhost → halaman suspended, hentikan PHP-FPM & cron. Mail & FTP otomatis ditolak lewat view SQL | P1      |
-| `account.delete`                | Hentikan proses; hapus config, database, mail, home, dan user Linux                                         | P1      |
-| `account.set_password`          | Password Linux (untuk SFTP/SSH)                                                                             | P1      |
-| `account.rename`                | Ganti username                                                                                              | P6      |
+| Aksi                            | Fungsi                                                                                                                                                             | Fase    |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- |
+| `account.create`                | Buat user & grup Linux (penanda GECOS `nusapanel`), home `0710 <user>:nusa-access`, `domains`/`tmp`/`backups`/`.trash`; quota & slice systemd menyusul             | P1 ✅   |
+| `account.apply_limits`          | Quota disk/inode; batas CPU, RAM, proses, IO                                                                                                                       | P1 / P3 |
+| `account.suspend` / `unsuspend` | ✅ kunci password + akun kedaluwarsa (blok SSH-key/SFTP); menyusul: vhost → halaman suspended, hentikan PHP-FPM & cron. Mail & FTP otomatis ditolak lewat view SQL | P1      |
+| `account.delete`                | ✅ hentikan proses, hapus home & user Linux (akun sistem ditolak); menyusul: hapus config, database, mail, dst.                                                    | P1      |
+| `account.set_password`          | Password Linux (untuk SFTP/SSH)                                                                                                                                    | P1      |
+| `account.rename`                | Ganti username                                                                                                                                                     | P6      |
 
 ### web
 

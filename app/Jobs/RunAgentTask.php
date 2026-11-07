@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Agent\AgentClient;
 use App\Agent\AgentException;
 use App\Enums\TaskStatus;
+use App\Events\AgentTaskFinished;
 use App\Models\Task;
 use DateTimeInterface;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -63,14 +64,20 @@ class RunAgentTask implements ShouldQueue
         } catch (AgentException $exception) {
             $this->task->markFailed($exception->getMessage());
 
+            AgentTaskFinished::dispatch($this->task);
+
             return;
         }
 
         $this->task->markSucceeded($output);
+
+        AgentTaskFinished::dispatch($this->task);
     }
 
     public function failed(?Throwable $exception): void
     {
         $this->task->markFailed($exception?->getMessage() ?? 'The task failed unexpectedly.');
+
+        AgentTaskFinished::dispatch($this->task);
     }
 }

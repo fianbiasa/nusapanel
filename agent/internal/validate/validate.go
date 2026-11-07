@@ -27,6 +27,12 @@ var reservedUsernames = map[string]bool{
 	"sshd": true, "staff": true, "sudo": true, "sync": true, "sys": true, "syslog": true,
 	"systemd": true, "tcpdump": true, "tss": true, "ubuntu": true, "users": true, "uucp": true,
 	"uuidd": true, "vmail": true,
+	// Privileged groups: an account must never share a name with one, or a
+	// group created later (e.g. by installing Docker) could be handed to it.
+	"audio": true, "cdrom": true, "crontab": true, "dialout": true, "disk": true, "docker": true,
+	"floppy": true, "input": true, "kmem": true, "kvm": true, "libvirt": true, "netdev": true,
+	"plugdev": true, "render": true, "shadow": true, "systemd-journal": true, "tape": true,
+	"tty": true, "utmp": true, "video": true, "wheel": true, "www": true,
 }
 
 // Username returns an error unless name is a valid account name: 3 to 16

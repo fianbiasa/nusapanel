@@ -21,6 +21,8 @@ class AdminAreaTest extends TestCase
     public static function adminRoutes(): array
     {
         return [
+            'accounts' => ['admin.accounts.index'],
+            'new account' => ['admin.accounts.create'],
             'tasks' => ['admin.tasks.index'],
             'audit log' => ['admin.audit-logs.index'],
         ];

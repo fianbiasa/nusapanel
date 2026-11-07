@@ -44,6 +44,8 @@ Pekerjaan:
 
 ## P1 — Hosting inti
 
+**Status:** akun hosting ✅ (buat, suspend, unsuspend, hapus dari panel; teruji di Ubuntu 24.04). Berikutnya: domain & website.
+
 - Akun user & paket user, buat/suspend/hapus akun, quota disk & inode.
 - Domain, subdomain, pointer, redirect, www/HTTPS.
 - Nginx → Apache → PHP-FPM per user, banyak versi PHP, PHP settings.

@@ -507,6 +507,14 @@ create_layout() {
         info "User sistem $PANEL_USER dibuat"
     fi
 
+    # Hosting homes are 0710 <user>:nusa-access, so only the web server can
+    # enter them. Created before any web server starts, so its workers get
+    # the group without a restart.
+    if ! getent group nusa-access >/dev/null; then
+        groupadd --system nusa-access
+    fi
+    usermod -aG nusa-access www-data
+
     install -d -m 0755 -o root -g root "$INSTALL_DIR" "$INSTALL_DIR/releases"
     install -d -m 0750 -o root -g "$PANEL_USER" "$CONFIG_DIR"
     install -d -m 0700 -o root -g root "$CONFIG_DIR/ssl"

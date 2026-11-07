@@ -1,0 +1,487 @@
+package actions
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"reflect"
+	"runtime"
+	"slices"
+	"testing"
+
+	"nusapanel/agent/internal/rpc"
+	"nusapanel/agent/internal/sysuser"
+)
+
+var accountMethodNames = []string{"account.create", "account.suspend", "account.unsuspend", "account.delete"}
+
+func TestAccountMethodsAreRegistered(t *testing.T) {
+	registry := rpc.NewRegistry()
+	Register(registry)
+
+	for _, name := range accountMethodNames {
+		if !slices.Contains(registry.Names(), name) {
+			t.Errorf("method %s is not registered", name)
+		}
+	}
+}
+
+func TestAccountMethodsRejectInvalidUsernames(t *testing.T) {
+	invalid := []any{"", "ab", "Budi", "1budi", "budi-s", "budi;id", "../etc", "root", "nusapanel", "www-data", "mysql", 42, nil}
+
+	for _, method := range accountMethodNames {
+		for _, username := range invalid {
+			system := newFakeSystem()
+
+			_, err := callAccount(t, system, method, map[string]any{"username": username})
+
+			assertCode(t, err, rpc.CodeInvalidParams)
+
+			if len(system.calls) != 0 {
+				t.Fatalf("%s(%v) reached the system: %v", method, username, system.calls)
+			}
+		}
+	}
+}
+
+func TestAccountMethodsRejectUnknownParams(t *testing.T) {
+	for _, method := range accountMethodNames {
+		system := newFakeSystem()
+
+		_, err := callAccount(t, system, method, map[string]any{"username": "budi", "shell": "/bin/bash"})
+
+		assertCode(t, err, rpc.CodeInvalidParams)
+
+		if len(system.calls) != 0 {
+			t.Fatalf("%s reached the system: %v", method, system.calls)
+		}
+	}
+}
+
+func TestAccountMethodsLockTheAccount(t *testing.T) {
+	for name, method := range accountMethods(newFakeSystem()) {
+		if method.LockKey == nil {
+			t.Fatalf("%s has no lock key", name)
+		}
+
+		key, err := method.LockKey(json.RawMessage(`{"username":"budi"}`))
+		if err != nil || key != "account:budi" {
+			t.Fatalf("%s lock key = %q, %v; want account:budi", name, key, err)
+		}
+
+		_, err = method.LockKey(json.RawMessage(`{"username":"root"}`))
+		assertCode(t, err, rpc.CodeInvalidParams)
+	}
+}
+
+func TestCreateMakesTheAccount(t *testing.T) {
+	system := newFakeSystem()
+
+	result, err := callAccount(t, system, "account.create", map[string]string{"username": "budi"})
+	if err != nil {
+		t.Fatalf("create failed: %v", err)
+	}
+
+	if string(result) != `{"username":"budi","uid":1001,"gid":1001,"home":"/home/budi"}` {
+		t.Fatalf("unexpected result %s", result)
+	}
+
+	assertCalls(t, system, "lookup budi", "group nusa-access www-data", "useradd budi", "lookup budi", "prepare /home/budi")
+
+	user := system.users["budi"]
+	if user.Comment != "nusapanel" || user.Shell != "/usr/sbin/nologin" || user.Home != "/home/budi" {
+		t.Fatalf("user created with unexpected details: %+v", user)
+	}
+
+	access := system.groups["nusa-access"]
+	if access == nil || !slices.Contains(access.Members, "www-data") {
+		t.Fatalf("www-data is not in nusa-access: %+v", access)
+	}
+
+	want := sysuser.Home{
+		Path:      "/home/budi",
+		Mode:      0o710,
+		UID:       1001,
+		AccessGID: access.GID,
+		GID:       1001,
+		Dirs: []sysuser.Dir{
+			{Name: "domains", Mode: 0o711},
+			{Name: "tmp", Mode: 0o700},
+			{Name: "backups", Mode: 0o700},
+			{Name: ".trash", Mode: 0o700},
+		},
+	}
+	if home := system.homes["/home/budi"]; !reflect.DeepEqual(home, want) {
+		t.Fatalf("home prepared as %+v, want %+v", home, want)
+	}
+}
+
+func TestCreateIsIdempotent(t *testing.T) {
+	system := newFakeSystem()
+
+	first, err := callAccount(t, system, "account.create", map[string]string{"username": "budi"})
+	if err != nil {
+		t.Fatalf("first create failed: %v", err)
+	}
+
+	system.calls = nil
+
+	second, err := callAccount(t, system, "account.create", map[string]string{"username": "budi"})
+	if err != nil {
+		t.Fatalf("second create failed: %v", err)
+	}
+
+	if string(first) != string(second) {
+		t.Fatalf("results differ: %s and %s", first, second)
+	}
+
+	assertCalls(t, system, "lookup budi", "group nusa-access www-data", "prepare /home/budi")
+}
+
+func TestCreateReportsNamesTakenByGroups(t *testing.T) {
+	system := newFakeSystem()
+	system.groups["budi"] = &sysuser.Group{Name: "budi", GID: 1500}
+
+	_, err := callAccount(t, system, "account.create", map[string]string{"username": "budi"})
+
+	agentErr := assertCode(t, err, rpc.CodeActionFailed)
+	if agentErr.Message != "username budi is already used by a system account" {
+		t.Fatalf("unexpected message %q", agentErr.Message)
+	}
+}
+
+func TestForeignAccountsAreNeverChanged(t *testing.T) {
+	foreign := map[string]sysuser.User{
+		"no marker":       {Name: "budi", UID: 1001, GID: 1001, Comment: "Budi Santoso", Home: "/home/budi"},
+		"empty comment":   {Name: "budi", UID: 1001, GID: 1001, Home: "/home/budi"},
+		"marker later":    {Name: "budi", UID: 1001, GID: 1001, Comment: "Budi,nusapanel", Home: "/home/budi"},
+		"system uid":      {Name: "budi", UID: 999, GID: 999, Comment: "nusapanel", Home: "/home/budi"},
+		"root uid":        {Name: "budi", UID: 0, GID: 0, Comment: "nusapanel", Home: "/home/budi"},
+		"home elsewhere":  {Name: "budi", UID: 1001, GID: 1001, Comment: "nusapanel", Home: "/var/www"},
+		"home in a child": {Name: "budi", UID: 1001, GID: 1001, Comment: "nusapanel", Home: "/home/budi/x"},
+	}
+
+	for description, user := range foreign {
+		for _, method := range accountMethodNames {
+			system := newFakeSystem()
+			system.users["budi"] = user
+
+			_, err := callAccount(t, system, method, map[string]string{"username": "budi"})
+
+			agentErr := assertCode(t, err, rpc.CodeActionFailed)
+			if description != "home elsewhere" && description != "home in a child" &&
+				agentErr.Message != "username budi is already used by a system account" {
+				t.Fatalf("%s for %s: unexpected message %q", method, description, agentErr.Message)
+			}
+
+			assertCalls(t, system, "lookup budi")
+		}
+	}
+}
+
+func TestSuspendLocksTheAccount(t *testing.T) {
+	system := newFakeSystem()
+	system.addAccount("budi", 1001)
+
+	result, err := callAccount(t, system, "account.suspend", map[string]string{"username": "budi"})
+	if err != nil {
+		t.Fatalf("suspend failed: %v", err)
+	}
+
+	if string(result) != `{}` {
+		t.Fatalf("unexpected result %s", result)
+	}
+
+	assertCalls(t, system, "lookup budi", "lock budi", "shell budi /usr/sbin/nologin")
+}
+
+func TestUnsuspendUnlocksTheAccount(t *testing.T) {
+	system := newFakeSystem()
+	system.addAccount("budi", 1001)
+
+	result, err := callAccount(t, system, "account.unsuspend", map[string]string{"username": "budi"})
+	if err != nil {
+		t.Fatalf("unsuspend failed: %v", err)
+	}
+
+	if string(result) != `{}` {
+		t.Fatalf("unexpected result %s", result)
+	}
+
+	assertCalls(t, system, "lookup budi", "unlock budi")
+}
+
+func TestSuspendAndUnsuspendNeedAnExistingAccount(t *testing.T) {
+	for _, method := range []string{"account.suspend", "account.unsuspend"} {
+		system := newFakeSystem()
+
+		_, err := callAccount(t, system, method, map[string]string{"username": "budi"})
+
+		agentErr := assertCode(t, err, rpc.CodeActionFailed)
+		if agentErr.Message != "account budi does not exist" {
+			t.Fatalf("%s: unexpected message %q", method, agentErr.Message)
+		}
+	}
+}
+
+func TestDeleteKillsProcessesThenRemovesTheAccount(t *testing.T) {
+	system := newFakeSystem()
+	system.addAccount("budi", 1001)
+
+	result, err := callAccount(t, system, "account.delete", map[string]string{"username": "budi"})
+	if err != nil {
+		t.Fatalf("delete failed: %v", err)
+	}
+
+	if string(result) != `{}` {
+		t.Fatalf("unexpected result %s", result)
+	}
+
+	assertCalls(t, system, "lookup budi", "kill 1001", "userdel budi")
+
+	if _, exists := system.users["budi"]; exists {
+		t.Fatal("the user still exists")
+	}
+}
+
+func TestDeleteOfAMissingAccountSucceeds(t *testing.T) {
+	system := newFakeSystem()
+
+	result, err := callAccount(t, system, "account.delete", map[string]string{"username": "budi"})
+	if err != nil {
+		t.Fatalf("delete failed: %v", err)
+	}
+
+	if string(result) != `{}` {
+		t.Fatalf("unexpected result %s", result)
+	}
+
+	assertCalls(t, system, "lookup budi")
+}
+
+func TestDeleteRefusesSystemUIDs(t *testing.T) {
+	system := newFakeSystem()
+	system.addAccount("budi", 999)
+
+	_, err := callAccount(t, system, "account.delete", map[string]string{"username": "budi"})
+
+	assertCode(t, err, rpc.CodeActionFailed)
+	assertCalls(t, system, "lookup budi")
+}
+
+func TestSystemFailuresStayInternal(t *testing.T) {
+	system := newFakeSystem()
+	system.addAccount("budi", 1001)
+	system.failWith = errors.New("/usr/sbin/userdel exited with code 12: cannot remove /home/budi")
+
+	_, err := callAccount(t, system, "account.delete", map[string]string{"username": "budi"})
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+
+	if _, ok := errors.AsType[*rpc.Error](err); ok {
+		t.Fatalf("system details would reach the panel: %v", err)
+	}
+}
+
+func TestUnsupportedPlatformsGetAReadableError(t *testing.T) {
+	if runtime.GOOS == "linux" {
+		t.Skip("this would change the real system")
+	}
+
+	for _, method := range accountMethodNames {
+		_, err := callAccount(t, sysuser.System{}, method, map[string]string{"username": "budi"})
+
+		agentErr := assertCode(t, err, rpc.CodeActionFailed)
+		if agentErr.Message != "accounts can only be managed on Linux" {
+			t.Fatalf("%s: unexpected message %q", method, agentErr.Message)
+		}
+	}
+}
+
+// callAccount runs method the way the server does: lock key first, then the
+// handler. The result is returned as JSON.
+func callAccount(t *testing.T, system accountSystem, method string, params any) (json.RawMessage, error) {
+	t.Helper()
+
+	raw, err := json.Marshal(params)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	registered, ok := accountMethods(system)[method]
+	if !ok {
+		t.Fatalf("unknown method %s", method)
+	}
+
+	if _, err := registered.LockKey(raw); err != nil {
+		return nil, err
+	}
+
+	result, err := registered.Handler(context.Background(), raw)
+	if err != nil {
+		return nil, err
+	}
+
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("result cannot be encoded: %v", err)
+	}
+
+	return encoded, nil
+}
+
+func assertCode(t *testing.T, err error, code int) *rpc.Error {
+	t.Helper()
+
+	agentErr, ok := errors.AsType[*rpc.Error](err)
+	if !ok {
+		t.Fatalf("expected agent error %d, got %v", code, err)
+	}
+
+	if agentErr.Code != code {
+		t.Fatalf("expected code %d, got %d (%s)", code, agentErr.Code, agentErr.Message)
+	}
+
+	return agentErr
+}
+
+func assertCalls(t *testing.T, system *fakeSystem, want ...string) {
+	t.Helper()
+
+	if !slices.Equal(system.calls, want) {
+		t.Fatalf("system calls = %q, want %q", system.calls, want)
+	}
+}
+
+// fakeSystem is an in-memory accountSystem that records every call and
+// refuses what a real system would refuse.
+type fakeSystem struct {
+	users  map[string]sysuser.User
+	groups map[string]*sysuser.Group
+	homes  map[string]sysuser.Home
+	calls  []string
+
+	nextID int
+	// failWith, when set, is returned by every change.
+	failWith error
+}
+
+func newFakeSystem() *fakeSystem {
+	return &fakeSystem{
+		users:  map[string]sysuser.User{},
+		groups: map[string]*sysuser.Group{},
+		homes:  map[string]sysuser.Home{},
+		nextID: 1001,
+	}
+}
+
+// addAccount adds a user that looks like one account.create made.
+func (f *fakeSystem) addAccount(name string, uid int) {
+	f.users[name] = sysuser.User{Name: name, UID: uid, GID: uid, Comment: "nusapanel", Home: "/home/" + name, Shell: "/usr/sbin/nologin"}
+	f.groups[name] = &sysuser.Group{Name: name, GID: uid}
+}
+
+func (f *fakeSystem) record(format string, args ...any) error {
+	f.calls = append(f.calls, fmt.Sprintf(format, args...))
+
+	return f.failWith
+}
+
+func (f *fakeSystem) LookupUser(_ context.Context, name string) (sysuser.User, error) {
+	f.calls = append(f.calls, "lookup "+name)
+
+	user, ok := f.users[name]
+	if !ok {
+		return sysuser.User{}, fmt.Errorf("user %s: %w", name, sysuser.ErrNotFound)
+	}
+
+	return user, nil
+}
+
+func (f *fakeSystem) EnsureGroupMember(_ context.Context, group, member string) (int, error) {
+	if err := f.record("group %s %s", group, member); err != nil {
+		return 0, err
+	}
+
+	found, ok := f.groups[group]
+	if !ok {
+		found = &sysuser.Group{Name: group, GID: 990}
+		f.groups[group] = found
+	}
+
+	if !slices.Contains(found.Members, member) {
+		found.Members = append(found.Members, member)
+	}
+
+	return found.GID, nil
+}
+
+func (f *fakeSystem) AddUser(_ context.Context, user sysuser.NewUser) error {
+	if err := f.record("useradd %s", user.Name); err != nil {
+		return err
+	}
+
+	if _, exists := f.users[user.Name]; exists {
+		return sysuser.ErrNameTaken
+	}
+
+	if _, exists := f.groups[user.Name]; exists {
+		return sysuser.ErrNameTaken
+	}
+
+	id := f.nextID
+	f.nextID++
+
+	f.users[user.Name] = sysuser.User{Name: user.Name, UID: id, GID: id, Comment: user.Comment, Home: user.Home, Shell: user.Shell}
+	f.groups[user.Name] = &sysuser.Group{Name: user.Name, GID: id}
+
+	return nil
+}
+
+func (f *fakeSystem) SetPasswordLock(_ context.Context, name string, locked bool) error {
+	action := "unlock"
+	if locked {
+		action = "lock"
+	}
+
+	return f.record("%s %s", action, name)
+}
+
+func (f *fakeSystem) SetShell(_ context.Context, name, shell string) error {
+	if err := f.record("shell %s %s", name, shell); err != nil {
+		return err
+	}
+
+	user := f.users[name]
+	user.Shell = shell
+	f.users[name] = user
+
+	return nil
+}
+
+func (f *fakeSystem) KillProcesses(_ context.Context, uid int) error {
+	return f.record("kill %d", uid)
+}
+
+func (f *fakeSystem) DeleteUser(_ context.Context, name string) error {
+	if err := f.record("userdel %s", name); err != nil {
+		return err
+	}
+
+	delete(f.users, name)
+	delete(f.groups, name)
+
+	return nil
+}
+
+func (f *fakeSystem) PrepareHome(_ context.Context, home sysuser.Home) error {
+	if err := f.record("prepare %s", home.Path); err != nil {
+		return err
+	}
+
+	f.homes[home.Path] = home
+
+	return nil
+}
