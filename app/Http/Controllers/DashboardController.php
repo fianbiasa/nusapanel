@@ -46,6 +46,7 @@ class DashboardController extends Controller
                     'status' => $domain->status->value,
                     'php_version' => $domain->php_version,
                     'is_primary' => $domain->is_primary,
+                    'ssl_active' => $domain->hasActiveSsl(),
                 ]);
         }
 

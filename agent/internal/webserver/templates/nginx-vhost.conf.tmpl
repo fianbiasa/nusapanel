@@ -4,14 +4,53 @@ server {
 {{- if .IPv6}}
     listen [::]:80;
 {{- end}}
-    server_name {{.Domain}} www.{{.Domain}};
+{{- template "identity" .}}
 
-    root {{.DocumentRoot}};
+    # Let's Encrypt checks for this domain's certificate, answered from the
+    # shared ACME folder, also when HTTPS is forced.
+    location ^~ /.well-known/acme-challenge/ {
+        root {{.AcmeDir}};
+        default_type text/plain;
+        try_files $uri =404;
+    }
+{{- if .ForceHTTPS}}
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+{{- else}}
+{{- template "site" .}}
+{{- end}}
+}
+{{- if .SSL}}
+
+server {
+    listen 443 ssl http2;
+{{- if .IPv6}}
+    listen [::]:443 ssl http2;
+{{- end}}
+{{- template "identity" .}}
+
+    ssl_certificate {{.Certificate}};
+    ssl_certificate_key {{.CertificateKey}};
+    ssl_protocols TLSv1.2 TLSv1.3;
+{{- template "site" .}}
+}
+{{- end}}
+{{- /* What every server of the domain shares, on any port. */ -}}
+{{define "identity"}}
+    server_name {{.Domain}} www.{{.Domain}};
 
     access_log {{.LogDir}}/{{.Domain}}.access.log;
     error_log {{.LogDir}}/{{.Domain}}.error.log;
 
     server_tokens off;
+{{- end}}
+{{- /* Serving the website itself, the same over HTTP and HTTPS. */ -}}
+{{define "site"}}
+
+    root {{.DocumentRoot}};
+
     # Never serve a file through a symlink that someone else owns, such as a
     # link to another account's wp-config.php.
     disable_symlinks if_not_owner from=$document_root;
@@ -38,7 +77,8 @@ server {
     location @apache {
 {{- template "proxy" .}}
     }
-}
+{{- end}}
+{{- /* Apache behind Nginx. X-Forwarded-Proto tells Apache (and PHP) whether the visitor uses HTTPS. */ -}}
 {{define "proxy"}}
         proxy_pass http://{{.Backend}};
         proxy_set_header Host $host;

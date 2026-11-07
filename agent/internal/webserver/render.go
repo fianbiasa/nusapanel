@@ -32,6 +32,14 @@ type siteData struct {
 	// Socket and PoolName identify the account's PHP-FPM pool.
 	Socket   string
 	PoolName string
+	// AcmeDir is the webroot of Let's Encrypt challenges.
+	AcmeDir string
+	// SSL adds a server on port 443 with Certificate and CertificateKey;
+	// ForceHTTPS redirects port 80 to it.
+	SSL            bool
+	ForceHTTPS     bool
+	Certificate    string
+	CertificateKey string
 }
 
 // poolData is what the pool template sees.
@@ -83,6 +91,11 @@ func (m *Manager) siteData(site Site) siteData {
 		IPv6:            m.hasIPv6(),
 		Socket:          pool.Socket,
 		PoolName:        pool.PoolName,
+		AcmeDir:         m.cfg.AcmeDir,
+		SSL:             site.SSL,
+		ForceHTTPS:      site.ForceHTTPS,
+		Certificate:     m.certificateFile(site.Domain),
+		CertificateKey:  m.certificateKeyFile(site.Domain),
 	}
 }
 
@@ -177,4 +190,35 @@ func (m *Manager) apacheVhost(user, domain string) string {
 
 func (m *Manager) suspendedFile(user string) string {
 	return m.nginxAccountDir(user) + "/suspended.inc"
+}
+
+// removedDomainsFile lists the domains of an account whose vhosts
+// RemoveAccount removed but whose certificates may still exist. It has no
+// .conf suffix, so neither web server ever loads it.
+func (m *Manager) removedDomainsFile(user string) string {
+	return m.nginxAccountDir(user) + "/.removed-domains"
+}
+
+// certificateDir is the folder certbot keeps the current certificate of
+// domain in, as symlinks into its archive.
+func (m *Manager) certificateDir(domain string) string {
+	return m.cfg.LetsEncryptDir + "/live/" + domain
+}
+
+func (m *Manager) certificateFile(domain string) string {
+	return m.certificateDir(domain) + "/fullchain.pem"
+}
+
+func (m *Manager) certificateKeyFile(domain string) string {
+	return m.certificateDir(domain) + "/privkey.pem"
+}
+
+// renewalFile is certbot's renewal configuration of the certificate named
+// domain; it exists exactly as long as certbot manages that certificate.
+func (m *Manager) renewalFile(domain string) string {
+	return m.cfg.LetsEncryptDir + "/renewal/" + domain + ".conf"
+}
+
+func (m *Manager) challengeDir() string {
+	return m.cfg.AcmeDir + "/.well-known/acme-challenge"
 }

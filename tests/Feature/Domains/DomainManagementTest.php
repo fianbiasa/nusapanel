@@ -87,7 +87,13 @@ class DomainManagementTest extends TestCase
         $task = Task::query()->sole();
 
         $this->assertSame('web.apply_domain', $task->action);
-        $this->assertSame(['username' => 'budi', 'domain' => 'example.com', 'php_version' => '8.4'], $task->payload);
+        $this->assertSame([
+            'username' => 'budi',
+            'domain' => 'example.com',
+            'php_version' => '8.4',
+            'ssl' => false,
+            'force_https' => false,
+        ], $task->payload);
         $this->assertSame($account->id, $task->user_id);
         $this->assertSame($account->id, $task->actor_id);
 

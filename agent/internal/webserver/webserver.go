@@ -1,6 +1,7 @@
 // Package webserver manages the websites of hosting accounts: an Nginx vhost
-// and an Apache vhost per domain, and a PHP-FPM pool per account per PHP
-// version that runs as its own systemd service (nusa-php<ver>@<user>). See
+// and an Apache vhost per domain, a PHP-FPM pool per account per PHP
+// version that runs as its own systemd service (nusa-php<ver>@<user>), and
+// a Let's Encrypt certificate per domain (certificate.go). See
 // docs/02-arsitektur.md 2.6-2.7 and docs/04-agent-dan-server.md 4.4-4.6.
 //
 // Every value written into a config file comes from a validated username,
@@ -13,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"slices"
 	"strings"
@@ -28,6 +30,7 @@ const (
 	nginxProgram     = "/usr/sbin/nginx"
 	apachectlProgram = "/usr/sbin/apache2ctl"
 	systemctlProgram = "/usr/bin/systemctl"
+	certbotProgram   = "/usr/bin/certbot"
 )
 
 var (
@@ -38,6 +41,9 @@ var (
 	// ErrPoolRejected means PHP-FPM refused a new pool configuration, which
 	// was not installed.
 	ErrPoolRejected = errors.New("PHP-FPM rejected the pool configuration")
+	// ErrNoCertificate means HTTPS was asked for a domain that has no
+	// certificate yet. Nothing was changed.
+	ErrNoCertificate = errors.New("the domain has no certificate")
 )
 
 // Config holds every location the Manager reads or writes and the
@@ -68,6 +74,13 @@ type Config struct {
 	IPv6File string
 	// Backend is the address Apache listens on, behind Nginx.
 	Backend string
+	// AcmeDir is the webroot certbot puts Let's Encrypt challenges in; every
+	// vhost serves its /.well-known/acme-challenge/ on port 80.
+	AcmeDir string
+	// LetsEncryptDir is certbot's configuration folder, with the current
+	// certificates in live/<domain>/ and their settings in
+	// renewal/<domain>.conf.
+	LetsEncryptDir string
 
 	// Hostnames returns the server's own names, lowercased. No website may
 	// use one of them.
@@ -77,6 +90,10 @@ type Config struct {
 	// PrepareSite creates a website's folders inside a home, like
 	// sysuser.System.PrepareSite.
 	PrepareSite func(ctx context.Context, site sysuser.Site) error
+	// DialHTTP opens the connections of the check that a domain reaches
+	// this server before a certificate is requested. Defaults to dialing
+	// public addresses only.
+	DialHTTP func(ctx context.Context, network, address string) (net.Conn, error)
 	// Logger receives the output of rejected config tests. Defaults to
 	// slog.Default().
 	Logger *slog.Logger
@@ -85,20 +102,23 @@ type Config struct {
 // DefaultConfig returns the locations and operations used on a server.
 func DefaultConfig() Config {
 	return Config{
-		NginxDir:    "/etc/nginx/nusapanel",
-		ApacheDir:   "/etc/apache2/nusapanel",
-		PoolDir:     "/etc/nusapanel/php-fpm",
-		UnitDir:     "/etc/systemd/system",
-		LogDir:      "/var/log/nusapanel/domains",
-		LogGroup:    "adm",
-		RunDir:      "/run/nusa-php",
-		HomeRoot:    "/home",
-		PHPFPMDir:   "/usr/sbin",
-		IPv6File:    "/proc/net/if_inet6",
-		Backend:     "127.0.0.1:8080",
-		Hostnames:   systemHostnames,
-		Run:         runner.Run,
-		PrepareSite: sysuser.System{}.PrepareSite,
+		NginxDir:       "/etc/nginx/nusapanel",
+		ApacheDir:      "/etc/apache2/nusapanel",
+		PoolDir:        "/etc/nusapanel/php-fpm",
+		UnitDir:        "/etc/systemd/system",
+		LogDir:         "/var/log/nusapanel/domains",
+		LogGroup:       "adm",
+		RunDir:         "/run/nusa-php",
+		HomeRoot:       "/home",
+		PHPFPMDir:      "/usr/sbin",
+		IPv6File:       "/proc/net/if_inet6",
+		Backend:        "127.0.0.1:8080",
+		AcmeDir:        "/var/www/nusapanel-acme",
+		LetsEncryptDir: "/etc/letsencrypt",
+		Hostnames:      systemHostnames,
+		Run:            runner.Run,
+		PrepareSite:    sysuser.System{}.PrepareSite,
+		DialHTTP:       dialPublic,
 	}
 }
 
@@ -148,6 +168,12 @@ type Site struct {
 	GID        int
 	Domain     string
 	PHPVersion string
+	// SSL serves the domain over HTTPS too, with its Let's Encrypt
+	// certificate, which must exist.
+	SSL bool
+	// ForceHTTPS redirects HTTP to HTTPS, except Let's Encrypt challenges.
+	// It needs SSL.
+	ForceHTTPS bool
 }
 
 // PHPInstalled reports whether PHP-FPM of version is installed.
@@ -217,10 +243,16 @@ func (m *Manager) DocumentRoot(user, domain string) string {
 
 // ApplyDomain creates the folders of site, its PHP-FPM pool and its Nginx
 // and Apache vhosts, and returns its document root. Running it again
-// renders the same configuration, so a failed call can be retried.
+// renders the same configuration, so a failed call can be retried. HTTPS
+// for a domain without a certificate fails with ErrNoCertificate before
+// anything changes.
 func (m *Manager) ApplyDomain(ctx context.Context, site Site) (string, error) {
 	if err := checkSite(site); err != nil {
 		return "", err
+	}
+
+	if site.SSL && !m.HasCertificate(site.Domain) {
+		return "", fmt.Errorf("%w: %s", ErrNoCertificate, site.Domain)
 	}
 
 	index, err := render("index.html.tmpl", m.siteData(site))
@@ -259,26 +291,36 @@ func (m *Manager) ApplyDomain(ctx context.Context, site Site) (string, error) {
 }
 
 // RemoveDomain removes the Nginx and Apache vhosts of domain, reloads both,
-// then deletes the domain's logs, so a later owner of the same domain never
-// inherits them and account.delete leaves nothing behind. The domain's files
-// in the home are kept. Removing a domain without configuration succeeds.
+// then deletes the domain's logs and its certificate, so a later owner of
+// the same domain never inherits them and account.delete leaves nothing
+// behind. The domain's files in the home are kept. Removing a domain
+// without configuration succeeds.
 func (m *Manager) RemoveDomain(ctx context.Context, user, domain string) error {
 	if err := checkNames(user, domain); err != nil {
 		return err
 	}
 
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	err := m.commit(ctx, []fileChange{
-		{path: m.nginxVhost(user, domain)},
-		{path: m.apacheVhost(user, domain)},
-	}, nginxService, apacheService)
-	if err != nil {
+	if err := m.removeDomainVhosts(ctx, user, domain); err != nil {
 		return err
 	}
 
-	return m.removeLogs([]string{domain})
+	if err := m.removeLogs([]string{domain}); err != nil {
+		return err
+	}
+
+	return m.deleteUnusedCertificates(ctx, []string{domain})
+}
+
+// removeDomainVhosts deletes the vhosts of domain, then tests and reloads
+// Nginx and Apache.
+func (m *Manager) removeDomainVhosts(ctx context.Context, user, domain string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return m.commit(ctx, []fileChange{
+		{path: m.nginxVhost(user, domain)},
+		{path: m.apacheVhost(user, domain)},
+	}, nginxService, apacheService)
 }
 
 // RemovePool stops and disables the PHP-FPM pool of user for version and
@@ -370,8 +412,9 @@ func (m *Manager) UnsuspendAccount(ctx context.Context, user string) error {
 
 // RemoveAccount removes everything web related of user: its PHP-FPM pools
 // (stopped and disabled first), the Nginx and Apache vhosts of all its
-// domains, and those domains' logs. It succeeds for an account that has
-// none of these, so it can be repeated.
+// domains, and those domains' logs and certificates. It succeeds for an
+// account that has none of these, so it can be repeated; a repeat after a
+// failure also finds the domains whose vhosts the failed call removed.
 func (m *Manager) RemoveAccount(ctx context.Context, user string) error {
 	if err := validate.Username(user); err != nil {
 		return err
@@ -404,21 +447,41 @@ func (m *Manager) RemoveAccount(ctx context.Context, user string) error {
 		return err
 	}
 
-	return m.removeLogs(domains)
+	if err := m.removeLogs(domains); err != nil {
+		return err
+	}
+
+	if err := m.deleteUnusedCertificates(ctx, domains); err != nil {
+		return err
+	}
+
+	for _, dir := range []string{m.nginxAccountDir(user), m.apacheAccountDir(user)} {
+		if err := os.RemoveAll(dir); err != nil {
+			return fmt.Errorf("remove %s: %w", dir, err)
+		}
+	}
+
+	return nil
 }
 
-// removeVhosts deletes the vhost directories of user, tests and reloads
-// Nginx and Apache, and returns the domains that had a vhost.
+// removeVhosts deletes every file in the vhost directories of user, tests
+// and reloads Nginx and Apache, and returns the domains that had a vhost,
+// together with those an earlier, unfinished call removed. Until the
+// directories themselves are removed, they keep that list in
+// removedDomainsFile, so a retry can still delete the domains' certificates.
 func (m *Manager) removeVhosts(ctx context.Context, user string) ([]string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	accountDirs := []string{m.nginxAccountDir(user), m.apacheAccountDir(user)}
+	listFile := m.removedDomainsFile(user)
 
-	var (
-		changes []fileChange
-		domains []string
-	)
+	domains, err := readDomainList(listFile)
+	if err != nil {
+		return nil, err
+	}
+
+	var changes []fileChange
 
 	for _, dir := range accountDirs {
 		entries, err := os.ReadDir(dir)
@@ -431,11 +494,12 @@ func (m *Manager) removeVhosts(ctx context.Context, user string) ([]string, erro
 		}
 
 		for _, entry := range entries {
-			if !entry.Type().IsRegular() {
+			path := dir + "/" + entry.Name()
+			if !entry.Type().IsRegular() || path == listFile {
 				continue
 			}
 
-			changes = append(changes, fileChange{path: dir + "/" + entry.Name()})
+			changes = append(changes, fileChange{path: path})
 
 			domain, ok := strings.CutSuffix(entry.Name(), ".conf")
 			if ok && validate.Domain(domain) == nil && !slices.Contains(domains, domain) {
@@ -444,13 +508,41 @@ func (m *Manager) removeVhosts(ctx context.Context, user string) ([]string, erro
 		}
 	}
 
+	if len(domains) > 0 {
+		if err := ensureDir(m.nginxAccountDir(user), 0o755); err != nil {
+			return nil, err
+		}
+
+		// Part of the commit, so a rejected change takes the list back too.
+		list := []byte(strings.Join(domains, "\n") + "\n")
+		changes = append([]fileChange{{path: listFile, content: list}}, changes...)
+	}
+
 	if err := m.commit(ctx, changes, nginxService, apacheService); err != nil {
 		return nil, err
 	}
 
-	for _, dir := range accountDirs {
-		if err := os.RemoveAll(dir); err != nil {
-			return nil, fmt.Errorf("remove %s: %w", dir, err)
+	return domains, nil
+}
+
+// readDomainList returns the valid domains listed one per line in path, or
+// none when path does not exist.
+func readDomainList(path string) ([]string, error) {
+	content, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+
+	var domains []string
+
+	for line := range strings.Lines(string(content)) {
+		domain := strings.TrimSpace(line)
+		if validate.Domain(domain) == nil && !slices.Contains(domains, domain) {
+			domains = append(domains, domain)
 		}
 	}
 
@@ -563,6 +655,10 @@ func (m *Manager) logger() *slog.Logger {
 func checkSite(site Site) error {
 	if err := checkNames(site.User, site.Domain); err != nil {
 		return err
+	}
+
+	if site.ForceHTTPS && !site.SSL {
+		return errors.New("forcing HTTPS needs SSL")
 	}
 
 	return validate.PHPVersion(site.PHPVersion)

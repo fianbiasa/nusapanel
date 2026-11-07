@@ -17,6 +17,19 @@ return [
 
     'socket' => env('AGENT_SOCKET', '/run/nusapanel/agent.sock'),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Timeouts (seconds)
+    |--------------------------------------------------------------------------
+    |
+    | "timeout" is for calls a page waits on, such as system.info.
+    | "task_timeout" is for queued tasks, which may take much longer:
+    | issuing a certificate checks the domain, then waits for Let's Encrypt.
+    |
+    */
+
     'timeout' => (int) env('AGENT_TIMEOUT', 30),
+
+    'task_timeout' => (int) env('AGENT_TASK_TIMEOUT', 300),
 
 ];

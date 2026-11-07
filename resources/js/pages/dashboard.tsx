@@ -8,6 +8,8 @@ import {
     HardDrive,
     KeyRound,
     ListChecks,
+    Lock,
+    LockOpen,
     LogIn,
     Gauge,
     Plus,
@@ -66,6 +68,7 @@ type DomainSummary = {
     status: string;
     php_version: string;
     is_primary: boolean;
+    ssl_active: boolean;
 };
 
 type Props = {
@@ -520,6 +523,11 @@ const activityIcons: Record<string, LucideIcon> = {
     'auth.login': LogIn,
     'domain.created': Globe,
     'domain.deleted': Trash2,
+    'domain.ssl_requested': Lock,
+    'domain.ssl_removed': LockOpen,
+    'domain.ssl_cancelled': LockOpen,
+    'domain.https_forced': Lock,
+    'domain.https_unforced': LockOpen,
 };
 
 function ActivityList({ items }: { items: Activity[] }) {
@@ -594,6 +602,15 @@ function DomainList({ domains }: { domains: DomainSummary[] }) {
                     <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold">
                             {domain.display_name}
+                            {domain.ssl_active && (
+                                <span title="SSL aktif">
+                                    <Lock
+                                        className="ml-1.5 inline size-3.5 -translate-y-px text-success"
+                                        aria-hidden
+                                    />
+                                    <span className="sr-only">SSL aktif</span>
+                                </span>
+                            )}
                             {domain.is_primary && (
                                 <span className="ml-2 text-xs font-medium text-muted-foreground">
                                     utama

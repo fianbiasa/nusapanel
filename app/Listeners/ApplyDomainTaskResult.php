@@ -3,6 +3,7 @@
 namespace App\Listeners;
 
 use App\Enums\DomainStatus;
+use App\Enums\SslStatus;
 use App\Enums\TaskStatus;
 use App\Events\AgentTaskFinished;
 use App\Models\Domain;
@@ -25,7 +26,7 @@ class ApplyDomainTaskResult
             return;
         }
 
-        $domain = $this->findDomain($task);
+        $domain = Domain::findForTask($task);
 
         if ($domain === null) {
             return;
@@ -46,6 +47,24 @@ class ApplyDomainTaskResult
         } elseif ($task->status === TaskStatus::Failed && $domain->status !== DomainStatus::Deleting) {
             $domain->forceFill(['status' => DomainStatus::Failed])->save();
         }
+
+        if ($domain->ssl_status === SslStatus::Removing && ($task->payload['ssl'] ?? null) === false) {
+            $this->continueSslRemoval($domain, $task);
+        }
+    }
+
+    /**
+     * Once the website is served without its certificate, the certificate
+     * can be deleted. If the website could not be applied without it, it
+     * still uses the certificate, which therefore stays active.
+     */
+    private function continueSslRemoval(Domain $domain, Task $task): void
+    {
+        if ($task->status === TaskStatus::Success) {
+            $this->domains->deleteCertificate($domain, $task->actor);
+        } elseif ($task->status === TaskStatus::Failed) {
+            $domain->forceFill(['ssl_status' => SslStatus::Active])->save();
+        }
     }
 
     private function applyRemove(Domain $domain, Task $task): void
@@ -59,19 +78,5 @@ class ApplyDomainTaskResult
         } elseif ($task->status === TaskStatus::Failed) {
             $domain->forceFill(['status' => DomainStatus::Failed])->save();
         }
-    }
-
-    private function findDomain(Task $task): ?Domain
-    {
-        $name = $task->payload['domain'] ?? null;
-
-        if ($task->user_id === null || ! is_string($name)) {
-            return null;
-        }
-
-        return Domain::query()
-            ->where('user_id', $task->user_id)
-            ->where('name', $name)
-            ->first();
     }
 }

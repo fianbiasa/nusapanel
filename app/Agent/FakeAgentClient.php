@@ -13,12 +13,13 @@ final class FakeAgentClient implements AgentClient
      */
     private array $calls = [];
 
-    public function call(string $method, array $params = []): array
+    public function call(string $method, array $params = [], ?int $timeoutSeconds = null): array
     {
         $this->calls[] = ['method' => $method, 'params' => $params];
 
         return match ($method) {
             'system.info' => $this->systemInfo(),
+            'ssl.issue' => $this->issuedCertificate((string) ($params['domain'] ?? '')),
             default => ['simulated' => true],
         };
     }
@@ -47,6 +48,21 @@ final class FakeAgentClient implements AgentClient
             'disk' => ['mount' => '/', 'total_gb' => 160, 'used_gb' => 48],
             'uptime_seconds' => 1_036_800,
             'agent_version' => 'fake',
+            'simulated' => true,
+        ];
+    }
+
+    /**
+     * A Let's Encrypt certificate for the domain and its www name, valid
+     * for 90 days.
+     *
+     * @return array<string, mixed>
+     */
+    private function issuedCertificate(string $domain): array
+    {
+        return [
+            'names' => [$domain, 'www.'.$domain],
+            'expires_at' => now()->addDays(90)->toRfc3339String(),
             'simulated' => true,
         ];
     }

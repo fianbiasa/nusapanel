@@ -5,19 +5,25 @@ namespace App\Services;
 use App\Enums\AccountStatus;
 use App\Enums\DomainStatus;
 use App\Enums\Role;
+use App\Enums\SslStatus;
 use App\Listeners\ApplyDomainTaskResult;
+use App\Listeners\ApplySslTaskResult;
 use App\Models\Domain;
 use App\Models\User;
 use App\Rules\ValidDomain;
+use Carbon\CarbonImmutable;
+use Carbon\Exceptions\InvalidFormatException;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Adds and removes the domains (websites) of hosting accounts. The panel
- * record is updated right away and the matching change on the server is
- * queued for the agent; {@see ApplyDomainTaskResult} applies the result.
+ * Adds and removes the domains (websites) of hosting accounts and their
+ * Let's Encrypt certificates. The panel record is updated right away and
+ * the matching change on the server is queued for the agent;
+ * {@see ApplyDomainTaskResult} and {@see ApplySslTaskResult} apply the
+ * results.
  */
 class DomainService
 {
@@ -98,6 +104,12 @@ class DomainService
             ]);
         }
 
+        if ($domain->ssl_status?->isBusy()) {
+            throw ValidationException::withMessages([
+                'domain' => __('Wait until the SSL certificate has been installed or removed.'),
+            ]);
+        }
+
         $account = $domain->account;
 
         DB::transaction(function () use ($domain, $account, $actor): void {
@@ -158,13 +170,275 @@ class DomainService
             ->update(['status' => DomainStatus::Failed]);
     }
 
+    /**
+     * Ask the agent for a Let's Encrypt certificate, also to retry a request
+     * that failed. The agent first checks that the domain points to this
+     * server; the website switches to HTTPS once the certificate is issued.
+     *
+     * @throws ValidationException
+     */
+    public function requestSsl(Domain $domain, User $actor): void
+    {
+        $this->ensureDomainIsActive($domain);
+
+        if ($domain->ssl_status !== null && $domain->ssl_status !== SslStatus::Failed) {
+            throw ValidationException::withMessages([
+                'domain' => __('This domain already has an SSL certificate, or one is being processed.'),
+            ]);
+        }
+
+        $account = $domain->account;
+
+        DB::transaction(function () use ($domain, $account, $actor): void {
+            $domain->forceFill([
+                'ssl_status' => SslStatus::Pending,
+                'ssl_error' => null,
+            ])->save();
+
+            $this->tasks->dispatch('ssl.issue', [
+                'username' => $account->username,
+                'domain' => $domain->name,
+            ], $account, $actor);
+
+            $this->audit->record('domain.ssl_requested', $domain, [
+                'domain' => $domain->name,
+                'username' => $account->username,
+            ], $actor);
+        });
+    }
+
+    /**
+     * Serve the website over plain HTTP again, then delete its certificate:
+     * the agent refuses to delete a certificate the website still uses, so
+     * the certificate is only deleted once the website has been applied
+     * without it.
+     *
+     * @throws ValidationException
+     */
+    public function removeSsl(Domain $domain, User $actor): void
+    {
+        $this->ensureSslIsActive($domain);
+
+        $account = $domain->account;
+
+        DB::transaction(function () use ($domain, $account, $actor): void {
+            $domain->forceFill([
+                'ssl_status' => SslStatus::Removing,
+                'force_https' => false,
+            ])->save();
+
+            $this->dispatchApply($domain, $account, $actor);
+
+            $this->audit->record('domain.ssl_removed', $domain, [
+                'domain' => $domain->name,
+                'username' => $account->username,
+            ], $actor);
+        });
+    }
+
+    /**
+     * Forget a certificate request that failed. Nothing was installed on
+     * the server, so the agent has nothing to undo.
+     *
+     * @throws ValidationException
+     */
+    public function cancelSsl(Domain $domain, User $actor): void
+    {
+        if ($domain->ssl_status !== SslStatus::Failed) {
+            throw ValidationException::withMessages([
+                'domain' => __('Only a failed SSL request can be cancelled.'),
+            ]);
+        }
+
+        DB::transaction(function () use ($domain, $actor): void {
+            $domain->forceFill([
+                'ssl_status' => null,
+                'ssl_error' => null,
+            ])->save();
+
+            $this->audit->record('domain.ssl_cancelled', $domain, [
+                'domain' => $domain->name,
+                'username' => $domain->account->username,
+            ], $actor);
+        });
+    }
+
+    /**
+     * Redirect HTTP visitors to HTTPS, or stop doing so.
+     *
+     * @throws ValidationException
+     */
+    public function setForceHttps(Domain $domain, bool $forceHttps, User $actor): void
+    {
+        $this->ensureSslIsActive($domain);
+
+        if ($domain->force_https === $forceHttps) {
+            return;
+        }
+
+        $account = $domain->account;
+
+        DB::transaction(function () use ($domain, $forceHttps, $account, $actor): void {
+            $domain->forceFill(['force_https' => $forceHttps])->save();
+
+            $this->dispatchApply($domain, $account, $actor);
+
+            $this->audit->record($forceHttps ? 'domain.https_forced' : 'domain.https_unforced', $domain, [
+                'domain' => $domain->name,
+                'username' => $account->username,
+            ], $actor);
+        });
+    }
+
+    /**
+     * Record the certificate the agent issued and switch the website to
+     * HTTPS. Nothing is queued for an account that is being deleted.
+     *
+     * @param  array<string, mixed>  $output  The agent's `ssl.issue` result: `names` and an RFC 3339 `expires_at`.
+     */
+    public function completeSslIssue(Domain $domain, array $output, ?User $actor): void
+    {
+        $account = $domain->account;
+
+        DB::transaction(function () use ($domain, $output, $account, $actor): void {
+            $domain->forceFill([
+                'ssl_status' => SslStatus::Active,
+                'ssl_names' => $this->certificateNames($output['names'] ?? null),
+                'ssl_expires_at' => $this->certificateExpiry($output['expires_at'] ?? null),
+                'ssl_error' => null,
+            ])->save();
+
+            if ($account->status !== AccountStatus::Deleting) {
+                $this->dispatchApply($domain, $account, $actor);
+            }
+        });
+    }
+
+    /**
+     * Queue the deletion of a certificate the website no longer uses.
+     * Deleting an account removes its certificates on the server anyway.
+     */
+    public function deleteCertificate(Domain $domain, ?User $actor): void
+    {
+        $account = $domain->account;
+
+        if ($account->status === AccountStatus::Deleting) {
+            return;
+        }
+
+        $this->tasks->dispatch('ssl.delete', [
+            'username' => $account->username,
+            'domain' => $domain->name,
+        ], $account, $actor);
+    }
+
+    /**
+     * Forget the domain's certificate.
+     */
+    public function clearSsl(Domain $domain): void
+    {
+        $domain->forceFill([
+            'ssl_status' => null,
+            'ssl_names' => null,
+            'ssl_expires_at' => null,
+            'ssl_error' => null,
+            'force_https' => false,
+        ])->save();
+    }
+
+    /**
+     * Queue the configuration of every active website again, e.g. after an
+     * upgrade changed the web server templates. Websites of accounts that
+     * are being created or deleted are left alone.
+     *
+     * @return int The number of websites queued.
+     */
+    public function reapplyAll(?User $actor = null): int
+    {
+        $queued = 0;
+
+        Domain::query()
+            ->with('account')
+            ->where('status', DomainStatus::Active)
+            ->whereHas('account', fn (Builder $query) => $query->whereIn('status', [
+                AccountStatus::Active,
+                AccountStatus::Suspended,
+            ]))
+            ->orderBy('id')
+            ->each(function (Domain $domain) use ($actor, &$queued): void {
+                $this->dispatchApply($domain, $domain->account, $actor);
+                $queued++;
+            });
+
+        return $queued;
+    }
+
+    /**
+     * Queue the (re)configuration of the domain's website. It is served over
+     * HTTPS only while its certificate is active.
+     */
     private function dispatchApply(Domain $domain, User $account, ?User $actor): void
     {
+        $ssl = $domain->hasActiveSsl();
+
         $this->tasks->dispatch('web.apply_domain', [
             'username' => $account->username,
             'domain' => $domain->name,
             'php_version' => $domain->php_version,
+            'ssl' => $ssl,
+            'force_https' => $ssl && $domain->force_https,
         ], $account, $actor);
+    }
+
+    /**
+     * @throws ValidationException
+     */
+    private function ensureDomainIsActive(Domain $domain): void
+    {
+        if ($domain->status !== DomainStatus::Active) {
+            throw ValidationException::withMessages([
+                'domain' => __('SSL can only be managed for active domains.'),
+            ]);
+        }
+    }
+
+    /**
+     * @throws ValidationException
+     */
+    private function ensureSslIsActive(Domain $domain): void
+    {
+        $this->ensureDomainIsActive($domain);
+
+        if (! $domain->hasActiveSsl()) {
+            throw ValidationException::withMessages([
+                'domain' => __('This domain has no active SSL certificate.'),
+            ]);
+        }
+    }
+
+    /**
+     * @return list<string>|null
+     */
+    private function certificateNames(mixed $names): ?array
+    {
+        if (! is_array($names)) {
+            return null;
+        }
+
+        return array_values(array_filter($names, is_string(...)));
+    }
+
+    private function certificateExpiry(mixed $expiresAt): ?CarbonImmutable
+    {
+        if (! is_string($expiresAt)) {
+            return null;
+        }
+
+        try {
+            return CarbonImmutable::parse($expiresAt)->setTimezone((string) config('app.timezone'));
+        } catch (InvalidFormatException) {
+            return null;
+        }
     }
 
     /**

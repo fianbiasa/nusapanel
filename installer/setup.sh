@@ -99,7 +99,7 @@ Syarat sebelum instalasi:
   - Hostname berupa FQDN, misalnya server1.domainmu.com
   - A record hostname -> IP publik server ini (kalau pakai Cloudflare: DNS only, bukan proxy)
   - PTR (reverse DNS) IP publik -> hostname, diatur lewat provider VPS
-  - Port 80 dan 2222 terbuka dari internet (untuk SSL Let's Encrypt dan panel)
+  - Port 80, 443 dan 2222 terbuka dari internet (untuk SSL Let's Encrypt, website, dan panel)
 
 Lainnya:
   --hostname NAME       hostname server (default: hasil `hostname -f`)
@@ -710,12 +710,31 @@ SQL
     info "Database dan user MariaDB \"nusapanel\" siap"
 }
 
+# The panel tells users to point their domains' A records to this address
+# (config('hosting.public_ip')). Only a public IPv4 address is written (or
+# one given with --public-ip), and a value already there is kept.
+add_public_ip_env() {
+    local ipv4_re='^([0-9]{1,3}\.){3}[0-9]{1,3}$'
+
+    if [[ ! "${public_ip:-}" =~ $ipv4_re ]]; then
+        return
+    fi
+
+    if is_private_ip "$public_ip" && ((public_ip_given == 0)); then
+        return
+    fi
+
+    add_env_value NUSAPANEL_PUBLIC_IP "$public_ip"
+}
+
 write_env() {
     if [[ -f "$ENV_FILE" ]]; then
         info "Memakai konfigurasi yang sudah ada: $ENV_FILE"
         # Installs from before the panel was translated have no locale yet.
         add_env_value APP_LOCALE id
         add_env_value APP_FALLBACK_LOCALE en
+        # Installs from before SSL for customer domains have no public IP yet.
+        add_public_ip_env
         return
     fi
 
@@ -769,6 +788,7 @@ ENV
 
     chown "root:$PANEL_USER" "$ENV_FILE"
     chmod 0640 "$ENV_FILE"
+    add_public_ip_env
     info "Konfigurasi ditulis ke $ENV_FILE"
 }
 
@@ -945,24 +965,32 @@ issue_certificate() {
     return 1
 }
 
+# certbot.timer renews every certificate (the hostname's and those the agent
+# gets for customer domains); this hook makes Nginx pick up a renewed one.
+# Installed even while the panel uses a self-signed certificate, because
+# customer domains can still get theirs.
+install_renewal_hook() {
+    install -d -m 0755 /etc/letsencrypt/renewal-hooks/deploy
+    cat >/etc/letsencrypt/renewal-hooks/deploy/nusapanel-reload.sh <<'HOOK'
+#!/bin/sh
+# Installed by nusapanel setup.sh: reload Nginx, which serves the hostname
+# certificate and those of customer websites.
+systemctl reload nginx
+HOOK
+    chmod 0755 /etc/letsencrypt/renewal-hooks/deploy/nusapanel-reload.sh
+}
+
 configure_ssl() {
     step "Memasang SSL untuk $server_hostname"
 
     local key="$CONFIG_DIR/ssl/panel.key" cert="$CONFIG_DIR/ssl/panel.crt"
     local live="/etc/letsencrypt/live/$server_hostname"
 
+    install_renewal_hook
+
     if ((skip_dns_check == 0)) && issue_certificate; then
         ln -sfn "$live/fullchain.pem" "$cert"
         ln -sfn "$live/privkey.pem" "$key"
-
-        # certbot.timer renews; this hook makes nginx pick up the new certificate.
-        install -d -m 0755 /etc/letsencrypt/renewal-hooks/deploy
-        cat >/etc/letsencrypt/renewal-hooks/deploy/nusapanel-reload.sh <<'HOOK'
-#!/bin/sh
-# Installed by nusapanel setup.sh: reload services that use the hostname certificate.
-systemctl reload nginx
-HOOK
-        chmod 0755 /etc/letsencrypt/renewal-hooks/deploy/nusapanel-reload.sh
 
         ssl_status="letsencrypt"
         info "Sertifikat Let's Encrypt aktif sampai $(cert_expiry "$live/fullchain.pem"), diperpanjang otomatis"
@@ -1112,6 +1140,19 @@ install_services() {
     info "nusad, queue worker dan scheduler berjalan"
 }
 
+# Websites set up by an older release keep their old web server config until
+# it is written again. Queue that for every website; the queue worker and the
+# agent do the rest in the background.
+rebuild_websites() {
+    step "Memperbarui konfigurasi website customer"
+
+    if artisan nusapanel:rebuild-web >>"$INSTALL_LOG" 2>&1; then
+        info "Konfigurasi semua website diperbarui di latar belakang (lihat Tasks di panel)"
+    else
+        warn "konfigurasi website tidak bisa diperbarui; jalankan lagi: runuser -u $PANEL_USER -- $PHP_BIN $INSTALL_DIR/current/panel/artisan nusapanel:rebuild-web"
+    fi
+}
+
 verify_install() {
     step "Memeriksa hasil instalasi"
 
@@ -1146,6 +1187,16 @@ verify_install() {
     [[ "$apache_listen" == "127.0.0.1:8080" ]] ||
         die "Apache harus hanya mendengar di 127.0.0.1:8080, sekarang: ${apache_listen:-tidak mendengar di port mana pun}"
     info "Apache aktif dan hanya mendengar di 127.0.0.1:8080"
+
+    # nginx -t does not bind ports, so a reload that could not take port 443
+    # would only show up here.
+    local port listeners
+    for port in 80 443; do
+        listeners="$(ss -ltnpH "sport = :$port")"
+        [[ "$listeners" == *'"nginx"'* ]] ||
+            die "Nginx tidak mendengar di port $port (cek: journalctl -u nginx dan ss -ltnp)"
+    done
+    info "Nginx mendengar di port 80 dan 443"
 
     systemctl is-active --quiet postfix || die "Postfix tidak berjalan (cek: journalctl -u postfix)"
     if ss -ltnH 'sport = :25' | grep -vqE '127\.0\.0\.1:25'; then
@@ -1256,7 +1307,7 @@ summary() {
 
     printf '\n'
     info "Catatan:"
-    info "- Pastikan port 80 dan $PANEL_PORT terbuka di firewall / security group provider VPS."
+    info "- Pastikan port 80, 443 dan $PANEL_PORT terbuka di firewall / security group provider VPS."
     info "- Cek agent: nusactl ping"
     info "- Lupa password admin: runuser -u $PANEL_USER -- php$PHP_VERSION $INSTALL_DIR/current/panel/artisan nusapanel:reset-password $admin_user"
     info "- Log instalasi: $INSTALL_LOG"
@@ -1300,6 +1351,7 @@ main() {
     configure_logrotate
     install_services
     verify_install
+    rebuild_websites
     # Last, right before the summary, so a failure in an earlier step can never
     # leave an admin whose generated password was not shown.
     create_admin

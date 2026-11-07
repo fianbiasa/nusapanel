@@ -72,25 +72,25 @@ UI menampilkan progres task lewat polling Inertia dulu; websocket (Laravel Rever
 
 ## 2.6 Stack layanan
 
-| Fungsi                      | Software                               | Catatan                                                                                                                            |
-| --------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Web (depan)                 | Nginx                                  | Port 80/443, terminasi SSL, file statis                                                                                            |
-| Web (belakang)              | Apache 2.4 (event MPM)                 | `127.0.0.1:8080`, supaya `.htaccess` jalan                                                                                         |
-| PHP                         | PHP-FPM, banyak versi                  | Satu proses PHP-FPM per user per versi, jalan sebagai user itu, `pm = ondemand`                                                    |
-| Database                    | MariaDB LTS                            | + phpMyAdmin                                                                                                                       |
-| DNS                         | PowerDNS Authoritative (backend MySQL) | Dikelola lewat API PowerDNS; siap DNSSEC & cluster                                                                                 |
-| Email (kirim/terima)        | Postfix                                | Sejak P0: kirim-saja untuk email panel (hanya 127.0.0.1, IPv4). P2: lengkap untuk customer, domain/akun/alias dibaca dari view SQL |
-| Email (IMAP/POP3)           | Dovecot                                | + LMTP, SASL, Sieve, quota                                                                                                         |
-| Antispam & DKIM             | Rspamd + Redis                         | P2, sekaligus pembatas jumlah kirim. Sebelum itu, DKIM email panel ditangani OpenDKIM (selector `nusapanel`)                       |
-| SSL hostname/panel          | certbot (Let's Encrypt)                | Dipasang `setup.sh` lewat webroot di port 80, diperpanjang `certbot.timer`. SSL domain customer (P1) lewat agent (lego)            |
-| Webmail                     | Roundcube                              |                                                                                                                                    |
-| FTP                         | Pure-FTPd (auth MySQL)                 | TLS wajib, passive port 35000–35999                                                                                                |
-| SSL                         | lego (library Go di dalam agent)       | HTTP-01 & DNS-01                                                                                                                   |
-| Firewall                    | nftables                               | Set IP terblokir dengan timeout                                                                                                    |
-| Statistik situs             | GoAccess                               |                                                                                                                                    |
-| Backup remote               | rclone                                 | FTP, SFTP, S3, Google Drive, dll.                                                                                                  |
-| Cache, queue, session panel | MariaDB (driver database)              | Bukan Redis: PHP customer di server yang sama bisa menyambung ke Redis lokal tanpa password dan membaca session admin              |
-| Batas resource              | systemd slice (cgroups v2)             | CPU, RAM, jumlah proses, IO per user                                                                                               |
+| Fungsi                      | Software                                  | Catatan                                                                                                                                                          |
+| --------------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Web (depan)                 | Nginx                                     | Port 80/443, terminasi SSL, file statis                                                                                                                          |
+| Web (belakang)              | Apache 2.4 (event MPM)                    | `127.0.0.1:8080`, supaya `.htaccess` jalan                                                                                                                       |
+| PHP                         | PHP-FPM, banyak versi                     | Satu proses PHP-FPM per user per versi, jalan sebagai user itu, `pm = ondemand`                                                                                  |
+| Database                    | MariaDB LTS                               | + phpMyAdmin                                                                                                                                                     |
+| DNS                         | PowerDNS Authoritative (backend MySQL)    | Dikelola lewat API PowerDNS; siap DNSSEC & cluster                                                                                                               |
+| Email (kirim/terima)        | Postfix                                   | Sejak P0: kirim-saja untuk email panel (hanya 127.0.0.1, IPv4). P2: lengkap untuk customer, domain/akun/alias dibaca dari view SQL                               |
+| Email (IMAP/POP3)           | Dovecot                                   | + LMTP, SASL, Sieve, quota                                                                                                                                       |
+| Antispam & DKIM             | Rspamd + Redis                            | P2, sekaligus pembatas jumlah kirim. Sebelum itu, DKIM email panel ditangani OpenDKIM (selector `nusapanel`)                                                     |
+| SSL hostname/panel          | certbot (Let's Encrypt)                   | Dipasang `setup.sh` lewat webroot di port 80, diperpanjang `certbot.timer`                                                                                       |
+| Webmail                     | Roundcube                                 |                                                                                                                                                                  |
+| FTP                         | Pure-FTPd (auth MySQL)                    | TLS wajib, passive port 35000–35999                                                                                                                              |
+| SSL domain customer         | certbot (Let's Encrypt), dijalankan agent | HTTP-01 lewat webroot bersama `/var/www/nusapanel-acme`; diperpanjang `certbot.timer` (nginx di-reload otomatis). DNS-01/wildcard menyusul bersama PowerDNS (P2) |
+| Firewall                    | nftables                                  | Set IP terblokir dengan timeout                                                                                                                                  |
+| Statistik situs             | GoAccess                                  |                                                                                                                                                                  |
+| Backup remote               | rclone                                    | FTP, SFTP, S3, Google Drive, dll.                                                                                                                                |
+| Cache, queue, session panel | MariaDB (driver database)                 | Bukan Redis: PHP customer di server yang sama bisa menyambung ke Redis lokal tanpa password dan membaca session admin                                            |
+| Batas resource              | systemd slice (cgroups v2)                | CPU, RAM, jumlah proses, IO per user                                                                                                                             |
 
 ### Mode web server
 

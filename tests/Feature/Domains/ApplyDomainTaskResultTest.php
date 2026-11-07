@@ -69,7 +69,13 @@ class ApplyDomainTaskResultTest extends TestCase
     {
         $account = User::factory()->create();
         $domain = Domain::factory()->for($account, 'account')->deleting()->create(['name' => 'example.com']);
-        $task = $this->makeTask($account, 'web.apply_domain', ['username' => $account->username, 'domain' => 'example.com', 'php_version' => '8.4']);
+        $task = $this->makeTask($account, 'web.apply_domain', [
+            'username' => $account->username,
+            'domain' => 'example.com',
+            'php_version' => '8.4',
+            'ssl' => false,
+            'force_https' => false,
+        ]);
 
         $this->runTask($task, []);
 
@@ -132,7 +138,7 @@ class ApplyDomainTaskResultTest extends TestCase
     private function runTask(Task $task, array|AgentException $result): void
     {
         $agent = Mockery::mock(AgentClient::class);
-        $call = $agent->shouldReceive('call')->once()->with($task->action, $task->payload);
+        $call = $agent->shouldReceive('call')->once()->with($task->action, $task->payload, config('agent.task_timeout'));
 
         $result instanceof AgentException ? $call->andThrow($result) : $call->andReturn($result);
 

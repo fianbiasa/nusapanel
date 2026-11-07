@@ -35,13 +35,18 @@ type testEnv struct {
 	sites []sysuser.Site
 	// siteErr, when set, is returned by PrepareSite.
 	siteErr error
+	// hosts says where the reachability check's connections to a host
+	// name go: an address, or an error. Other names have no DNS record.
+	hosts map[string]any
 }
 
 func newEnv(t *testing.T) *testEnv {
 	t.Helper()
 
 	base := t.TempDir()
-	env := &testEnv{t: t, base: base, runner: newFakeRunner(), logs: &bytes.Buffer{}}
+	env := &testEnv{t: t, base: base, runner: newFakeRunner(), logs: &bytes.Buffer{}, hosts: map[string]any{}}
+	env.runner.base = base
+	env.runner.certbot = env.fakeCertbot
 
 	env.cfg = Config{
 		NginxDir:  filepath.Join(base, "etc/nginx/nusapanel"),
@@ -55,8 +60,12 @@ func newEnv(t *testing.T) *testEnv {
 		PHPFPMDir: filepath.Join(base, "usr/sbin"),
 		IPv6File:  filepath.Join(base, "if_inet6"),
 		Backend:   "127.0.0.1:8080",
-		Hostnames: func() []string { return []string{"server1.example.net", "server1"} },
-		Run:       env.runner.run,
+		AcmeDir:   filepath.Join(base, "var/www/nusapanel-acme"),
+		// The same layout as /etc/letsencrypt.
+		LetsEncryptDir: filepath.Join(base, "etc/letsencrypt"),
+		Hostnames:      func() []string { return []string{"server1.example.net", "server1"} },
+		Run:            env.runner.run,
+		DialHTTP:       env.dial,
 		PrepareSite: func(_ context.Context, site sysuser.Site) error {
 			env.mu.Lock()
 			defer env.mu.Unlock()
@@ -163,6 +172,11 @@ type fakeRunner struct {
 	fail []string
 	// pools records the content of every pool config php-fpm -t checked.
 	pools []string
+	// base, when set, is shown as $BASE in recorded calls.
+	base string
+	// certbot, when set, runs instead of every certbot call that is not
+	// failed through fail.
+	certbot func(args []string) ([]byte, error)
 }
 
 func newFakeRunner() *fakeRunner {
@@ -188,12 +202,20 @@ func (f *fakeRunner) run(_ context.Context, program string, args ...string) ([]b
 	}
 
 	command := strings.Join(append([]string{filepath.Base(program)}, recorded...), " ")
+	if f.base != "" {
+		command = strings.ReplaceAll(command, f.base, "$BASE")
+	}
+
 	f.calls = append(f.calls, command)
 
 	for _, prefix := range f.fail {
 		if strings.HasPrefix(command, prefix) {
 			return []byte("syntax error"), &runner.Error{Program: program, ExitCode: 1, Output: "syntax error", Err: errors.New("exit status 1")}
 		}
+	}
+
+	if filepath.Base(program) == "certbot" && f.certbot != nil {
+		return f.certbot(args)
 	}
 
 	if filepath.Base(program) != "systemctl" {

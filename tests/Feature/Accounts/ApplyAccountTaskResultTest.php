@@ -82,7 +82,13 @@ class ApplyAccountTaskResultTest extends TestCase
 
         $task = Task::query()->where('action', 'web.apply_domain')->sole();
 
-        $this->assertSame(['username' => 'budi', 'domain' => 'example.com', 'php_version' => '8.4'], $task->payload);
+        $this->assertSame([
+            'username' => 'budi',
+            'domain' => 'example.com',
+            'php_version' => '8.4',
+            'ssl' => false,
+            'force_https' => false,
+        ], $task->payload);
         $this->assertSame($account->id, $task->user_id);
         $this->assertSame($admin->id, $task->actor_id);
         $this->assertSame(DomainStatus::Pending, Domain::query()->sole()->status);
@@ -168,7 +174,7 @@ class ApplyAccountTaskResultTest extends TestCase
         $task = Task::query()->where('action', $action)->sole();
 
         $agent = Mockery::mock(AgentClient::class);
-        $call = $agent->shouldReceive('call')->once()->with($action, ['username' => 'budi']);
+        $call = $agent->shouldReceive('call')->once()->with($action, ['username' => 'budi'], config('agent.task_timeout'));
 
         $result instanceof AgentException ? $call->andThrow($result) : $call->andReturn($result);
 
@@ -181,14 +187,14 @@ class ApplyAccountTaskResultTest extends TestCase
     private function agentReturns(string $method, array $output): void
     {
         $this->mock(AgentClient::class, function (MockInterface $mock) use ($method, $output) {
-            $mock->shouldReceive('call')->once()->with($method, ['username' => 'budi'])->andReturn($output);
+            $mock->shouldReceive('call')->once()->with($method, ['username' => 'budi'], config('agent.task_timeout'))->andReturn($output);
         });
     }
 
     private function agentFails(string $method, string $error): void
     {
         $this->mock(AgentClient::class, function (MockInterface $mock) use ($method, $error) {
-            $mock->shouldReceive('call')->once()->with($method, ['username' => 'budi'])->andThrow(new AgentException($error));
+            $mock->shouldReceive('call')->once()->with($method, ['username' => 'budi'], config('agent.task_timeout'))->andThrow(new AgentException($error));
         });
     }
 }

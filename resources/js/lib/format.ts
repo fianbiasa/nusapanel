@@ -17,6 +17,11 @@ export const auditActionLabels: Record<string, string> = {
     'auth.login': 'Masuk ke panel',
     'domain.created': 'Domain ditambahkan',
     'domain.deleted': 'Domain dihapus',
+    'domain.ssl_requested': 'SSL diminta',
+    'domain.ssl_removed': 'SSL dilepas',
+    'domain.ssl_cancelled': 'Permintaan SSL dibatalkan',
+    'domain.https_forced': 'Paksa HTTPS diaktifkan',
+    'domain.https_unforced': 'Paksa HTTPS dimatikan',
 };
 
 /** What a task asks the server agent to do, by its agent method. */
@@ -28,8 +33,15 @@ export const taskActionLabels: Record<string, string> = {
     'web.apply_domain': 'Pasang website domain',
     'web.remove_domain': 'Lepas website domain',
     'php.remove_pool': 'Hapus pool PHP',
+    'ssl.issue': 'Pasang sertifikat SSL',
+    'ssl.delete': 'Hapus sertifikat SSL',
     'system.info': 'Baca info server',
 };
+
+/** "5 Feb 2027" */
+export function formatDate(iso: string): string {
+    return new Date(iso).toLocaleDateString('id-ID', { dateStyle: 'medium' });
+}
 
 export function formatDateTime(iso: string): string {
     return new Date(iso).toLocaleString('id-ID', {

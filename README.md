@@ -22,7 +22,7 @@ Panel hosting self-hosted dengan fitur **minimal setara DirectAdmin**: tiga leve
 | Panel web          | Laravel + Inertia + React (TypeScript, Tailwind, shadcn/ui)                      | UI dibangun sendiri; interaktif untuk file manager, editor, dan progres task         |
 | Login              | Laravel Fortify                                                                  | Username/email, 2FA, passkey; pendaftaran publik dimatikan                           |
 | Pengembangan lokal | Herd (`nusapanel.test`)                                                          | SSL & versi PHP diatur dari aplikasi Herd; agent disimulasikan (`AGENT_DRIVER=fake`) |
-| Agent              | Go, satu binary, jalan sebagai root                                              | Eksekusi tanpa shell, mudah dipasang, ada library ACME (lego)                        |
+| Agent              | Go, satu binary, jalan sebagai root                                              | Eksekusi tanpa shell, mudah dipasang; SSL lewat certbot yang sudah ada di server     |
 | Pemisahan hak      | Panel bukan root; semua perubahan sistem lewat agent dengan daftar aksi tertutup | Bug di panel tidak otomatis jadi akses root                                          |
 | Web server         | Nginx → Apache → PHP-FPM per user                                                | Cepat, dan `.htaccess` tetap jalan untuk WordPress & pelanggan pindahan              |
 | DNS                | PowerDNS                                                                         | Ada API, siap DNSSEC & cluster                                                       |

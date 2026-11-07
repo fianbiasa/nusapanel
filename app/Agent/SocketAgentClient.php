@@ -17,11 +17,11 @@ final class SocketAgentClient implements AgentClient
         private readonly int $timeoutSeconds,
     ) {}
 
-    public function call(string $method, array $params = []): array
+    public function call(string $method, array $params = [], ?int $timeoutSeconds = null): array
     {
         $id = (string) Str::uuid();
 
-        $line = $this->exchange($this->encode($id, $method, $params));
+        $line = $this->exchange($this->encode($id, $method, $params), $timeoutSeconds ?? $this->timeoutSeconds);
 
         try {
             $response = json_decode($line, true, 512, JSON_THROW_ON_ERROR);
@@ -80,13 +80,13 @@ final class SocketAgentClient implements AgentClient
         }
     }
 
-    private function exchange(string $request): string
+    private function exchange(string $request, int $timeoutSeconds): string
     {
         $connection = @stream_socket_client(
             'unix://'.$this->socketPath,
             $errorCode,
             $errorMessage,
-            $this->timeoutSeconds,
+            $timeoutSeconds,
         );
 
         if ($connection === false) {
@@ -94,7 +94,7 @@ final class SocketAgentClient implements AgentClient
         }
 
         try {
-            stream_set_timeout($connection, $this->timeoutSeconds);
+            stream_set_timeout($connection, $timeoutSeconds);
 
             if (@fwrite($connection, $request) === false) {
                 throw new AgentException('The request could not be sent to the agent.');
@@ -106,7 +106,7 @@ final class SocketAgentClient implements AgentClient
                 $timedOut = stream_get_meta_data($connection)['timed_out'];
 
                 throw new AgentException($timedOut
-                    ? "The agent did not respond within {$this->timeoutSeconds} seconds."
+                    ? "The agent did not respond within {$timeoutSeconds} seconds."
                     : 'The agent closed the connection without a response.');
             }
 

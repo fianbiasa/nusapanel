@@ -16,6 +16,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('domains', [DomainController::class, 'index'])->name('domains.index');
         Route::post('domains', [DomainController::class, 'store'])->name('domains.store');
         Route::delete('domains/{domain}', [DomainController::class, 'destroy'])->name('domains.destroy');
+        Route::post('domains/{domain}/ssl', [DomainController::class, 'requestSsl'])->name('domains.ssl.store');
+        Route::delete('domains/{domain}/ssl', [DomainController::class, 'removeSsl'])->name('domains.ssl.destroy');
+        Route::put('domains/{domain}/force-https', [DomainController::class, 'updateForceHttps'])->name('domains.force-https.update');
     });
 
     Route::middleware('role:admin')->prefix('admin')->name('admin.')->group(function () {

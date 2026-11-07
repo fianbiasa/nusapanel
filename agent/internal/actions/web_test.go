@@ -20,7 +20,7 @@ import (
 	"nusapanel/agent/internal/webserver"
 )
 
-var webMethodNames = []string{"web.apply_domain", "web.remove_domain", "php.remove_pool"}
+var webMethodNames = []string{"web.apply_domain", "web.remove_domain", "php.remove_pool", "ssl.issue", "ssl.delete"}
 
 // webEnv runs the web methods against a fake account system and a real
 // webserver.Manager whose files live in a temporary directory and whose
@@ -36,29 +36,38 @@ type webEnv struct {
 	sites    []sysuser.Site
 	// failing lists program names (e.g. "nginx") that exit with code 1.
 	failing []string
+	// certbot runs instead of every certbot call.
+	certbot func(args []string) ([]byte, error)
+	// reachable maps the names that reach this server's ACME webroot to
+	// its address; other names have no DNS record.
+	reachable map[string]string
 }
 
 func newWebEnv(t *testing.T) *webEnv {
 	t.Helper()
 
 	base := t.TempDir()
-	env := &webEnv{t: t, system: newFakeSystem()}
+	env := &webEnv{t: t, system: newFakeSystem(), reachable: map[string]string{}}
+	env.certbot = env.fakeCertbot
 	env.system.addAccount("budi", 1001)
 	env.system.addAccount("sari", 1002)
 
 	env.cfg = webserver.Config{
-		NginxDir:  filepath.Join(base, "nginx"),
-		ApacheDir: filepath.Join(base, "apache2"),
-		PoolDir:   filepath.Join(base, "php-fpm"),
-		UnitDir:   filepath.Join(base, "systemd"),
-		LogDir:    filepath.Join(base, "log"),
-		RunDir:    "/run/nusa-php",
-		HomeRoot:  "/home",
-		PHPFPMDir: filepath.Join(base, "sbin"),
-		IPv6File:  filepath.Join(base, "if_inet6"),
-		Backend:   "127.0.0.1:8080",
-		Hostnames: func() []string { return []string{"server1.example.net"} },
-		Run:       env.run,
+		NginxDir:       filepath.Join(base, "nginx"),
+		ApacheDir:      filepath.Join(base, "apache2"),
+		PoolDir:        filepath.Join(base, "php-fpm"),
+		UnitDir:        filepath.Join(base, "systemd"),
+		LogDir:         filepath.Join(base, "log"),
+		RunDir:         "/run/nusa-php",
+		HomeRoot:       "/home",
+		PHPFPMDir:      filepath.Join(base, "sbin"),
+		IPv6File:       filepath.Join(base, "if_inet6"),
+		Backend:        "127.0.0.1:8080",
+		AcmeDir:        filepath.Join(base, "acme"),
+		LetsEncryptDir: filepath.Join(base, "letsencrypt"),
+		Hostnames:      func() []string { return []string{"server1.example.net"} },
+		Run:            env.run,
+		DialHTTP:       env.dial,
 		PrepareSite: func(_ context.Context, site sysuser.Site) error {
 			env.mu.Lock()
 			defer env.mu.Unlock()
@@ -85,6 +94,10 @@ func (e *webEnv) run(_ context.Context, program string, args ...string) ([]byte,
 
 	if slices.Contains(e.failing, name) {
 		return nil, &runner.Error{Program: program, ExitCode: 1, Output: "emerg: unexpected }", Err: errors.New("exit status 1")}
+	}
+
+	if name == "certbot" {
+		return e.certbot(args)
 	}
 
 	if name == "systemctl" && args[0] == "is-active" {
@@ -172,6 +185,8 @@ func TestWebMethodsLockTheAccount(t *testing.T) {
 		"web.apply_domain":  `{"username":"budi","domain":"example.com","php_version":"8.4"}`,
 		"web.remove_domain": `{"username":"budi","domain":"example.com"}`,
 		"php.remove_pool":   `{"username":"budi","php_version":"8.4"}`,
+		"ssl.issue":         `{"username":"budi","domain":"example.com"}`,
+		"ssl.delete":        `{"username":"budi","domain":"example.com"}`,
 	}
 
 	env := newWebEnv(t)
@@ -203,6 +218,10 @@ func TestWebMethodsRejectInvalidParams(t *testing.T) {
 			{"username": "budi", "domain": "example.com"},
 			{"username": "budi", "php_version": "8.4"},
 			{"username": "budi", "domain": "example.com", "php_version": "8.4", "root": "/etc"},
+			{"username": "budi", "domain": "example.com", "php_version": "8.4", "force_https": true},
+			{"username": "budi", "domain": "example.com", "php_version": "8.4", "ssl": false, "force_https": true},
+			{"username": "budi", "domain": "example.com", "php_version": "8.4", "ssl": "yes"},
+			{"username": "budi", "domain": "example.com", "php_version": "8.4", "ssl": 1},
 		},
 		"web.remove_domain": {
 			{"username": "budi"},
@@ -215,6 +234,17 @@ func TestWebMethodsRejectInvalidParams(t *testing.T) {
 			{"username": "budi", "php_version": "8.x"},
 			{"username": "mysql", "php_version": "8.4"},
 			{"username": "budi", "php_version": "8.4", "domain": "example.com"},
+		},
+		"ssl.issue": {
+			{"username": "budi"},
+			{"username": "budi", "domain": "example.com;"},
+			{"username": "root", "domain": "example.com"},
+			{"username": "budi", "domain": "example.com", "email": "a@b.c"},
+		},
+		"ssl.delete": {
+			{"domain": "example.com"},
+			{"username": "budi", "domain": "../etc"},
+			{"username": "budi", "domain": "example.com", "php_version": "8.4"},
 		},
 	}
 
@@ -278,7 +308,7 @@ func TestApplyDomainNeedsAnInstalledPHP(t *testing.T) {
 }
 
 func TestWebMethodsRefuseTheServerHostname(t *testing.T) {
-	for _, method := range []string{"web.apply_domain", "web.remove_domain"} {
+	for _, method := range []string{"web.apply_domain", "web.remove_domain", "ssl.issue", "ssl.delete"} {
 		env := newWebEnv(t)
 		params := map[string]string{"username": "budi", "domain": "server1.example.net"}
 		if method == "web.apply_domain" {
@@ -328,6 +358,8 @@ func TestWebMethodsNeedAnExistingManagedAccount(t *testing.T) {
 		"web.apply_domain":  applyParams("example.com", "8.4"),
 		"web.remove_domain": {"username": "budi", "domain": "example.com"},
 		"php.remove_pool":   {"username": "budi", "php_version": "8.4"},
+		"ssl.issue":         {"username": "budi", "domain": "example.com"},
+		"ssl.delete":        {"username": "budi", "domain": "example.com"},
 	}
 
 	for method, methodParams := range params {
@@ -498,6 +530,8 @@ func TestWebMethodsOnUnsupportedPlatformsGetAReadableError(t *testing.T) {
 		"web.apply_domain":  applyParams("example.com", "8.4"),
 		"web.remove_domain": {"username": "budi", "domain": "example.com"},
 		"php.remove_pool":   {"username": "budi", "php_version": "8.4"},
+		"ssl.issue":         {"username": "budi", "domain": "example.com"},
+		"ssl.delete":        {"username": "budi", "domain": "example.com"},
 	}
 
 	for method, methodParams := range params {

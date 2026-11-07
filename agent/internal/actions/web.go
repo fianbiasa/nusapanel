@@ -11,8 +11,8 @@ import (
 	"nusapanel/agent/internal/webserver"
 )
 
-// webServer is what the web.* and php.* actions need. *webserver.Manager
-// implements it.
+// webServer is what the web.*, php.* and ssl.* actions need.
+// *webserver.Manager implements it.
 type webServer interface {
 	PHPInstalled(version string) bool
 	IsHostname(domain string) bool
@@ -20,30 +20,41 @@ type webServer interface {
 	ApplyDomain(ctx context.Context, site webserver.Site) (documentRoot string, err error)
 	RemoveDomain(ctx context.Context, user, domain string) error
 	RemovePool(ctx context.Context, user, version string) error
+	IssueCertificate(ctx context.Context, user, domain string) (webserver.Certificate, error)
+	DeleteCertificate(ctx context.Context, user, domain string) error
 }
 
-// applyDomainParams are the params of web.apply_domain.
+// applyDomainParams are the params of web.apply_domain. SSL and ForceHTTPS
+// are optional, so callers from before HTTPS existed keep working.
 type applyDomainParams struct {
 	Username   string `json:"username"`
 	Domain     string `json:"domain"`
 	PHPVersion string `json:"php_version"`
+	SSL        bool   `json:"ssl"`
+	ForceHTTPS bool   `json:"force_https"`
 }
 
 func (p applyDomainParams) account() string { return p.Username }
 
 func (p applyDomainParams) validate() error {
-	return firstError(validate.Username(p.Username), validate.Domain(p.Domain), validate.PHPVersion(p.PHPVersion))
+	var httpsErr error
+	if p.ForceHTTPS && !p.SSL {
+		httpsErr = errors.New("force_https needs ssl")
+	}
+
+	return firstError(validate.Username(p.Username), validate.Domain(p.Domain), validate.PHPVersion(p.PHPVersion), httpsErr)
 }
 
-// removeDomainParams are the params of web.remove_domain.
-type removeDomainParams struct {
+// domainParams are the params of web.remove_domain, ssl.issue and
+// ssl.delete.
+type domainParams struct {
 	Username string `json:"username"`
 	Domain   string `json:"domain"`
 }
 
-func (p removeDomainParams) account() string { return p.Username }
+func (p domainParams) account() string { return p.Username }
 
-func (p removeDomainParams) validate() error {
+func (p domainParams) validate() error {
 	return firstError(validate.Username(p.Username), validate.Domain(p.Domain))
 }
 
@@ -82,22 +93,24 @@ type domainInfo struct {
 	DocumentRoot string `json:"document_root"`
 }
 
-// webActions implements the web.* and php.* methods.
+// webActions implements the web.*, php.* and ssl.* methods.
 type webActions struct {
 	accounts accountActions
 	web      webServer
 }
 
-// webMethods returns the web.* and php.* methods by name. They lock the
-// account like the account.* methods, so no two calls change one account
-// at the same time.
+// webMethods returns the web.*, php.* and ssl.* methods by name. They lock
+// the account like the account.* methods, so no two calls change one
+// account at the same time.
 func webMethods(system accountSystem, web webServer) map[string]rpc.Method {
 	actions := webActions{accounts: accountActions{system: system}, web: web}
 
 	return map[string]rpc.Method{
 		"web.apply_domain":  {Handler: actions.applyDomain, LockKey: webLockKey[applyDomainParams]},
-		"web.remove_domain": {Handler: actions.removeDomain, LockKey: webLockKey[removeDomainParams]},
+		"web.remove_domain": {Handler: actions.removeDomain, LockKey: webLockKey[domainParams]},
 		"php.remove_pool":   {Handler: actions.removePool, LockKey: webLockKey[removePoolParams]},
+		"ssl.issue":         {Handler: actions.issueCertificate, LockKey: webLockKey[domainParams]},
+		"ssl.delete":        {Handler: actions.deleteCertificate, LockKey: webLockKey[domainParams]},
 	}
 }
 
@@ -127,7 +140,9 @@ func decodeWebParams[P webParams](raw json.RawMessage) (P, error) {
 
 // applyDomain implements web.apply_domain: it creates the domain's folders,
 // the account's PHP-FPM pool for the requested version, and the domain's
-// Nginx and Apache vhosts. Calling it again renders the same configuration.
+// Nginx and Apache vhosts, with HTTPS when ssl is set (the certificate must
+// exist) and HTTP redirected to HTTPS when force_https is set. Calling it
+// again renders the same configuration.
 func (w webActions) applyDomain(ctx context.Context, raw json.RawMessage) (any, error) {
 	params, err := decodeWebParams[applyDomainParams](raw)
 	if err != nil {
@@ -153,6 +168,8 @@ func (w webActions) applyDomain(ctx context.Context, raw json.RawMessage) (any, 
 		GID:        user.GID,
 		Domain:     params.Domain,
 		PHPVersion: params.PHPVersion,
+		SSL:        params.SSL,
+		ForceHTTPS: params.ForceHTTPS,
 	})
 	if err != nil {
 		return nil, webError(err, params.Domain)
@@ -162,10 +179,10 @@ func (w webActions) applyDomain(ctx context.Context, raw json.RawMessage) (any, 
 }
 
 // removeDomain implements web.remove_domain: it removes the domain's Nginx
-// and Apache vhosts. The domain's files stay in the home. Removing a domain
-// without configuration succeeds.
+// and Apache vhosts, then its logs and certificate. The domain's files stay
+// in the home. Removing a domain without configuration succeeds.
 func (w webActions) removeDomain(ctx context.Context, raw json.RawMessage) (any, error) {
-	params, err := decodeWebParams[removeDomainParams](raw)
+	params, err := decodeWebParams[domainParams](raw)
 	if err != nil {
 		return nil, err
 	}
@@ -259,6 +276,16 @@ func (w webActions) checkNotUsedElsewhere(domain, user string) error {
 // readable messages about subject (a domain, or "account <name>"). Anything
 // else stays an internal error whose details only reach the agent log.
 func webError(err error, subject string) error {
+	if unreachable, ok := errors.AsType[*webserver.UnreachableError](err); ok {
+		return rpc.Errorf(rpc.CodeActionFailed,
+			"%s does not reach this server over HTTP (%s); point its A record to this server, "+
+				"or proxy it through Cloudflare, then try again", unreachable.Domain, unreachable.Reason)
+	}
+
+	if issue, ok := errors.AsType[*webserver.IssueError](err); ok {
+		return issueError(issue)
+	}
+
 	switch {
 	case errors.Is(err, errors.ErrUnsupported):
 		return rpc.Errorf(rpc.CodeActionFailed, "websites can only be managed on Linux")
@@ -269,7 +296,36 @@ func webError(err error, subject string) error {
 	case errors.Is(err, sysuser.ErrInTheWay):
 		return rpc.Errorf(rpc.CodeActionFailed,
 			"the folder of %s cannot be created: a file or symlink is in the way inside the home directory", subject)
+	case errors.Is(err, webserver.ErrNoCertificate):
+		return rpc.Errorf(rpc.CodeActionFailed, "there is no certificate for %s yet; request one first", subject)
+	case errors.Is(err, webserver.ErrDomainNotSetUp):
+		return rpc.Errorf(rpc.CodeActionFailed, "%s is not set up on this account", subject)
+	case errors.Is(err, webserver.ErrCertificateInUse):
+		return rpc.Errorf(rpc.CodeActionFailed, "turn off HTTPS for %s before deleting its certificate", subject)
+	case errors.Is(err, webserver.ErrAccountSuspended):
+		return rpc.Errorf(rpc.CodeActionFailed, "%s cannot get a certificate while its account is suspended", subject)
+	case errors.Is(err, webserver.ErrVhostOutdated):
+		return rpc.Errorf(rpc.CodeActionFailed,
+			"the web server configuration of %s is from an older version; apply the domain again, then request the certificate", subject)
+	case errors.Is(err, webserver.ErrCertbotBusy):
+		return rpc.Errorf(rpc.CodeActionFailed, "another certificate operation is running; try again in a minute")
 	}
 
 	return err
+}
+
+// issueError explains why Let's Encrypt did not issue a certificate.
+func issueError(issue *webserver.IssueError) error {
+	switch {
+	case issue.RateLimited && issue.Detail != "":
+		return rpc.Errorf(rpc.CodeActionFailed,
+			"Let's Encrypt rate limit reached for %s (%s); try again later", issue.Domain, issue.Detail)
+	case issue.RateLimited:
+		return rpc.Errorf(rpc.CodeActionFailed, "Let's Encrypt rate limit reached for %s; try again later", issue.Domain)
+	case issue.Detail != "":
+		return rpc.Errorf(rpc.CodeActionFailed, "Let's Encrypt could not issue a certificate for %s: %s", issue.Domain, issue.Detail)
+	}
+
+	return rpc.Errorf(rpc.CodeActionFailed,
+		"Let's Encrypt could not issue a certificate for %s; the agent log has the details", issue.Domain)
 }

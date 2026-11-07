@@ -60,7 +60,11 @@ class RunAgentTask implements ShouldQueue
         $this->task->markRunning();
 
         try {
-            $output = $agent->call($this->task->action, $this->task->payload ?? []);
+            $output = $agent->call(
+                $this->task->action,
+                $this->task->payload ?? [],
+                (int) config('agent.task_timeout'),
+            );
         } catch (AgentException $exception) {
             $this->task->markFailed($exception->getMessage());
 

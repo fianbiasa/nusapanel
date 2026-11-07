@@ -98,15 +98,35 @@ class SocketAgentClientTest extends TestCase
         (new SocketAgentClient($this->socketPath, 1))->call('system.info');
     }
 
+    public function test_a_per_call_timeout_overrides_the_default(): void
+    {
+        $this->startAgent('{"jsonrpc":"2.0","id":"{id}","result":{"done":true}}', delaySeconds: 2);
+
+        $result = (new SocketAgentClient($this->socketPath, 1))->call('ssl.issue', [], 5);
+
+        $this->assertSame(['done' => true], $result);
+    }
+
+    public function test_it_gives_up_after_the_default_timeout(): void
+    {
+        $this->startAgent('{"jsonrpc":"2.0","id":"{id}","result":{}}', delaySeconds: 2);
+
+        $this->expectException(AgentException::class);
+        $this->expectExceptionMessage('did not respond within 1 seconds');
+
+        (new SocketAgentClient($this->socketPath, 1))->call('system.info');
+    }
+
     /**
-     * Start a stand-in agent that answers exactly one request.
+     * Start a stand-in agent that answers exactly one request, after
+     * $delaySeconds.
      *
      * The template may use {id}, {method} and {params} placeholders.
      */
-    private function startAgent(string $responseTemplate): void
+    private function startAgent(string $responseTemplate, int $delaySeconds = 0): void
     {
         $script = <<<'PHP'
-            [$socketPath, $template] = [$argv[1], $argv[2]];
+            [$socketPath, $template, $delay] = [$argv[1], $argv[2], (int) $argv[3]];
             $server = stream_socket_server('unix://'.$socketPath, $errorCode, $errorMessage);
             if ($server === false) {
                 fwrite(STDERR, $errorMessage);
@@ -114,6 +134,7 @@ class SocketAgentClientTest extends TestCase
             }
             $connection = stream_socket_accept($server, 10);
             $request = json_decode(fgets($connection), true);
+            sleep($delay);
             fwrite($connection, strtr($template, [
                 '{id}' => $request['id'],
                 '{method}' => $request['method'],
@@ -123,7 +144,7 @@ class SocketAgentClientTest extends TestCase
             PHP;
 
         $this->server = proc_open(
-            [PHP_BINARY, '-r', $script, '--', $this->socketPath, $responseTemplate],
+            [PHP_BINARY, '-r', $script, '--', $this->socketPath, $responseTemplate, (string) $delaySeconds],
             [],
             $pipes,
         );

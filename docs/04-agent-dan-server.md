@@ -110,13 +110,13 @@ Konvensi nama: `namespace.aksi`. "Sebagai user" = agent turun ke UID user sebelu
 
 ### ssl
 
-| Aksi                               | Fungsi                                                  | Fase    |
-| ---------------------------------- | ------------------------------------------------------- | ------- |
-| `ssl.issue`                        | Let's Encrypt via lego (HTTP-01; DNS-01 untuk wildcard) | P1 / P2 |
-| `ssl.install_custom`               | Simpan cert & key, cek pasangan cocok dan masa berlaku  | P1      |
-| `ssl.remove`                       |                                                         | P1      |
-| `ssl.issue_hostname`               | SSL untuk hostname server: panel, mail, FTP             | P1      |
-| `ssl.generate_csr` / `self_signed` |                                                         | P3      |
+| Aksi                               | Fungsi                                                                                                                                                                                                                                                                                                  | Fase    |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| `ssl.issue`                        | ✅ `{username, domain}`: cek dulu domain (dan `www.`) benar-benar sampai ke server ini lewat HTTP (file uji di webroot ACME, jadi A record langsung maupun proxy Cloudflare lolos), lalu Let's Encrypt via certbot (HTTP-01). `www.` ikut hanya kalau juga sampai. DNS-01 untuk wildcard menyusul di P2 | P1 / P2 |
+| `ssl.install_custom`               | Simpan cert & key, cek pasangan cocok dan masa berlaku                                                                                                                                                                                                                                                  | P1      |
+| `ssl.delete`                       | ✅ `{username, domain}`: hapus sertifikat (`certbot delete`); ditolak selama vhost masih memakai HTTPS. `web.remove_domain` dan `account.delete` juga menghapus sertifikat domainnya                                                                                                                    | P1      |
+| `ssl.issue_hostname`               | SSL untuk hostname server: panel, mail, FTP                                                                                                                                                                                                                                                             | P1      |
+| `ssl.generate_csr` / `self_signed` |                                                                                                                                                                                                                                                                                                         | P3      |
 
 ### dns
 
@@ -256,12 +256,12 @@ Konvensi nama: `namespace.aksi`. "Sebagai user" = agent turun ke UID user sebelu
 ├── installed, admin-created            penanda instalasi (dipakai setup.sh saat diulang)
 ├── templates/custom/                   override template (tidak tertimpa update)
 ├── php-fpm/<versi>/<user>.conf         pool PHP-FPM per user
-└── ssl/<domain>/{cert,key,chain}.pem   0600 root
+└── ssl/<domain>/{cert,key,chain}.pem   0600 root (sertifikat kustom, menyusul)
 
-/etc/nginx/nusapanel/<user>/<domain>.conf        vhost Nginx (port 80), ditulis nusad
+/etc/nginx/nusapanel/<user>/<domain>.conf        vhost Nginx (port 80, plus 443 kalau SSL aktif), ditulis nusad
 /etc/nginx/nusapanel/<user>/suspended.inc        hanya ada selama akun di-suspend (halaman 503)
 /etc/nginx/conf.d/nusapanel-sites.conf           include semua vhost di atas
-/etc/nginx/sites-enabled/nusapanel-default.conf  default server port 80: host tak dikenal & IP → 404
+/etc/nginx/sites-enabled/nusapanel-default.conf  default server: port 80 → 404, port 443 → handshake ditolak (host tak dikenal & IP)
 /etc/apache2/nusapanel/<user>/<domain>.conf      vhost Apache (127.0.0.1:8080), ditulis nusad
 /etc/apache2/conf-available/nusapanel.conf       mod_remoteip, HTTPS dari proxy, aturan /home
 /etc/systemd/system/nusa-php<versi>@.service     unit template pool PHP-FPM, ditulis nusad
@@ -271,7 +271,8 @@ Konvensi nama: `namespace.aksi`. "Sebagai user" = agent turun ke UID user sebelu
 /var/log/nusapanel/domains/<domain>.{access,error,apache-error}.log
 /var/log/nusapanel-install.log          log setup.sh (0600, tanpa password)
 /etc/letsencrypt/live/<hostname>/       sertifikat Let's Encrypt hostname (certbot)
-/var/www/nusapanel-acme/                webroot verifikasi Let's Encrypt (port 80)
+/etc/letsencrypt/live/<domain>/         sertifikat Let's Encrypt domain customer (certbot, nama sertifikat = domain)
+/var/www/nusapanel-acme/                webroot verifikasi Let's Encrypt (port 80), dipakai hostname dan semua domain
 /etc/opendkim/keys/<hostname>/          kunci DKIM email panel (0600 opendkim)
 /var/lib/nusapanel/                     home user nusapanel; state agent, backup admin
 /var/lib/nusapanel/storage/             storage Laravel (log, cache view), dipakai semua rilis
