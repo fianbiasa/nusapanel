@@ -1,11 +1,13 @@
 import { Form, Head } from '@inertiajs/react';
+import { LockKeyhole } from 'lucide-react';
 import { useRef } from 'react';
 import SecurityController from '@/actions/App/Http/Controllers/Settings/SecurityController';
-import Heading from '@/components/heading';
 import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
+import SettingsCard from '@/components/settings-card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Spinner } from '@/components/ui/spinner';
 import { edit } from '@/routes/security';
 import type { Props as ManagePasskeysProps } from '@/components/manage-passkeys';
 import ManagePasskeys from '@/components/manage-passkeys';
@@ -24,17 +26,13 @@ export default function Security(props: Props) {
 
     return (
         <>
-            <Head title="Security settings" />
+            <Head title="Pengaturan keamanan" />
 
-            <h1 className="sr-only">Security settings</h1>
-
-            <div className="space-y-6">
-                <Heading
-                    variant="small"
-                    title="Update password"
-                    description="Ensure your account is using a long, random password to stay secure"
-                />
-
+            <SettingsCard
+                icon={LockKeyhole}
+                title="Ganti kata sandi"
+                description="Gunakan kata sandi yang panjang dan acak agar akun kamu tetap aman."
+            >
                 <Form
                     {...SecurityController.update.form()}
                     options={{
@@ -55,74 +53,82 @@ export default function Security(props: Props) {
                             currentPasswordInput.current?.focus();
                         }
                     }}
-                    className="space-y-6"
+                    className="flex flex-col gap-6"
                 >
                     {({ errors, processing }) => (
                         <>
-                            <div className="grid gap-2">
-                                <Label htmlFor="current_password">
-                                    Current password
-                                </Label>
+                            <div className="grid gap-5">
+                                <div className="grid gap-2 sm:max-w-[calc(50%-0.625rem)]">
+                                    <Label htmlFor="current_password">
+                                        Kata sandi saat ini
+                                    </Label>
 
-                                <PasswordInput
-                                    id="current_password"
-                                    ref={currentPasswordInput}
-                                    name="current_password"
-                                    className="mt-1 block w-full"
-                                    autoComplete="current-password"
-                                    placeholder="Current password"
-                                />
+                                    <PasswordInput
+                                        id="current_password"
+                                        ref={currentPasswordInput}
+                                        name="current_password"
+                                        autoComplete="current-password"
+                                        placeholder="Kata sandi saat ini"
+                                    />
 
-                                <InputError message={errors.current_password} />
+                                    <InputError
+                                        message={errors.current_password}
+                                    />
+                                </div>
+
+                                <div className="grid gap-5 sm:grid-cols-2">
+                                    <div className="grid content-start gap-2">
+                                        <Label htmlFor="password">
+                                            Kata sandi baru
+                                        </Label>
+
+                                        <PasswordInput
+                                            id="password"
+                                            ref={passwordInput}
+                                            name="password"
+                                            autoComplete="new-password"
+                                            placeholder="Kata sandi baru"
+                                            passwordrules={props.passwordRules}
+                                        />
+
+                                        <InputError message={errors.password} />
+                                    </div>
+
+                                    <div className="grid content-start gap-2">
+                                        <Label htmlFor="password_confirmation">
+                                            Konfirmasi kata sandi baru
+                                        </Label>
+
+                                        <PasswordInput
+                                            id="password_confirmation"
+                                            name="password_confirmation"
+                                            autoComplete="new-password"
+                                            placeholder="Ulangi kata sandi baru"
+                                            passwordrules={props.passwordRules}
+                                        />
+
+                                        <InputError
+                                            message={
+                                                errors.password_confirmation
+                                            }
+                                        />
+                                    </div>
+                                </div>
                             </div>
 
-                            <div className="grid gap-2">
-                                <Label htmlFor="password">New password</Label>
-
-                                <PasswordInput
-                                    id="password"
-                                    ref={passwordInput}
-                                    name="password"
-                                    className="mt-1 block w-full"
-                                    autoComplete="new-password"
-                                    placeholder="New password"
-                                    passwordrules={props.passwordRules}
-                                />
-
-                                <InputError message={errors.password} />
-                            </div>
-
-                            <div className="grid gap-2">
-                                <Label htmlFor="password_confirmation">
-                                    Confirm password
-                                </Label>
-
-                                <PasswordInput
-                                    id="password_confirmation"
-                                    name="password_confirmation"
-                                    className="mt-1 block w-full"
-                                    autoComplete="new-password"
-                                    placeholder="Confirm password"
-                                    passwordrules={props.passwordRules}
-                                />
-
-                                <InputError
-                                    message={errors.password_confirmation}
-                                />
-                            </div>
-
-                            <div className="flex items-center gap-4">
+                            <div className="flex items-center justify-end border-t pt-5">
                                 <Button
                                     disabled={processing}
                                     data-test="update-password-button"
                                 >
-                                    Save
+                                    {processing && <Spinner />}
+                                    Simpan
                                 </Button>
                             </div>
                         </>
                     )}
                 </Form>
-            </div>
+            </SettingsCard>
 
             <ManageTwoFactor
                 canManageTwoFactor={props.canManageTwoFactor}
@@ -141,7 +147,7 @@ export default function Security(props: Props) {
 Security.layout = {
     breadcrumbs: [
         {
-            title: 'Security settings',
+            title: 'Pengaturan keamanan',
             href: edit(),
         },
     ],

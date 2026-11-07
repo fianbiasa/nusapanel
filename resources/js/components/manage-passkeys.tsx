@@ -1,9 +1,9 @@
 import { router } from '@inertiajs/react';
-import { KeyRound } from 'lucide-react';
+import { Fingerprint, KeyRound } from 'lucide-react';
 import { destroy } from '@/actions/Laravel/Passkeys/Http/Controllers/PasskeyRegistrationController';
-import Heading from '@/components/heading';
 import PasskeyItem from '@/components/passkey-item';
 import PasskeyRegistration from '@/components/passkey-register';
+import SettingsCard from '@/components/settings-card';
 import type { Passkey } from '@/types/auth';
 
 export type Props = {
@@ -13,14 +13,16 @@ export type Props = {
 
 const EmptyState = () => {
     return (
-        <div className="p-8 text-center">
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
-                <KeyRound className="h-7 w-7 text-muted-foreground" />
+        <div className="flex flex-col items-center gap-3 px-6 py-8 text-center">
+            <span className="flex size-14 items-center justify-center rounded-full bg-accent text-accent-foreground">
+                <KeyRound className="size-6" />
+            </span>
+            <div className="space-y-1">
+                <p className="font-semibold">Belum ada passkey</p>
+                <p className="text-sm text-muted-foreground">
+                    Tambahkan passkey untuk masuk tanpa kata sandi.
+                </p>
             </div>
-            <p className="font-medium">No passkeys yet</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-                Add a passkey to sign in without a password
-            </p>
         </div>
     );
 };
@@ -44,14 +46,12 @@ export default function ManagePasskeys(props: Props) {
     }
 
     return (
-        <div className="space-y-6">
-            <Heading
-                variant="small"
-                title="Passkeys"
-                description="Manage your passkeys for passwordless sign-in"
-            />
-
-            <div className="overflow-hidden rounded-lg border border-border">
+        <SettingsCard
+            icon={Fingerprint}
+            title="Passkey"
+            description="Masuk tanpa kata sandi memakai sidik jari, wajah, atau kunci keamanan perangkat kamu."
+        >
+            <div className="overflow-hidden rounded-xl border">
                 {passkeys.length > 0 ? (
                     passkeys.map((passkey) => (
                         <PasskeyItem
@@ -66,6 +66,6 @@ export default function ManagePasskeys(props: Props) {
             </div>
 
             <PasskeyRegistration onSuccess={handleRegisterSuccess} />
-        </div>
+        </SettingsCard>
     );
 }

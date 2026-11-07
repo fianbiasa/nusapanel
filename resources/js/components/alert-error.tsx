@@ -9,9 +9,14 @@ export default function AlertError({
     title?: string;
 }) {
     return (
-        <Alert variant="destructive">
+        <Alert
+            variant="destructive"
+            className="rounded-xl border-destructive/20 bg-destructive/8"
+        >
             <AlertCircleIcon />
-            <AlertTitle>{title || 'Something went wrong.'}</AlertTitle>
+            <AlertTitle className="font-semibold">
+                {title || 'Terjadi kesalahan.'}
+            </AlertTitle>
             <AlertDescription>
                 <ul className="list-inside list-disc text-sm">
                     {Array.from(new Set(errors)).map((error, index) => (

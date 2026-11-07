@@ -194,6 +194,14 @@ set_env_value() {
     chmod 0640 "$ENV_FILE"
 }
 
+# Add KEY=VALUE to the panel's .env only when KEY is missing, so a value
+# someone changed by hand is kept.
+add_env_value() {
+    if ! grep -q "^$1=" "$ENV_FILE"; then
+        set_env_value "$1" "$2"
+    fi
+}
+
 # Value of KEY in the panel's .env, or nothing.
 env_value() {
     if [[ -f "$ENV_FILE" ]]; then
@@ -705,6 +713,9 @@ SQL
 write_env() {
     if [[ -f "$ENV_FILE" ]]; then
         info "Memakai konfigurasi yang sudah ada: $ENV_FILE"
+        # Installs from before the panel was translated have no locale yet.
+        add_env_value APP_LOCALE id
+        add_env_value APP_FALLBACK_LOCALE en
         return
     fi
 
@@ -724,6 +735,9 @@ APP_ENV=production
 APP_KEY=$app_key
 APP_DEBUG=false
 APP_URL=https://$server_hostname:$PANEL_PORT
+
+APP_LOCALE=id
+APP_FALLBACK_LOCALE=en
 
 LOG_CHANNEL=daily
 LOG_LEVEL=info

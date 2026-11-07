@@ -1,10 +1,11 @@
 import { Form } from '@inertiajs/react';
 import { ShieldCheck } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import Heading from '@/components/heading';
+import SettingsCard from '@/components/settings-card';
 import TwoFactorRecoveryCodes from '@/components/two-factor-recovery-codes';
 import TwoFactorSetupModal from '@/components/two-factor-setup-modal';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import { useTwoFactorAuth } from '@/hooks/use-two-factor-auth';
 import { disable, enable } from '@/routes/two-factor';
 
@@ -45,29 +46,41 @@ export default function ManageTwoFactor(props: Props) {
     }
 
     return (
-        <div className="space-y-6">
-            <Heading
-                variant="small"
-                title="Two-factor authentication"
-                description="Manage your two-factor authentication settings"
-            />
+        <SettingsCard
+            icon={ShieldCheck}
+            title="Autentikasi dua faktor"
+            description="Tambahkan lapisan keamanan ekstra saat kamu masuk."
+            badge={
+                twoFactorEnabled ? (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-success/10 px-2.5 py-1 text-xs font-semibold text-success-foreground ring-1 ring-success/20 ring-inset">
+                        <span className="size-1.5 rounded-full bg-success" />
+                        Aktif
+                    </span>
+                ) : (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground ring-1 ring-border ring-inset">
+                        <span className="size-1.5 rounded-full bg-muted-foreground" />
+                        Nonaktif
+                    </span>
+                )
+            }
+        >
             {twoFactorEnabled ? (
-                <div className="flex flex-col items-start justify-start space-y-4">
-                    <p className="text-sm text-muted-foreground">
-                        You will be prompted for a secure, random pin during
-                        login, which you can retrieve from the TOTP-supported
-                        application on your phone.
-                    </p>
+                <div className="flex flex-col gap-5">
+                    <div className="flex flex-col gap-4 rounded-xl bg-muted/60 p-4 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-sm text-muted-foreground">
+                            Saat masuk, kamu akan diminta memasukkan PIN acak
+                            dari aplikasi autentikator (TOTP) di ponsel kamu.
+                        </p>
 
-                    <div className="relative inline">
-                        <Form {...disable.form()}>
+                        <Form {...disable.form()} className="shrink-0">
                             {({ processing }) => (
                                 <Button
                                     variant="destructive"
                                     type="submit"
                                     disabled={processing}
                                 >
-                                    Disable 2FA
+                                    {processing && <Spinner />}
+                                    Nonaktifkan 2FA
                                 </Button>
                             )}
                         </Form>
@@ -80,19 +93,18 @@ export default function ManageTwoFactor(props: Props) {
                     />
                 </div>
             ) : (
-                <div className="flex flex-col items-start justify-start space-y-4">
+                <div className="flex flex-col gap-4 rounded-xl bg-muted/60 p-4 sm:flex-row sm:items-center sm:justify-between">
                     <p className="text-sm text-muted-foreground">
-                        When you enable two-factor authentication, you will be
-                        prompted for a secure pin during login. This pin can be
-                        retrieved from a TOTP-supported application on your
-                        phone.
+                        Setelah 2FA aktif, kamu akan diminta memasukkan PIN saat
+                        masuk. PIN ini bisa kamu dapatkan dari aplikasi
+                        autentikator (TOTP) di ponsel kamu.
                     </p>
 
-                    <div>
+                    <div className="shrink-0">
                         {hasSetupData ? (
                             <Button onClick={() => setShowSetupModal(true)}>
                                 <ShieldCheck />
-                                Continue setup
+                                Lanjutkan pengaturan
                             </Button>
                         ) : (
                             <Form
@@ -101,7 +113,8 @@ export default function ManageTwoFactor(props: Props) {
                             >
                                 {({ processing }) => (
                                     <Button type="submit" disabled={processing}>
-                                        Enable 2FA
+                                        {processing && <Spinner />}
+                                        Aktifkan 2FA
                                     </Button>
                                 )}
                             </Form>
@@ -121,6 +134,6 @@ export default function ManageTwoFactor(props: Props) {
                 fetchSetupData={fetchSetupData}
                 errors={errors}
             />
-        </div>
+        </SettingsCard>
     );
 }

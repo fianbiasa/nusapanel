@@ -4,7 +4,9 @@ namespace Tests\Feature;
 
 use App\Agent\AgentClient;
 use App\Agent\AgentException;
+use App\Models\Domain;
 use App\Models\User;
+use App\Services\AuditLogger;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 use Mockery\MockInterface;
@@ -44,6 +46,44 @@ class DashboardTest extends TestCase
                 ->loadDeferredProps(fn (Assert $reload) => $reload
                     ->where('systemInfo.data.hostname', 'server.nusapanel.test')
                     ->where('systemInfo.error', null)));
+    }
+
+    public function test_admins_see_counts_for_the_whole_server_and_recent_activity()
+    {
+        $admin = User::factory()->admin()->create();
+        $active = User::factory()->create();
+        User::factory()->suspended()->create();
+        Domain::factory()->for($active, 'account')->create();
+        Domain::factory()->for($active, 'account')->pending()->create();
+        app(AuditLogger::class)->record('account.created', $active, [], $admin);
+
+        $this->actingAs($admin)
+            ->get(route('dashboard'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('stats.accounts.total', 2)
+                ->where('stats.accounts.active', 1)
+                ->where('stats.accounts.suspended', 1)
+                ->where('stats.domains.total', 2)
+                ->where('stats.domains.pending', 1)
+                ->where('stats.tasks.active', 0)
+                ->has('recentActivity', 1)
+                ->where('recentActivity.0.action', 'account.created')
+                ->where('recentActivity.0.actor', $admin->username));
+    }
+
+    public function test_hosting_accounts_see_only_their_own_domains()
+    {
+        $account = User::factory()->create();
+        Domain::factory()->for($account, 'account')->create(['name' => 'mine.example']);
+        Domain::factory()->for(User::factory()->create(), 'account')->create(['name' => 'theirs.example']);
+
+        $this->actingAs($account)
+            ->get(route('dashboard'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('stats.domains.total', 1)
+                ->has('domains', 1)
+                ->where('domains.0.name', 'mine.example')
+                ->missing('recentActivity'));
     }
 
     public function test_admins_see_an_error_when_the_agent_is_unreachable()

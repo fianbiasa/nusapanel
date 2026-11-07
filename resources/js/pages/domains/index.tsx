@@ -1,9 +1,10 @@
 import { Form, Head, usePoll } from '@inertiajs/react';
-import { ExternalLink, Plus } from 'lucide-react';
+import { ExternalLink, Globe, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import Heading from '@/components/heading';
 import InputError from '@/components/input-error';
-import { Badge } from '@/components/ui/badge';
+import { PageHeader } from '@/components/page-header';
+import { Panel, tableStyles } from '@/components/panel';
+import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -15,10 +16,9 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { formatDateTime } from '@/lib/format';
-import { destroy, index, store } from '@/routes/domains';
+import { destroy, store } from '@/routes/domains';
 
 type DomainStatus = 'pending' | 'active' | 'failed' | 'deleting';
 
@@ -30,16 +30,6 @@ type DomainRow = {
     is_primary: boolean;
     status: DomainStatus;
     created_at: string | null;
-};
-
-const statusVariants: Record<
-    DomainStatus,
-    'default' | 'secondary' | 'destructive' | 'outline'
-> = {
-    pending: 'outline',
-    active: 'default',
-    failed: 'destructive',
-    deleting: 'outline',
 };
 
 const busyStatuses: DomainStatus[] = ['pending', 'deleting'];
@@ -78,129 +68,167 @@ export default function DomainsIndex({ domains }: { domains: DomainRow[] }) {
     return (
         <>
             <Head title="Domains" />
-            <div className="flex flex-1 flex-col gap-4 p-4">
-                <Heading
-                    title="Domains"
-                    description="Websites on your account. Each one is served from domains/<domain>/public_html in your home directory, with and without www."
-                />
 
+            <PageHeader
+                title="Domains"
+                description="Website di akun kamu. Setiap domain bisa dibuka dengan dan tanpa www."
+            />
+
+            <Panel
+                title="Tambah domain"
+                description={
+                    <>
+                        File website diletakkan di{' '}
+                        <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
+                            domains/&lt;domain&gt;/public_html
+                        </code>{' '}
+                        di folder home kamu.
+                    </>
+                }
+            >
                 <Form
                     {...store.form()}
                     resetOnSuccess
                     options={{ preserveScroll: true }}
-                    className="grid w-full max-w-xl gap-2"
+                    className="grid max-w-2xl gap-2"
                 >
                     {({ processing, errors }) => (
                         <>
-                            <Label htmlFor="domain">Add a domain</Label>
-                            <div className="flex items-center gap-2">
-                                <Input
-                                    id="domain"
-                                    name="domain"
-                                    required
-                                    autoComplete="off"
-                                    autoCapitalize="none"
-                                    spellCheck={false}
-                                    maxLength={253}
-                                    placeholder="example.com"
-                                    aria-invalid={
-                                        errors.domain ? true : undefined
-                                    }
-                                />
-                                <Button type="submit" disabled={processing}>
+                            <label htmlFor="domain" className="sr-only">
+                                Nama domain
+                            </label>
+                            <div className="flex flex-col gap-2 sm:flex-row">
+                                <div className="relative flex-1">
+                                    <Globe className="pointer-events-none absolute top-1/2 left-3.5 size-[18px] -translate-y-1/2 text-muted-foreground" />
+                                    <Input
+                                        id="domain"
+                                        name="domain"
+                                        required
+                                        autoComplete="off"
+                                        autoCapitalize="none"
+                                        spellCheck={false}
+                                        maxLength={253}
+                                        placeholder="contoh.com"
+                                        className="pl-10"
+                                        aria-invalid={
+                                            errors.domain ? true : undefined
+                                        }
+                                    />
+                                </div>
+                                <Button
+                                    type="submit"
+                                    size="lg"
+                                    disabled={processing}
+                                >
                                     {processing ? <Spinner /> : <Plus />}
-                                    Add domain
+                                    Tambah domain
                                 </Button>
                             </div>
                             <InputError message={errors.domain} />
                         </>
                     )}
                 </Form>
+            </Panel>
 
+            <Panel
+                title="Daftar domain"
+                description={`${domains.length} domain`}
+                flush
+            >
                 {domains.length === 0 ? (
-                    <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
-                        No domains yet. Add one to start hosting a website.
-                    </p>
+                    <div className="flex flex-col items-center gap-3 px-6 pt-4 pb-10 text-center">
+                        <span className="flex size-14 items-center justify-center rounded-full bg-accent text-accent-foreground">
+                            <Globe className="size-6" />
+                        </span>
+                        <p className="max-w-sm text-sm text-muted-foreground">
+                            Belum ada domain. Tambahkan domain pertama di atas
+                            untuk mulai membuat website.
+                        </p>
+                    </div>
                 ) : (
-                    <div className="overflow-x-auto rounded-xl border">
-                        <table className="w-full text-sm">
-                            <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
+                    <div className="overflow-x-auto">
+                        <table className={tableStyles.table}>
+                            <thead className={tableStyles.head}>
                                 <tr>
-                                    <th className="px-4 py-2 font-medium">
-                                        Domain
+                                    <th className={tableStyles.th}>Domain</th>
+                                    <th className={tableStyles.th}>Status</th>
+                                    <th className={tableStyles.th}>PHP</th>
+                                    <th className={tableStyles.th}>
+                                        Ditambahkan
                                     </th>
-                                    <th className="px-4 py-2 font-medium">
-                                        Status
-                                    </th>
-                                    <th className="px-4 py-2 font-medium">
-                                        PHP
-                                    </th>
-                                    <th className="px-4 py-2 font-medium">
-                                        Added
-                                    </th>
-                                    <th className="px-4 py-2 font-medium">
-                                        <span className="sr-only">Actions</span>
+                                    <th className={tableStyles.th}>
+                                        <span className="sr-only">Aksi</span>
                                     </th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y">
                                 {domains.map((domain) => (
-                                    <tr key={domain.id} className="align-top">
-                                        <td className="px-4 py-3">
-                                            <div className="flex flex-wrap items-center gap-2">
-                                                {domain.status === 'active' ? (
-                                                    <a
-                                                        href={`http://${domain.name}`}
-                                                        target="_blank"
-                                                        rel="noreferrer"
-                                                        className="inline-flex items-center gap-1 font-medium underline-offset-4 hover:underline"
-                                                    >
-                                                        {domain.display_name}
-                                                        <ExternalLink className="size-3 text-muted-foreground" />
-                                                    </a>
-                                                ) : (
-                                                    <span className="font-medium">
-                                                        {domain.display_name}
-                                                    </span>
-                                                )}
-                                                {domain.is_primary && (
-                                                    <Badge variant="secondary">
-                                                        Primary
-                                                    </Badge>
-                                                )}
+                                    <tr
+                                        key={domain.id}
+                                        className={tableStyles.row}
+                                    >
+                                        <td className={tableStyles.td}>
+                                            <div className="flex items-center gap-3">
+                                                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground">
+                                                    <Globe className="size-4" />
+                                                </span>
+                                                <div className="min-w-0">
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        {domain.status ===
+                                                        'active' ? (
+                                                            <a
+                                                                href={`http://${domain.name}`}
+                                                                target="_blank"
+                                                                rel="noreferrer"
+                                                                className="inline-flex items-center gap-1 font-semibold underline-offset-4 hover:text-primary hover:underline"
+                                                            >
+                                                                {
+                                                                    domain.display_name
+                                                                }
+                                                                <ExternalLink className="size-3.5 text-muted-foreground" />
+                                                            </a>
+                                                        ) : (
+                                                            <span className="font-semibold">
+                                                                {
+                                                                    domain.display_name
+                                                                }
+                                                            </span>
+                                                        )}
+                                                        {domain.is_primary && (
+                                                            <span className="rounded-full bg-secondary px-2 py-0.5 text-[11px] font-semibold text-secondary-foreground">
+                                                                Utama
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    {domain.display_name !==
+                                                        domain.name && (
+                                                        <code className="mt-0.5 block font-mono text-xs text-muted-foreground">
+                                                            {domain.name}
+                                                        </code>
+                                                    )}
+                                                </div>
                                             </div>
-                                            {domain.display_name !==
-                                                domain.name && (
-                                                <code className="mt-1 block font-mono text-xs text-muted-foreground">
-                                                    {domain.name}
-                                                </code>
-                                            )}
                                         </td>
-                                        <td className="px-4 py-3">
-                                            <Badge
-                                                variant={
-                                                    statusVariants[
-                                                        domain.status
-                                                    ]
-                                                }
-                                            >
-                                                {busyStatuses.includes(
-                                                    domain.status,
-                                                ) && <Spinner />}
-                                                {domain.status}
-                                            </Badge>
+                                        <td className={tableStyles.td}>
+                                            <StatusBadge
+                                                status={domain.status}
+                                            />
                                         </td>
-                                        <td className="px-4 py-3">
-                                            {domain.php_version}
+                                        <td className={tableStyles.td}>
+                                            <span className="font-medium">
+                                                {domain.php_version}
+                                            </span>
                                         </td>
-                                        <td className="px-4 py-3 whitespace-nowrap">
+                                        <td
+                                            className={`${tableStyles.td} whitespace-nowrap text-muted-foreground`}
+                                        >
                                             {domain.created_at
                                                 ? formatDateTime(
                                                       domain.created_at,
                                                   )
                                                 : '—'}
                                         </td>
-                                        <td className="px-4 py-3">
+                                        <td className={tableStyles.td}>
                                             <div className="flex justify-end">
                                                 {deletableStatuses.includes(
                                                     domain.status,
@@ -208,14 +236,14 @@ export default function DomainsIndex({ domains }: { domains: DomainRow[] }) {
                                                     <Button
                                                         variant="ghost"
                                                         size="sm"
-                                                        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                                        className="text-destructive-foreground hover:bg-destructive/10 hover:text-destructive-foreground"
                                                         onClick={() =>
                                                             confirmDelete(
                                                                 domain,
                                                             )
                                                         }
                                                     >
-                                                        Delete
+                                                        <Trash2 /> Hapus
                                                     </Button>
                                                 )}
                                             </div>
@@ -226,10 +254,10 @@ export default function DomainsIndex({ domains }: { domains: DomainRow[] }) {
                         </table>
                     </div>
                 )}
-            </div>
+            </Panel>
 
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                <DialogContent>
+                <DialogContent className="rounded-2xl">
                     {domainToDelete && (
                         <DeleteDomainForm
                             key={domainToDelete.id}
@@ -260,14 +288,14 @@ function DeleteDomainForm({
             {({ processing, errors }) => (
                 <>
                     <DialogHeader>
-                        <DialogTitle>Delete {domain.display_name}</DialogTitle>
+                        <DialogTitle>Hapus {domain.display_name}?</DialogTitle>
                         <DialogDescription>
-                            The website stops being served from this server. Its
-                            files in{' '}
+                            Website ini tidak akan dilayani lagi oleh server.
+                            File di{' '}
                             <code className="font-mono text-xs">
                                 domains/{domain.name}/public_html
                             </code>{' '}
-                            are kept in your home directory.
+                            tetap tersimpan di folder home kamu.
                         </DialogDescription>
                     </DialogHeader>
 
@@ -276,7 +304,7 @@ function DeleteDomainForm({
                     <DialogFooter className="gap-2">
                         <DialogClose asChild>
                             <Button type="button" variant="secondary">
-                                Cancel
+                                Batal
                             </Button>
                         </DialogClose>
                         <Button
@@ -285,7 +313,7 @@ function DeleteDomainForm({
                             disabled={processing}
                         >
                             {processing && <Spinner />}
-                            Delete domain
+                            Hapus domain
                         </Button>
                     </DialogFooter>
                 </>
@@ -293,12 +321,3 @@ function DeleteDomainForm({
         </Form>
     );
 }
-
-DomainsIndex.layout = {
-    breadcrumbs: [
-        {
-            title: 'Domains',
-            href: index(),
-        },
-    ],
-};

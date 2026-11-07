@@ -9,33 +9,33 @@ export function Pagination<T>({ page }: { page: Paginated<T> }) {
 
     return (
         <nav
-            aria-label="Pagination"
+            aria-label="Halaman"
             className="flex items-center justify-between gap-4 text-sm text-muted-foreground"
         >
             <span>
-                {page.from}–{page.to} of {page.total}
+                {page.from}–{page.to} dari {page.total}
             </span>
             <div className="flex gap-2">
                 {page.prev_page_url ? (
                     <Button variant="outline" size="sm" asChild>
                         <Link href={page.prev_page_url} preserveScroll>
-                            Previous
+                            Sebelumnya
                         </Link>
                     </Button>
                 ) : (
                     <Button variant="outline" size="sm" disabled>
-                        Previous
+                        Sebelumnya
                     </Button>
                 )}
                 {page.next_page_url ? (
                     <Button variant="outline" size="sm" asChild>
                         <Link href={page.next_page_url} preserveScroll>
-                            Next
+                            Berikutnya
                         </Link>
                     </Button>
                 ) : (
                     <Button variant="outline" size="sm" disabled>
-                        Next
+                        Berikutnya
                     </Button>
                 )}
             </div>

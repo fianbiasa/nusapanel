@@ -1,8 +1,9 @@
 import { Head } from '@inertiajs/react';
-import Heading from '@/components/heading';
+import { ScrollText } from 'lucide-react';
+import { PageHeader } from '@/components/page-header';
 import { Pagination } from '@/components/pagination';
-import { formatDateTime } from '@/lib/format';
-import { index } from '@/routes/admin/audit-logs';
+import { Panel, tableStyles } from '@/components/panel';
+import { auditActionLabels, formatDateTime } from '@/lib/format';
 import type { Paginated } from '@/types';
 
 type AuditLogRow = {
@@ -22,65 +23,73 @@ export default function AuditLogsIndex({
 }) {
     return (
         <>
-            <Head title="Audit log" />
-            <div className="flex flex-1 flex-col gap-4 p-4">
-                <Heading
-                    title="Audit log"
-                    description="Who did what, when, and from where. Entries cannot be edited."
-                />
+            <Head title="Audit Log" />
 
+            <PageHeader
+                title="Audit Log"
+                description="Siapa melakukan apa, kapan, dan dari mana. Catatan tidak bisa diubah."
+            />
+
+            <Panel flush title="Catatan" description={`${logs.total} catatan`}>
                 {logs.data.length === 0 ? (
-                    <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
-                        No audit entries yet.
-                    </p>
+                    <div className="flex flex-col items-center gap-3 px-6 pt-4 pb-10 text-center">
+                        <span className="flex size-14 items-center justify-center rounded-full bg-accent text-accent-foreground">
+                            <ScrollText className="size-6" />
+                        </span>
+                        <p className="text-sm text-muted-foreground">
+                            Belum ada catatan.
+                        </p>
+                    </div>
                 ) : (
-                    <div className="overflow-x-auto rounded-xl border">
-                        <table className="w-full text-sm">
-                            <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
+                    <div className="overflow-x-auto">
+                        <table className={tableStyles.table}>
+                            <thead className={tableStyles.head}>
                                 <tr>
-                                    <th className="px-4 py-2 font-medium">
-                                        Time
+                                    <th className={tableStyles.th}>Waktu</th>
+                                    <th className={tableStyles.th}>Aksi</th>
+                                    <th className={tableStyles.th}>Oleh</th>
+                                    <th className={tableStyles.th}>Objek</th>
+                                    <th className={tableStyles.th}>
+                                        Alamat IP
                                     </th>
-                                    <th className="px-4 py-2 font-medium">
-                                        Action
-                                    </th>
-                                    <th className="px-4 py-2 font-medium">
-                                        Actor
-                                    </th>
-                                    <th className="px-4 py-2 font-medium">
-                                        Subject
-                                    </th>
-                                    <th className="px-4 py-2 font-medium">
-                                        IP address
-                                    </th>
-                                    <th className="px-4 py-2 font-medium">
-                                        Details
-                                    </th>
+                                    <th className={tableStyles.th}>Detail</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y">
                                 {logs.data.map((log) => (
-                                    <tr key={log.id} className="align-top">
-                                        <td className="px-4 py-3 whitespace-nowrap">
+                                    <tr
+                                        key={log.id}
+                                        className={`${tableStyles.row} align-top`}
+                                    >
+                                        <td
+                                            className={`${tableStyles.td} whitespace-nowrap text-muted-foreground`}
+                                        >
                                             {formatDateTime(log.created_at)}
                                         </td>
-                                        <td className="px-4 py-3">
-                                            <code className="font-mono text-xs">
+                                        <td className={tableStyles.td}>
+                                            <p className="font-semibold">
+                                                {auditActionLabels[
+                                                    log.action
+                                                ] ?? log.action}
+                                            </p>
+                                            <code className="font-mono text-xs text-muted-foreground">
                                                 {log.action}
                                             </code>
                                         </td>
-                                        <td className="px-4 py-3">
+                                        <td className={tableStyles.td}>
                                             {log.actor ?? '—'}
                                         </td>
-                                        <td className="px-4 py-3">
+                                        <td className={tableStyles.td}>
                                             {log.subject ?? '—'}
                                         </td>
-                                        <td className="px-4 py-3 font-mono text-xs">
+                                        <td
+                                            className={`${tableStyles.td} font-mono text-xs`}
+                                        >
                                             {log.ip_address ?? '—'}
                                         </td>
-                                        <td className="px-4 py-3">
+                                        <td className={tableStyles.td}>
                                             {log.changes ? (
-                                                <code className="font-mono text-xs break-all text-muted-foreground">
+                                                <code className="block max-w-sm rounded-lg bg-muted px-2.5 py-1.5 font-mono text-xs break-all text-muted-foreground">
                                                     {JSON.stringify(
                                                         log.changes,
                                                     )}
@@ -96,17 +105,12 @@ export default function AuditLogsIndex({
                     </div>
                 )}
 
-                <Pagination page={logs} />
-            </div>
+                {logs.last_page > 1 && (
+                    <div className="border-t px-6 py-4">
+                        <Pagination page={logs} />
+                    </div>
+                )}
+            </Panel>
         </>
     );
 }
-
-AuditLogsIndex.layout = {
-    breadcrumbs: [
-        {
-            title: 'Audit log',
-            href: index(),
-        },
-    ],
-};

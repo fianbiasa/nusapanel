@@ -71,7 +71,7 @@ class AccountService
     public function suspend(User $account, ?string $reason, User $actor): void
     {
         $this->ensureCanBeChanged($account, $actor, 'suspend');
-        $this->ensureStatus($account, [AccountStatus::Active], 'Only active accounts can be suspended.');
+        $this->ensureStatus($account, [AccountStatus::Active], __('Only active accounts can be suspended.'));
 
         DB::transaction(function () use ($account, $reason, $actor): void {
             $account->forceFill([
@@ -95,7 +95,7 @@ class AccountService
      */
     public function unsuspend(User $account, User $actor): void
     {
-        $this->ensureStatus($account, [AccountStatus::Suspended], 'Only suspended accounts can be unsuspended.');
+        $this->ensureStatus($account, [AccountStatus::Suspended], __('Only suspended accounts can be unsuspended.'));
 
         DB::transaction(function () use ($account, $actor): void {
             $account->forceFill([
@@ -122,7 +122,7 @@ class AccountService
         $this->ensureStatus(
             $account,
             [AccountStatus::Active, AccountStatus::Suspended, AccountStatus::Failed],
-            'This account is still being created or is already being deleted.',
+            __('This account is still being created or is already being deleted.'),
         );
 
         DB::transaction(function () use ($account, $actor): void {

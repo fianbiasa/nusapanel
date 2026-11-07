@@ -1,12 +1,14 @@
 import { Form, Head, Link } from '@inertiajs/react';
-import Heading from '@/components/heading';
+import { UserPlus } from 'lucide-react';
 import InputError from '@/components/input-error';
+import { PageHeader } from '@/components/page-header';
+import { Panel } from '@/components/panel';
 import PasswordInput from '@/components/password-input';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
-import { create, index, store } from '@/routes/admin/accounts';
+import { index, store } from '@/routes/admin/accounts';
 
 export default function AccountsCreate({
     passwordRules,
@@ -15,70 +17,80 @@ export default function AccountsCreate({
 }) {
     return (
         <>
-            <Head title="New account" />
-            <div className="flex flex-1 flex-col gap-4 p-4">
-                <Heading
-                    title="New account"
-                    description="Create a hosting account. The server sets it up in the background, and the account can sign in once it is active."
-                />
+            <Head title="Buat akun" />
 
-                <Form
-                    {...store.form()}
-                    resetOnError={['password', 'password_confirmation']}
-                    className="max-w-xl space-y-6"
-                >
-                    {({ processing, errors }) => (
-                        <>
-                            <div className="grid gap-2">
-                                <Label htmlFor="username">Username</Label>
-                                <Input
-                                    id="username"
-                                    name="username"
-                                    required
-                                    autoFocus
-                                    autoComplete="off"
-                                    autoCapitalize="none"
-                                    spellCheck={false}
-                                    maxLength={16}
-                                    placeholder="e.g. budi"
-                                />
-                                <p className="text-xs text-muted-foreground">
-                                    3 to 16 lowercase letters and digits,
-                                    starting with a letter. Also used as the
-                                    Linux user name and cannot be changed later.
-                                </p>
-                                <InputError message={errors.username} />
+            <PageHeader
+                title="Buat akun"
+                description="Akun hosting baru. Server menyiapkannya di latar belakang, dan akun bisa dipakai masuk setelah statusnya aktif."
+            />
+
+            <Form
+                {...store.form()}
+                resetOnError={['password', 'password_confirmation']}
+                className="grid max-w-4xl gap-6"
+            >
+                {({ processing, errors }) => (
+                    <>
+                        <Panel
+                            title="Data akun"
+                            description="Username juga dipakai sebagai nama user Linux di server."
+                        >
+                            <div className="grid gap-5 md:grid-cols-2">
+                                <div className="grid gap-2 md:col-span-2">
+                                    <Label htmlFor="username">Username</Label>
+                                    <Input
+                                        id="username"
+                                        name="username"
+                                        required
+                                        autoFocus
+                                        autoComplete="off"
+                                        autoCapitalize="none"
+                                        spellCheck={false}
+                                        maxLength={16}
+                                        placeholder="mis. budi"
+                                        className="md:max-w-sm"
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                        3–16 huruf kecil dan angka, diawali
+                                        huruf. Tidak bisa diganti setelah akun
+                                        dibuat.
+                                    </p>
+                                    <InputError message={errors.username} />
+                                </div>
+
+                                <div className="grid gap-2">
+                                    <Label htmlFor="name">Nama</Label>
+                                    <Input
+                                        id="name"
+                                        name="name"
+                                        required
+                                        autoComplete="off"
+                                        placeholder="Nama lengkap"
+                                    />
+                                    <InputError message={errors.name} />
+                                </div>
+
+                                <div className="grid gap-2">
+                                    <Label htmlFor="email">Email</Label>
+                                    <Input
+                                        id="email"
+                                        type="email"
+                                        name="email"
+                                        required
+                                        autoComplete="off"
+                                        placeholder="email@contoh.com"
+                                    />
+                                    <InputError message={errors.email} />
+                                </div>
                             </div>
+                        </Panel>
 
+                        <Panel
+                            title="Website"
+                            description="Opsional. Domain utama disiapkan sebagai website pertama begitu akun selesai dibuat."
+                        >
                             <div className="grid gap-2">
-                                <Label htmlFor="name">Name</Label>
-                                <Input
-                                    id="name"
-                                    name="name"
-                                    required
-                                    autoComplete="off"
-                                    placeholder="Full name"
-                                />
-                                <InputError message={errors.name} />
-                            </div>
-
-                            <div className="grid gap-2">
-                                <Label htmlFor="email">Email address</Label>
-                                <Input
-                                    id="email"
-                                    type="email"
-                                    name="email"
-                                    required
-                                    autoComplete="off"
-                                    placeholder="email@example.com"
-                                />
-                                <InputError message={errors.email} />
-                            </div>
-
-                            <div className="grid gap-2">
-                                <Label htmlFor="domain">
-                                    Primary domain (optional)
-                                </Label>
+                                <Label htmlFor="domain">Domain utama</Label>
                                 <Input
                                     id="domain"
                                     name="domain"
@@ -86,71 +98,70 @@ export default function AccountsCreate({
                                     autoCapitalize="none"
                                     spellCheck={false}
                                     maxLength={253}
-                                    placeholder="example.com"
+                                    placeholder="contoh.com"
+                                    className="md:max-w-md"
                                 />
                                 <p className="text-xs text-muted-foreground">
-                                    Set up as the account&apos;s first website
-                                    once the account is ready. Leave out www.
+                                    Tulis tanpa www, karena www ikut aktif
+                                    otomatis.
                                 </p>
                                 <InputError message={errors.domain} />
                             </div>
+                        </Panel>
 
-                            <div className="grid gap-2">
-                                <Label htmlFor="password">Password</Label>
-                                <PasswordInput
-                                    id="password"
-                                    name="password"
-                                    required
-                                    autoComplete="new-password"
-                                    placeholder="Password"
-                                    passwordrules={passwordRules}
-                                />
-                                <InputError message={errors.password} />
-                            </div>
+                        <Panel
+                            title="Kata sandi"
+                            description="Dipakai untuk masuk ke panel."
+                        >
+                            <div className="grid gap-5 md:grid-cols-2">
+                                <div className="grid gap-2">
+                                    <Label htmlFor="password">Kata sandi</Label>
+                                    <PasswordInput
+                                        id="password"
+                                        name="password"
+                                        required
+                                        autoComplete="new-password"
+                                        placeholder="Kata sandi"
+                                        passwordrules={passwordRules}
+                                    />
+                                    <InputError message={errors.password} />
+                                </div>
 
-                            <div className="grid gap-2">
-                                <Label htmlFor="password_confirmation">
-                                    Confirm password
-                                </Label>
-                                <PasswordInput
-                                    id="password_confirmation"
-                                    name="password_confirmation"
-                                    required
-                                    autoComplete="new-password"
-                                    placeholder="Confirm password"
-                                    passwordrules={passwordRules}
-                                />
-                                <InputError
-                                    message={errors.password_confirmation}
-                                />
+                                <div className="grid gap-2">
+                                    <Label htmlFor="password_confirmation">
+                                        Ulangi kata sandi
+                                    </Label>
+                                    <PasswordInput
+                                        id="password_confirmation"
+                                        name="password_confirmation"
+                                        required
+                                        autoComplete="new-password"
+                                        placeholder="Ulangi kata sandi"
+                                        passwordrules={passwordRules}
+                                    />
+                                    <InputError
+                                        message={errors.password_confirmation}
+                                    />
+                                </div>
                             </div>
+                        </Panel>
 
-                            <div className="flex items-center gap-2">
-                                <Button type="submit" disabled={processing}>
-                                    {processing && <Spinner />}
-                                    Create account
-                                </Button>
-                                <Button variant="ghost" asChild>
-                                    <Link href={index()}>Cancel</Link>
-                                </Button>
-                            </div>
-                        </>
-                    )}
-                </Form>
-            </div>
+                        <div className="flex items-center gap-2">
+                            <Button
+                                type="submit"
+                                size="lg"
+                                disabled={processing}
+                            >
+                                {processing ? <Spinner /> : <UserPlus />}
+                                Buat akun
+                            </Button>
+                            <Button variant="ghost" size="lg" asChild>
+                                <Link href={index()}>Batal</Link>
+                            </Button>
+                        </div>
+                    </>
+                )}
+            </Form>
         </>
     );
 }
-
-AccountsCreate.layout = {
-    breadcrumbs: [
-        {
-            title: 'Accounts',
-            href: index(),
-        },
-        {
-            title: 'New account',
-            href: create(),
-        },
-    ],
-};

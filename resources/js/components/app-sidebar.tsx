@@ -1,6 +1,6 @@
-import { Link, usePage } from '@inertiajs/react';
-import { Globe, LayoutGrid, ListChecks, ScrollText, Users } from 'lucide-react';
-import AppLogo from '@/components/app-logo';
+import { Link } from '@inertiajs/react';
+import { ChevronsLeft, ChevronsRight } from 'lucide-react';
+import AppLogo, { AppLogoMark } from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
 import {
@@ -8,87 +8,59 @@ import {
     SidebarContent,
     SidebarFooter,
     SidebarHeader,
-    SidebarMenu,
-    SidebarMenuButton,
-    SidebarMenuItem,
+    useSidebar,
 } from '@/components/ui/sidebar';
+import { useNavigation } from '@/hooks/use-navigation';
 import { dashboard } from '@/routes';
-import { index as accountsIndex } from '@/routes/admin/accounts';
-import { index as auditLogsIndex } from '@/routes/admin/audit-logs';
-import { index as tasksIndex } from '@/routes/admin/tasks';
-import { index as domainsIndex } from '@/routes/domains';
-import type { NavItem } from '@/types';
-
-const mainNavItems: NavItem[] = [
-    {
-        title: 'Dashboard',
-        href: dashboard(),
-        icon: LayoutGrid,
-    },
-];
-
-// Hosting accounts only: admins and resellers have no websites of their own.
-const hostingNavItems: NavItem[] = [
-    {
-        title: 'Domains',
-        href: domainsIndex(),
-        icon: Globe,
-    },
-];
-
-const adminNavItems: NavItem[] = [
-    {
-        title: 'Accounts',
-        href: accountsIndex(),
-        icon: Users,
-    },
-    {
-        title: 'Tasks',
-        href: tasksIndex(),
-        icon: ListChecks,
-    },
-    {
-        title: 'Audit log',
-        href: auditLogsIndex(),
-        icon: ScrollText,
-    },
-];
 
 export function AppSidebar() {
-    const { auth } = usePage().props;
+    const { sections } = useNavigation();
+    const { toggleSidebar, state } = useSidebar();
+    const collapsed = state === 'collapsed';
 
     return (
-        <Sidebar collapsible="icon" variant="inset">
-            <SidebarHeader>
-                <SidebarMenu>
-                    <SidebarMenuItem>
-                        <SidebarMenuButton size="lg" asChild>
-                            <Link href={dashboard()} prefetch>
-                                <AppLogo />
-                            </Link>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
-                </SidebarMenu>
+        <Sidebar collapsible="icon" className="border-r-sidebar-border">
+            <SidebarHeader className="px-4 pt-6 pb-4 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:px-2">
+                <div className="flex items-center justify-between gap-2 group-data-[collapsible=icon]:flex-col">
+                    <Link
+                        href={dashboard()}
+                        prefetch
+                        className="rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+                    >
+                        {collapsed ? (
+                            <AppLogoMark className="size-10" />
+                        ) : (
+                            <AppLogo />
+                        )}
+                    </Link>
+                    <button
+                        type="button"
+                        onClick={toggleSidebar}
+                        aria-label={
+                            collapsed ? 'Lebarkan sidebar' : 'Ciutkan sidebar'
+                        }
+                        className="hidden size-9 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground md:flex"
+                    >
+                        {collapsed ? (
+                            <ChevronsRight className="size-4" />
+                        ) : (
+                            <ChevronsLeft className="size-4" />
+                        )}
+                    </button>
+                </div>
             </SidebarHeader>
 
-            <SidebarContent>
-                <NavMain
-                    label="Panel"
-                    items={
-                        auth.user.role === 'user'
-                            ? [...mainNavItems, ...hostingNavItems]
-                            : mainNavItems
-                    }
-                />
-                {auth.user.role === 'admin' && (
+            <SidebarContent className="gap-3 py-2">
+                {sections.map((section) => (
                     <NavMain
-                        label="Server administration"
-                        items={adminNavItems}
+                        key={section.label}
+                        label={section.label}
+                        items={section.items}
                     />
-                )}
+                ))}
             </SidebarContent>
 
-            <SidebarFooter>
+            <SidebarFooter className="p-4 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:p-2">
                 <NavUser />
             </SidebarFooter>
         </Sidebar>

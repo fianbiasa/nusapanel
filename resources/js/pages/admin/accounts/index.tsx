@@ -1,10 +1,19 @@
 import { Form, Head, Link, usePage, usePoll } from '@inertiajs/react';
-import { Plus, Search } from 'lucide-react';
+import {
+    MoreHorizontal,
+    Plus,
+    Search,
+    ShieldCheck,
+    ShieldOff,
+    Trash2,
+    Users,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
-import Heading from '@/components/heading';
 import InputError from '@/components/input-error';
+import { PageHeader } from '@/components/page-header';
 import { Pagination } from '@/components/pagination';
-import { Badge } from '@/components/ui/badge';
+import { Panel, tableStyles } from '@/components/panel';
+import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -15,10 +24,17 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
-import { formatDateTime } from '@/lib/format';
+import { useInitials } from '@/hooks/use-initials';
+import { formatDateTime, roleLabels } from '@/lib/format';
 import {
     create,
     destroy,
@@ -51,23 +67,13 @@ type Props = {
     filters: { search: string };
 };
 
-const statusVariants: Record<
-    AccountStatus,
-    'default' | 'secondary' | 'destructive' | 'outline'
-> = {
-    pending: 'outline',
-    active: 'default',
-    suspended: 'secondary',
-    deleting: 'outline',
-    failed: 'destructive',
-};
-
 const busyStatuses: AccountStatus[] = ['pending', 'deleting'];
 
 const deletableStatuses: AccountStatus[] = ['active', 'suspended', 'failed'];
 
 export default function AccountsIndex({ accounts, filters }: Props) {
     const { auth } = usePage().props;
+    const getInitials = useInitials();
     const [action, setAction] = useState<AccountAction | null>(null);
     const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -100,180 +106,142 @@ export default function AccountsIndex({ accounts, filters }: Props) {
     return (
         <>
             <Head title="Accounts" />
-            <div className="flex flex-1 flex-col gap-4 p-4">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                    <Heading
-                        title="Accounts"
-                        description="Panel accounts and the Linux users that back them on the server."
-                    />
-                    <Button asChild>
+
+            <PageHeader
+                title="Accounts"
+                description="Akun panel beserta user Linux-nya di server."
+                actions={
+                    <Button asChild size="lg">
                         <Link href={create()}>
                             <Plus />
-                            New account
+                            Buat akun
                         </Link>
                     </Button>
-                </div>
+                }
+            />
 
-                <Form
-                    {...index.form()}
-                    options={{ preserveState: true, replace: true }}
-                    className="flex w-full max-w-md items-center gap-2"
-                >
-                    <div className="relative flex-1">
-                        <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                            type="search"
-                            name="search"
-                            defaultValue={filters.search}
-                            placeholder="Search by username, name or email"
-                            aria-label="Search accounts"
-                            maxLength={100}
-                            className="pl-9"
-                        />
-                    </div>
-                    <Button type="submit" variant="outline">
-                        Search
-                    </Button>
-                </Form>
-
+            <Panel
+                flush
+                title="Daftar akun"
+                description={`${accounts.total} akun`}
+                action={
+                    <Form
+                        {...index.form()}
+                        options={{ preserveState: true, replace: true }}
+                        className="hidden w-full max-w-sm items-center gap-2 md:flex"
+                    >
+                        <div className="relative flex-1">
+                            <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground" />
+                            <Input
+                                type="search"
+                                name="search"
+                                defaultValue={filters.search}
+                                placeholder="Cari username, nama, atau email"
+                                aria-label="Cari akun"
+                                maxLength={100}
+                                className="h-10 pl-10"
+                            />
+                        </div>
+                        <Button type="submit" variant="outline">
+                            Cari
+                        </Button>
+                    </Form>
+                }
+            >
                 {accounts.data.length === 0 ? (
-                    <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
-                        {filters.search
-                            ? `No accounts match "${filters.search}".`
-                            : 'No accounts yet. Create one to get started.'}
-                    </p>
+                    <div className="flex flex-col items-center gap-3 px-6 pt-4 pb-10 text-center">
+                        <span className="flex size-14 items-center justify-center rounded-full bg-accent text-accent-foreground">
+                            <Users className="size-6" />
+                        </span>
+                        <p className="max-w-sm text-sm text-muted-foreground">
+                            {filters.search
+                                ? `Tidak ada akun yang cocok dengan "${filters.search}".`
+                                : 'Belum ada akun. Buat akun pertama untuk memulai.'}
+                        </p>
+                    </div>
                 ) : (
-                    <div className="overflow-x-auto rounded-xl border">
-                        <table className="w-full text-sm">
-                            <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
+                    <div className="overflow-x-auto">
+                        <table className={tableStyles.table}>
+                            <thead className={tableStyles.head}>
                                 <tr>
-                                    <th className="px-4 py-2 font-medium">
-                                        Username
-                                    </th>
-                                    <th className="px-4 py-2 font-medium">
-                                        Email
-                                    </th>
-                                    <th className="px-4 py-2 font-medium">
-                                        Domain
-                                    </th>
-                                    <th className="px-4 py-2 font-medium">
-                                        Role
-                                    </th>
-                                    <th className="px-4 py-2 font-medium">
-                                        Status
-                                    </th>
-                                    <th className="px-4 py-2 font-medium">
-                                        Owner
-                                    </th>
-                                    <th className="px-4 py-2 font-medium">
-                                        Created
-                                    </th>
-                                    <th className="px-4 py-2 font-medium">
-                                        <span className="sr-only">Actions</span>
+                                    <th className={tableStyles.th}>Akun</th>
+                                    <th className={tableStyles.th}>Domain</th>
+                                    <th className={tableStyles.th}>Peran</th>
+                                    <th className={tableStyles.th}>Status</th>
+                                    <th className={tableStyles.th}>Pemilik</th>
+                                    <th className={tableStyles.th}>Dibuat</th>
+                                    <th className={tableStyles.th}>
+                                        <span className="sr-only">Aksi</span>
                                     </th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y">
                                 {accounts.data.map((account) => (
-                                    <tr key={account.id} className="align-top">
-                                        <td className="px-4 py-3">
-                                            <code className="font-mono text-xs">
-                                                {account.username}
-                                            </code>
-                                            <p className="mt-1 text-xs text-muted-foreground">
-                                                {account.name}
-                                            </p>
+                                    <tr
+                                        key={account.id}
+                                        className={tableStyles.row}
+                                    >
+                                        <td className={tableStyles.td}>
+                                            <div className="flex items-center gap-3">
+                                                <span className="flex size-9 shrink-0 items-center justify-center rounded-full nusa-brand-gradient text-xs font-semibold text-white">
+                                                    {getInitials(account.name)}
+                                                </span>
+                                                <div className="min-w-0">
+                                                    <p className="truncate font-semibold">
+                                                        {account.name}
+                                                    </p>
+                                                    <p className="truncate text-xs text-muted-foreground">
+                                                        <code className="font-mono">
+                                                            {account.username}
+                                                        </code>{' '}
+                                                        · {account.email}
+                                                    </p>
+                                                </div>
+                                            </div>
                                         </td>
-                                        <td className="px-4 py-3">
-                                            {account.email}
+                                        <td className={tableStyles.td}>
+                                            {account.domain ?? (
+                                                <span className="text-muted-foreground">
+                                                    —
+                                                </span>
+                                            )}
                                         </td>
-                                        <td className="px-4 py-3">
-                                            {account.domain ?? '—'}
+                                        <td className={tableStyles.td}>
+                                            {roleLabels[account.role]}
                                         </td>
-                                        <td className="px-4 py-3 capitalize">
-                                            {account.role}
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <Badge
-                                                variant={
-                                                    statusVariants[
-                                                        account.status
-                                                    ]
-                                                }
-                                            >
-                                                {busyStatuses.includes(
-                                                    account.status,
-                                                ) && <Spinner />}
-                                                {account.status}
-                                            </Badge>
+                                        <td className={tableStyles.td}>
+                                            <StatusBadge
+                                                status={account.status}
+                                            />
                                             {account.status === 'suspended' &&
                                                 account.suspend_reason && (
-                                                    <p className="mt-1 max-w-xs text-xs text-muted-foreground">
+                                                    <p className="mt-1.5 max-w-xs text-xs text-muted-foreground">
                                                         {account.suspend_reason}
                                                     </p>
                                                 )}
                                         </td>
-                                        <td className="px-4 py-3">
+                                        <td
+                                            className={`${tableStyles.td} text-muted-foreground`}
+                                        >
                                             {account.owner ?? '—'}
                                         </td>
-                                        <td className="px-4 py-3 whitespace-nowrap">
+                                        <td
+                                            className={`${tableStyles.td} whitespace-nowrap text-muted-foreground`}
+                                        >
                                             {account.created_at
                                                 ? formatDateTime(
                                                       account.created_at,
                                                   )
                                                 : '—'}
                                         </td>
-                                        <td className="px-4 py-3">
-                                            <div className="flex justify-end gap-2">
-                                                {account.status === 'active' &&
-                                                    !isProtected(account) && (
-                                                        <Button
-                                                            variant="outline"
-                                                            size="sm"
-                                                            onClick={() =>
-                                                                openDialog(
-                                                                    'suspend',
-                                                                    account,
-                                                                )
-                                                            }
-                                                        >
-                                                            Suspend
-                                                        </Button>
-                                                    )}
-                                                {account.status ===
-                                                    'suspended' && (
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        onClick={() =>
-                                                            openDialog(
-                                                                'unsuspend',
-                                                                account,
-                                                            )
-                                                        }
-                                                    >
-                                                        Unsuspend
-                                                    </Button>
+                                        <td className={tableStyles.td}>
+                                            <RowActions
+                                                account={account}
+                                                isProtected={isProtected(
+                                                    account,
                                                 )}
-                                                {deletableStatuses.includes(
-                                                    account.status,
-                                                ) &&
-                                                    !isProtected(account) && (
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                                                            onClick={() =>
-                                                                openDialog(
-                                                                    'delete',
-                                                                    account,
-                                                                )
-                                                            }
-                                                        >
-                                                            Delete
-                                                        </Button>
-                                                    )}
-                                            </div>
+                                                onAction={openDialog}
+                                            />
                                         </td>
                                     </tr>
                                 ))}
@@ -282,11 +250,15 @@ export default function AccountsIndex({ accounts, filters }: Props) {
                     </div>
                 )}
 
-                <Pagination page={accounts} />
-            </div>
+                {accounts.last_page > 1 && (
+                    <div className="border-t px-6 py-4">
+                        <Pagination page={accounts} />
+                    </div>
+                )}
+            </Panel>
 
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                <DialogContent>
+                <DialogContent className="rounded-2xl">
                     {action && (
                         <AccountActionForm
                             key={`${action.type}-${action.account.id}`}
@@ -313,23 +285,23 @@ function AccountActionForm({
     const copy = {
         suspend: {
             form: suspend.form(account.id),
-            title: `Suspend ${username}`,
-            description: `${username} will be signed out and blocked from signing in, and the account will be locked on the server.`,
-            confirm: 'Suspend account',
+            title: `Suspend ${username}?`,
+            description: `${username} akan dikeluarkan dan tidak bisa masuk lagi. Semua website-nya menampilkan halaman "tidak tersedia" dan akunnya dikunci di server.`,
+            confirm: 'Suspend akun',
             variant: 'destructive' as const,
         },
         unsuspend: {
             form: unsuspend.form(account.id),
-            title: `Unsuspend ${username}`,
-            description: `${username} will be able to sign in again, and the account will be unlocked on the server.`,
-            confirm: 'Unsuspend account',
+            title: `Buka suspend ${username}?`,
+            description: `${username} bisa masuk lagi, website-nya aktif kembali, dan kuncinya di server dibuka.`,
+            confirm: 'Buka suspend',
             variant: 'default' as const,
         },
         delete: {
             form: destroy.form(account.id),
-            title: `Delete ${username}`,
-            description: `This removes ${username} and its files from the server. This cannot be undone.`,
-            confirm: 'Delete account',
+            title: `Hapus ${username}?`,
+            description: `Akun ${username} beserta semua file dan website-nya dihapus dari server. Tindakan ini tidak bisa dibatalkan.`,
+            confirm: 'Hapus akun',
             variant: 'destructive' as const,
         },
     }[type];
@@ -352,12 +324,12 @@ function AccountActionForm({
 
                     {type === 'suspend' && (
                         <div className="grid gap-2">
-                            <Label htmlFor="reason">Reason (optional)</Label>
+                            <Label htmlFor="reason">Alasan (opsional)</Label>
                             <Input
                                 id="reason"
                                 name="reason"
                                 maxLength={255}
-                                placeholder="e.g. Unpaid invoice"
+                                placeholder="mis. Tagihan belum dibayar"
                                 autoComplete="off"
                             />
                             <InputError message={errors.reason} />
@@ -369,7 +341,7 @@ function AccountActionForm({
                     <DialogFooter className="gap-2">
                         <DialogClose asChild>
                             <Button type="button" variant="secondary">
-                                Cancel
+                                Batal
                             </Button>
                         </DialogClose>
                         <Button
@@ -387,11 +359,65 @@ function AccountActionForm({
     );
 }
 
-AccountsIndex.layout = {
-    breadcrumbs: [
-        {
-            title: 'Accounts',
-            href: index(),
-        },
-    ],
-};
+/** The "⋯" menu of one account row, with the actions its status allows. */
+function RowActions({
+    account,
+    isProtected,
+    onAction,
+}: {
+    account: AccountRow;
+    isProtected: boolean;
+    onAction: (type: AccountAction['type'], account: AccountRow) => void;
+}) {
+    const canSuspend = account.status === 'active' && !isProtected;
+    const canUnsuspend = account.status === 'suspended';
+    const canDelete =
+        deletableStatuses.includes(account.status) && !isProtected;
+
+    if (!canSuspend && !canUnsuspend && !canDelete) {
+        return null;
+    }
+
+    return (
+        <div className="flex justify-end">
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Aksi untuk ${account.username}`}
+                    >
+                        <MoreHorizontal className="size-5" />
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                    align="end"
+                    className="min-w-44 rounded-xl"
+                >
+                    {canSuspend && (
+                        <DropdownMenuItem
+                            onSelect={() => onAction('suspend', account)}
+                        >
+                            <ShieldOff /> Suspend
+                        </DropdownMenuItem>
+                    )}
+                    {canUnsuspend && (
+                        <DropdownMenuItem
+                            onSelect={() => onAction('unsuspend', account)}
+                        >
+                            <ShieldCheck /> Buka suspend
+                        </DropdownMenuItem>
+                    )}
+                    {canDelete && (
+                        <DropdownMenuItem
+                            variant="destructive"
+                            onSelect={() => onAction('delete', account)}
+                        >
+                            <Trash2 /> Hapus akun
+                        </DropdownMenuItem>
+                    )}
+                </DropdownMenuContent>
+            </DropdownMenu>
+        </div>
+    );
+}

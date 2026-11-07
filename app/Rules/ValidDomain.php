@@ -17,13 +17,13 @@ class ValidDomain implements ValidationRule
     public function validate(string $attribute, mixed $value, Closure $fail): void
     {
         if (! is_string($value) || ! self::isWellFormed($value)) {
-            $fail('The :attribute must be a valid domain name, such as example.com.');
+            $fail('The :attribute must be a valid domain name, such as example.com.')->translate();
 
             return;
         }
 
         if (str_starts_with($value, 'www.')) {
-            $fail('Add the :attribute without "www." — www is served automatically.');
+            $fail('Add the :attribute without "www." — www is served automatically.')->translate();
 
             return;
         }
@@ -31,7 +31,7 @@ class ValidDomain implements ValidationRule
         $hostname = self::serverHostname();
 
         if ($hostname !== null && ($value === $hostname || str_ends_with($value, '.'.$hostname))) {
-            $fail('The :attribute belongs to this server\'s own hostname and cannot be added.');
+            $fail('The :attribute belongs to this server\'s own hostname and cannot be added.')->translate();
         }
     }
 

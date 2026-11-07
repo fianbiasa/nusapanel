@@ -7,15 +7,25 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * nusapanel theme, after docs/style/nusapanelv1: navy text, one strong blue,
+ * white cards with soft blue shadows on a pale blue page. Dark mode uses the
+ * navy palette of the sidebar asset sheet.
+ */
 @theme {
     --font-sans:
-        'Instrument Sans', ui-sans-serif, system-ui, sans-serif,
+        'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif,
         'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
         'Noto Color Emoji';
 
+    --radius-2xl: calc(var(--radius) + 6px);
+    --radius-xl: calc(var(--radius) + 2px);
     --radius-lg: var(--radius);
     --radius-md: calc(var(--radius) - 2px);
     --radius-sm: calc(var(--radius) - 4px);
+
+    --shadow-card: var(--card-shadow);
+    --shadow-brand: var(--brand-shadow);
 
     --color-background: var(--background);
     --color-foreground: var(--foreground);
@@ -41,6 +51,11 @@
     --color-destructive: var(--destructive);
     --color-destructive-foreground: var(--destructive-foreground);
 
+    --color-success: var(--success);
+    --color-success-foreground: var(--success-foreground);
+    --color-warning: var(--warning);
+    --color-warning-foreground: var(--warning-foreground);
+
     --color-border: var(--border);
     --color-input: var(--input);
     --color-ring: var(--ring);
@@ -62,74 +77,86 @@
 }
 
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --destructive-foreground: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.87 0 0);
-    --chart-1: oklch(0.646 0.222 41.116);
-    --chart-2: oklch(0.6 0.118 184.704);
-    --chart-3: oklch(0.398 0.07 227.392);
-    --chart-4: oklch(0.828 0.189 84.429);
-    --chart-5: oklch(0.769 0.188 70.08);
-    --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.87 0 0);
+    --background: #f4f7fd;
+    --foreground: #101b39;
+    --card: #ffffff;
+    --card-foreground: #101b39;
+    --popover: #ffffff;
+    --popover-foreground: #101b39;
+    --primary: #086cf0;
+    --primary-foreground: #ffffff;
+    --secondary: #eef4ff;
+    --secondary-foreground: #0a4fb0;
+    --muted: #eff3fa;
+    --muted-foreground: #52617f;
+    --accent: #eaf2ff;
+    --accent-foreground: #075fd3;
+    --destructive: #e5484d;
+    --destructive-foreground: #d13438;
+    --success: #08a95f;
+    --success-foreground: #067a45;
+    --warning: #f5a524;
+    --warning-foreground: #a35f00;
+    --border: #e2eaf7;
+    --input: #d9e3f3;
+    --ring: #1688ff;
+    --chart-1: #1688ff;
+    --chart-2: #9561f5;
+    --chart-3: #08b982;
+    --chart-4: #ff8a3d;
+    --chart-5: #f04444;
+    --radius: 0.875rem;
+    --card-shadow: 0 7px 20px rgb(36 77 139 / 0.07);
+    --brand-shadow: 0 8px 18px rgb(8 108 240 / 0.28);
+    --sidebar: #ffffff;
+    --sidebar-foreground: #101b39;
+    --sidebar-primary: #086cf0;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #eef4ff;
+    --sidebar-accent-foreground: #086cf0;
+    --sidebar-border: #e2eaf7;
+    --sidebar-ring: #1688ff;
 }
 
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.145 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.145 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.985 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.396 0.141 25.723);
-    --destructive-foreground: oklch(0.637 0.237 25.331);
-    --border: oklch(0.269 0 0);
-    --input: oklch(0.269 0 0);
-    --ring: oklch(0.439 0 0);
-    --chart-1: oklch(0.488 0.243 264.376);
-    --chart-2: oklch(0.696 0.17 162.48);
-    --chart-3: oklch(0.769 0.188 70.08);
-    --chart-4: oklch(0.627 0.265 303.9);
-    --chart-5: oklch(0.645 0.246 16.439);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.985 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(0.269 0 0);
-    --sidebar-ring: oklch(0.439 0 0);
+    --background: #070f24;
+    --foreground: #e8eefc;
+    --card: #0e1a37;
+    --card-foreground: #e8eefc;
+    --popover: #0e1a37;
+    --popover-foreground: #e8eefc;
+    --primary: #1688ff;
+    --primary-foreground: #ffffff;
+    --secondary: #16264d;
+    --secondary-foreground: #cfe0ff;
+    --muted: #14224a;
+    --muted-foreground: #93a3c6;
+    --accent: #16274f;
+    --accent-foreground: #7cb6ff;
+    --destructive: #f0565b;
+    --destructive-foreground: #ff8a8d;
+    --success: #1ec27a;
+    --success-foreground: #5fe0a4;
+    --warning: #f5b13d;
+    --warning-foreground: #ffd27f;
+    --border: #1d2c55;
+    --input: #23345f;
+    --ring: #3b9bff;
+    --chart-1: #3b9bff;
+    --chart-2: #a682ff;
+    --chart-3: #2fd39b;
+    --chart-4: #ff9d5c;
+    --chart-5: #ff6b6b;
+    --card-shadow: 0 7px 20px rgb(0 0 0 / 0.25);
+    --brand-shadow: 0 8px 22px rgb(22 136 255 / 0.35);
+    --sidebar: #0b1530;
+    --sidebar-foreground: #dfe7fb;
+    --sidebar-primary: #1688ff;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #15244a;
+    --sidebar-accent-foreground: #ffffff;
+    --sidebar-border: #1a2a52;
+    --sidebar-ring: #3b9bff;
 }
 
 @layer base {
@@ -138,6 +165,43 @@
     }
 
     body {
-        @apply bg-background text-foreground;
+        @apply bg-background text-foreground antialiased;
     }
+}
+
+@layer components {
+    /* The soft sky of the reference: a pale glow behind the top of each page. */
+    .nusa-page-bg {
+        background-image:
+            radial-gradient(
+                60rem 22rem at 85% -6rem,
+                rgb(22 136 255 / 0.13),
+                transparent 70%
+            ),
+            radial-gradient(
+                40rem 18rem at 10% -8rem,
+                rgb(149 97 245 / 0.06),
+                transparent 70%
+            );
+    }
+
+    .dark .nusa-page-bg {
+        background-image:
+            radial-gradient(
+                60rem 22rem at 85% -6rem,
+                rgb(22 136 255 / 0.16),
+                transparent 70%
+            ),
+            radial-gradient(
+                40rem 18rem at 10% -8rem,
+                rgb(149 97 245 / 0.08),
+                transparent 70%
+            );
+    }
+}
+
+/* The active navigation pill and primary call to action. A utility, so
+   variants such as data-[active=true]: can apply it. */
+@utility nusa-brand-gradient {
+    background-image: linear-gradient(135deg, #1688ff 0%, #086cf0 100%);
 }

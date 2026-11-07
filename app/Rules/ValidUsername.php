@@ -31,13 +31,13 @@ class ValidUsername implements ValidationRule
     public function validate(string $attribute, mixed $value, Closure $fail): void
     {
         if (! is_string($value) || preg_match(self::PATTERN, $value) !== 1) {
-            $fail('The :attribute must be 3 to 16 characters long, using only lowercase letters and digits, and start with a letter.');
+            $fail('The :attribute must be 3 to 16 characters long, using only lowercase letters and digits, and start with a letter.')->translate();
 
             return;
         }
 
         if (in_array($value, self::RESERVED, true)) {
-            $fail('The :attribute is reserved by the system.');
+            $fail('The :attribute is reserved by the system.')->translate();
         }
     }
 }
