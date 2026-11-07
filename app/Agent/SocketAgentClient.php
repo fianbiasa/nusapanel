@@ -29,7 +29,15 @@ final class SocketAgentClient implements AgentClient
             throw new AgentException('The agent returned a response that is not valid JSON.');
         }
 
-        if (! is_array($response) || ($response['id'] ?? null) !== $id) {
+        if (! is_array($response)) {
+            throw new AgentException('The agent response does not match the request.');
+        }
+
+        $responseId = $response['id'] ?? null;
+
+        // The agent answers with a null id when it rejects a call before
+        // reading it (e.g. the caller is not allowed), so surface that error.
+        if ($responseId !== $id && ! ($responseId === null && isset($response['error']))) {
             throw new AgentException('The agent response does not match the request.');
         }
 

@@ -2,21 +2,60 @@
 
 ## 4.1 Struktur kode agent (Go)
 
+Tanda ✅ = sudah ada (P0); sisanya menyusul sesuai fase.
+
 ```
 agent/
 ├── cmd/
-│   ├── nusad/          # daemon agent
-│   └── nusactl/        # CLI
+│   ├── nusad/          ✅ daemon agent
+│   └── nusactl/        ✅ CLI (ping, call <method> [params])
 ├── internal/
-│   ├── rpc/            # server JSON-RPC, cek SO_PEERCRED, dispatcher, kunci per akun
-│   ├── validate/       # validasi username, domain, path, nilai config
-│   ├── render/         # render template, tulis atomik, validasi, rollback
-│   ├── runner/         # jalankan program tanpa shell, opsi turun ke UID user
-│   ├── actions/        # satu paket per namespace: account, web, php, ssl, dns, db, mail, fs, ...
-│   ├── daemons/        # brute force monitor, watchdog
-│   └── services/       # wrapper systemd, nginx, apache, postfix, API PowerDNS, MariaDB
-└── templates/          # template config default
+│   ├── rpc/            ✅ server JSON-RPC, socket, cek UID pemanggil, registry method, kunci per akun
+│   ├── peercred/       ✅ UID pemanggil dari kernel (SO_PEERCRED di Linux, LOCAL_PEERCRED di Mac)
+│   ├── client/         ✅ klien socket (dipakai nusactl dan test)
+│   ├── actions/        ✅ daftar method; menyusul satu paket per namespace: account, web, php, ssl, dns, db, mail, fs, ...
+│   ├── sysinfo/        ✅ data untuk system.info (Linux; Mac khusus pengembangan)
+│   ├── validate/       ✅ username & domain; menyusul path dan nilai config
+│   ├── version/        ✅ versi, diisi saat build
+│   ├── render/         render template, tulis atomik, validasi, rollback
+│   ├── runner/         jalankan program tanpa shell, opsi turun ke UID user
+│   ├── daemons/        brute force monitor, watchdog
+│   └── services/       wrapper systemd, nginx, apache, postfix, API PowerDNS, MariaDB
+├── packaging/
+│   └── nusad.service   ✅ unit systemd
+├── templates/          template config default
+└── Makefile            ✅ build (Mac), linux (amd64/arm64 static), test, vet, check
 ```
+
+### Menjalankan nusad
+
+```
+nusad --socket /run/nusapanel/agent.sock --allow-user nusapanel --socket-group nusapanel
+```
+
+| Flag             | Default                     | Fungsi                                                   |
+| ---------------- | --------------------------- | -------------------------------------------------------- |
+| `--socket`       | `/run/nusapanel/agent.sock` | Lokasi Unix socket                                       |
+| `--allow-user`   | `nusapanel`                 | User yang boleh memanggil agent (selain root)            |
+| `--socket-group` | `nusapanel`                 | Grup pemilik socket; kosong = tidak diubah               |
+| `--call-timeout` | `10m`                       | Batas waktu satu panggilan, termasuk menunggu kunci akun |
+
+Socket dibuat dengan izin `0660` (umask ketat saat dibuat, jadi tidak ada celah sebelum izin final). Saat menerima `SIGTERM`, nusad berhenti menerima koneksi, menunggu panggilan yang sedang berjalan selesai, lalu menghapus socket. Log berformat JSON ke stderr (dibaca journald).
+
+### Protokol
+
+JSON-RPC 2.0, satu koneksi = satu request dan satu response, masing-masing satu baris JSON diakhiri `\n` (maks 1 MiB). `params` selalu objek; field yang tidak dikenal ditolak.
+
+| Kode     | Arti                                                                  |
+| -------- | --------------------------------------------------------------------- |
+| `-32700` | Request bukan JSON yang valid                                         |
+| `-32600` | Request tidak valid (tanpa `jsonrpc`/`method`/`id`, terlalu besar)    |
+| `-32601` | Method tidak ada                                                      |
+| `-32602` | Params tidak valid                                                    |
+| `-32603` | Error internal; detail hanya di log agent, tidak dikirim ke pemanggil |
+| `-32000` | Aksi gagal; pesannya aman ditampilkan ke user panel                   |
+| `-32003` | Pemanggil tidak diizinkan (dikirim dengan `id: null`)                 |
+| `-32004` | Akun sedang dikunci task lain sampai batas waktu habis                |
 
 ## 4.2 Aturan validasi (berlaku di semua aksi)
 
@@ -137,15 +176,16 @@ Konvensi nama: `namespace.aksi`. "Sebagai user" = agent turun ke UID user sebelu
 
 ### system
 
-| Aksi                                | Fungsi                                                      | Fase |
-| ----------------------------------- | ----------------------------------------------------------- | ---- |
-| `system.info`                       | CPU, RAM, disk, load, uptime, versi                         | P0   |
-| `service.list` / `service.action`   | start/stop/restart/reload; nama dari daftar putih           | P1   |
-| `system.set_hostname`               |                                                             | P1   |
-| `system.processes` / `process_kill` |                                                             | P3   |
-| `system.file_read` / `file_write`   | Hanya file di daftar putih; backup otomatis sebelum ditulis | P3   |
-| `system.ip_add` / `ip_remove`       |                                                             | P3   |
-| `system.update`                     | Update panel & agent                                        | P5   |
+| Aksi                                | Fungsi                                                      | Fase  |
+| ----------------------------------- | ----------------------------------------------------------- | ----- |
+| `agent.ping`                        | Cek agent hidup + versi (dipakai installer & monitoring)    | P0 ✅ |
+| `system.info`                       | CPU, RAM, disk, load, uptime, versi                         | P0 ✅ |
+| `service.list` / `service.action`   | start/stop/restart/reload; nama dari daftar putih           | P1    |
+| `system.set_hostname`               |                                                             | P1    |
+| `system.processes` / `process_kill` |                                                             | P3    |
+| `system.file_read` / `file_write`   | Hanya file di daftar putih; backup otomatis sebelum ditulis | P3    |
+| `system.ip_add` / `ip_remove`       |                                                             | P3    |
+| `system.update`                     | Update panel & agent                                        | P5    |
 
 ### security
 
@@ -196,7 +236,6 @@ Konvensi nama: `namespace.aksi`. "Sebagai user" = agent turun ke UID user sebelu
 └── templates/                          template default (ikut ter-update)
 
 /etc/nusapanel/
-├── nusad.yaml                          config agent
 ├── templates/custom/                   override template (tidak tertimpa update)
 ├── php-fpm/<versi>/<user>.conf         pool PHP-FPM per user
 └── ssl/<domain>/{cert,key,chain}.pem   0600 root

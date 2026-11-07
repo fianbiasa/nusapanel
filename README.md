@@ -56,3 +56,20 @@ pnpm run build                  # atau `composer run dev` untuk mode pengembanga
 - **SSL & versi PHP:** atur dari aplikasi Herd (Sites → `nusapanel`). Setelah mengaktifkan HTTPS, ubah `APP_URL` di `.env` menjadi `https://nusapanel.test`.
 - **Admin pertama di server:** `php artisan nusapanel:create-admin <username> <email>` (password acak ditampilkan sekali).
 - **Test & pengecekan:** `php artisan test`, `vendor/bin/pint`, `vendor/bin/phpstan analyse`, `pnpm run check`, `pnpm run types:check`.
+
+## Agent server (`agent/`, Go)
+
+```bash
+cd agent
+make check     # go vet (Mac + Linux), test dengan race detector, gofmt
+make build     # bin/nusad dan bin/nusactl untuk Mac
+make linux     # binary statis untuk server: bin/linux-amd64/ dan bin/linux-arm64/
+```
+
+**Uji panel dengan agent asli di Mac.** nusad bisa jalan di macOS khusus untuk pengembangan, karena PHP-FPM Herd jalan sebagai user kamu:
+
+```bash
+agent/bin/nusad --socket "$PWD/storage/app/nusad.sock" --allow-user "$(whoami)" --socket-group ""
+```
+
+Lalu di `.env` set `AGENT_DRIVER=socket` dan `AGENT_SOCKET` ke path socket di atas. Kembalikan ke `AGENT_DRIVER=fake` setelah selesai. Cek cepat tanpa panel: `agent/bin/nusactl -socket storage/app/nusad.sock ping`.

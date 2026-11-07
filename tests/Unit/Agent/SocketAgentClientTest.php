@@ -69,6 +69,17 @@ class SocketAgentClientTest extends TestCase
         (new SocketAgentClient($this->socketPath, 5))->call('web.apply_domain');
     }
 
+    public function test_it_reports_errors_the_agent_sends_before_reading_the_request(): void
+    {
+        $this->startAgent('{"jsonrpc":"2.0","id":null,"error":{"code":-32003,"message":"this process is not allowed to use the agent"}}');
+
+        $this->expectException(AgentException::class);
+        $this->expectExceptionMessage('not allowed to use the agent');
+        $this->expectExceptionCode(-32003);
+
+        (new SocketAgentClient($this->socketPath, 5))->call('system.info');
+    }
+
     public function test_it_rejects_a_response_to_a_different_request(): void
     {
         $this->startAgent('{"jsonrpc":"2.0","id":"another-request","result":{}}');

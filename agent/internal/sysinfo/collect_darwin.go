@@ -12,8 +12,8 @@ import (
 )
 
 // collect on macOS exists only so nusad can run next to the panel in Herd
-// during development. Used memory is approximate: macOS counts file cache as
-// in use, so the figure is higher than Activity Monitor's "Memory Used".
+// during development. Used memory approximates Activity Monitor's "Memory
+// Used": total minus free, speculative, file-cache and purgeable pages.
 func collect() (*Info, error) {
 	hostname, err := os.Hostname()
 	if err != nil {
@@ -44,9 +44,20 @@ func collect() (*Info, error) {
 	}
 
 	pageSize := uint64(os.Getpagesize())
-	freePages, _ := unix.SysctlUint32("vm.page_free_count")
-	speculativePages, _ := unix.SysctlUint32("vm.page_speculative_count")
-	freeBytes := min((uint64(freePages)+uint64(speculativePages))*pageSize, totalBytes)
+	var reclaimablePages uint64
+
+	for _, counter := range []string{
+		"vm.page_free_count",
+		"vm.page_speculative_count",
+		"vm.page_pageable_external_count",
+		"vm.page_purgeable_count",
+	} {
+		if pages, err := unix.SysctlUint32(counter); err == nil {
+			reclaimablePages += uint64(pages)
+		}
+	}
+
+	freeBytes := min(reclaimablePages*pageSize, totalBytes)
 
 	bootTime, err := unix.SysctlTimeval("kern.boottime")
 	if err != nil {
