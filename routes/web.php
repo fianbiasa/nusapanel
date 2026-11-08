@@ -6,6 +6,9 @@ use App\Http\Controllers\Admin\PackageController;
 use App\Http\Controllers\Admin\TaskController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DomainController;
+use App\Http\Controllers\PointerController;
+use App\Http\Controllers\SubdomainController;
+use App\Http\Controllers\UrlRedirectController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard')->name('home');
@@ -20,6 +23,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('domains/{domain}/ssl', [DomainController::class, 'requestSsl'])->name('domains.ssl.store');
         Route::delete('domains/{domain}/ssl', [DomainController::class, 'removeSsl'])->name('domains.ssl.destroy');
         Route::put('domains/{domain}/force-https', [DomainController::class, 'updateForceHttps'])->name('domains.force-https.update');
+        Route::post('subdomains', [SubdomainController::class, 'store'])->name('subdomains.store');
+        Route::post('pointers', [PointerController::class, 'store'])->name('pointers.store');
+        Route::get('redirects', [UrlRedirectController::class, 'index'])->name('redirects.index');
+        Route::post('redirects', [UrlRedirectController::class, 'store'])->name('redirects.store');
+        Route::delete('redirects/{urlRedirect}', [UrlRedirectController::class, 'destroy'])->name('redirects.destroy');
     });
 
     Route::middleware('role:admin')->prefix('admin')->name('admin.')->group(function () {

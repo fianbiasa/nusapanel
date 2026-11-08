@@ -96,7 +96,7 @@ Konvensi nama: `namespace.aksi`. "Sebagai user" = agent turun ke UID user sebelu
 
 | Aksi                | Fungsi                                                                                                                                                                                                                                                                                                                      | Fase |
 | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| `web.apply_domain`  | Render ulang semua config satu domain dari state lengkap. ✅ `{username, domain, php_version}`: folder `domains/<domain>/public_html` (+ `index.html` awal), vhost Nginx (port 80, `www.` ikut) → Apache → pool PHP-FPM akun itu. Menyusul: subdomain, pointer, redirect, HTTPS, proteksi folder, error page, hotlink, MIME | P1   |
+| `web.apply_domain`  | Render ulang semua config satu domain dari state lengkap. ✅ `{username, domain, php_version, ssl?, force_https?, kind?, parent?, redirects?}`: folder `domains/<domain>/public_html` (+ `index.html` awal), vhost Nginx (port 80, plus 443 kalau `ssl`; `www.` ikut) → Apache → pool PHP-FPM akun itu. Subdomain dikirim sebagai domain biasa (folder sendiri). `kind`: `domain` (bawaan), `alias` (pointer yang menampilkan folder `parent`, tanpa membuat `index.html`), `forward` (pointer yang mengalihkan semua request ke `parent` dengan 301; hanya vhost Nginx, tanpa folder & pool). `redirects`: paling banyak 100 `{path, destination, status 301/302, wildcard}`; path hanya huruf, angka, `._~-` di antara `/`, tujuan URL `http(s)://` lengkap tanpa karakter yang berarti di Nginx (`$ ; ' " \ { }`, spasi); wildcard ikut membawa sisa path (masih ter-encode) dan query, tujuannya tanpa `?`/`#`. Path terpanjang dicek duluan; verifikasi Let's Encrypt tidak pernah ikut dialihkan. Menyusul: proteksi folder, error page, hotlink, MIME | P1   |
 | `web.remove_domain` | ✅ Hapus vhost Nginx & Apache dan log domain itu (supaya pemilik domain berikutnya tidak mewarisi log lama); file di `domains/<domain>` tetap ada                                                                                                                                                                           | P1   |
 | `web.rebuild_all`   | Render ulang semua domain                                                                                                                                                                                                                                                                                                   | P1   |
 | `web.reload`        | Validasi lalu reload Nginx & Apache                                                                                                                                                                                                                                                                                         | P1   |
@@ -229,8 +229,8 @@ Konvensi nama: `namespace.aksi`. "Sebagai user" = agent turun ke UID user sebelu
 
 ```
 /home/<user>/                           0710  <user>:nusa-access
-├── domains/<domain>/
-│   ├── public_html/                    document root
+├── domains/<domain>/                    juga untuk subdomain: domains/blog.<domain>/
+│   ├── public_html/                    document root (pointer alias memakai milik domain induknya)
 │   ├── private_html -> public_html     kompatibel DirectAdmin
 │   └── stats/                          laporan GoAccess
 ├── imap/<domain>/<mailbox>/Maildir/    email

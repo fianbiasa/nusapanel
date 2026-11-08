@@ -5,6 +5,7 @@ export type QuotaKey =
     | 'bandwidth_mb'
     | 'domains'
     | 'subdomains'
+    | 'pointers'
     | 'email_accounts'
     | 'databases'
     | 'ftp_accounts'

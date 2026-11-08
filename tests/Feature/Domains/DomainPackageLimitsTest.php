@@ -118,7 +118,7 @@ class DomainPackageLimitsTest extends TestCase
                 ->component('domains/index')
                 ->where('limits.package', 'Basic')
                 ->where('limits.ssl', false)
-                ->has('limits.quotas', 9)
+                ->has('limits.quotas', 10)
                 ->where('limits.quotas.domains', ['limit' => 3, 'used' => 1])
                 ->where('limits.quotas.disk_mb', ['limit' => 1024, 'used' => null])
                 ->where('limits.quotas.databases', ['limit' => null, 'used' => null]));

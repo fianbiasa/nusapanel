@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Enums\DomainStatus;
+use App\Enums\DomainType;
 use App\Models\Package;
 use App\Models\User;
 use App\Services\QuotaService;
@@ -14,7 +15,8 @@ use Illuminate\Contracts\Support\Arrayable;
  *
  * Accounts without a package (admins, resellers and accounts created before
  * packages existed) have no limits and may use SSL. The panel counts the
- * account's domains itself; disk space and inodes are measured by the
+ * account's domains, subdomains and pointers itself; disk space and inodes
+ * are measured by the
  * server ({@see QuotaService}), which also enforces their limits, so the
  * panel never blocks anything on them. The other limits are stored and
  * shown, and are enforced once their features exist.
@@ -23,7 +25,12 @@ use Illuminate\Contracts\Support\Arrayable;
  */
 final class AccountLimits implements Arrayable
 {
-    private ?int $domainCount = null;
+    /**
+     * The number of websites of each type, once counted.
+     *
+     * @var array<string, int>|null
+     */
+    private ?array $websiteCounts = null;
 
     private function __construct(private readonly User $account) {}
 
@@ -42,19 +49,37 @@ final class AccountLimits implements Arrayable
 
     /**
      * How much of the quantity the account uses, or null while the panel
-     * cannot measure it (yet). Domains that are being removed do not count;
+     * cannot measure it (yet). Websites that are being removed do not count;
      * disk space is in whole megabytes, rounded up, as last measured.
      */
     public function usage(string $key): ?int
     {
         return match ($key) {
-            'domains' => $this->domainCount ??= $this->account->domains()
-                ->where('status', '!=', DomainStatus::Deleting)
-                ->count(),
+            'domains' => $this->websiteCount(DomainType::Domain),
+            'subdomains' => $this->websiteCount(DomainType::Subdomain),
+            'pointers' => $this->websiteCount(DomainType::Pointer),
             'disk_mb' => $this->account->diskUsage?->diskMegabytes(),
             'inodes' => $this->account->diskUsage?->inodes,
             default => null,
         };
+    }
+
+    /**
+     * The number of websites of the type the account has, not counting
+     * those being removed. All types are counted in one query.
+     */
+    private function websiteCount(DomainType $type): int
+    {
+        $this->websiteCounts ??= $this->account->domains()
+            ->where('status', '!=', DomainStatus::Deleting)
+            ->toBase()
+            ->selectRaw('type, count(*) as aggregate')
+            ->groupBy('type')
+            ->pluck('aggregate', 'type')
+            ->map(fn (mixed $count): int => (int) $count)
+            ->all();
+
+        return $this->websiteCounts[$type->value] ?? 0;
     }
 
     /**

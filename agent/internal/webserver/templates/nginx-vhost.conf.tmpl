@@ -19,7 +19,7 @@ server {
         return 301 https://$host$request_uri;
     }
 {{- else}}
-{{- template "site" .}}
+{{- template "content" .}}
 {{- end}}
 }
 {{- if .SSL}}
@@ -34,7 +34,7 @@ server {
     ssl_certificate {{.Certificate}};
     ssl_certificate_key {{.CertificateKey}};
     ssl_protocols TLSv1.2 TLSv1.3;
-{{- template "site" .}}
+{{- template "content" .}}
 }
 {{- end}}
 {{- /* What every server of the domain shares, on any port. */ -}}
@@ -46,7 +46,28 @@ server {
 
     server_tokens off;
 {{- end}}
-{{- /* Serving the website itself, the same over HTTP and HTTPS. */ -}}
+{{- /* What the domain answers with, the same over HTTP and HTTPS. */ -}}
+{{define "content"}}
+{{- if .ForwardTo}}
+{{- template "forward" .}}
+{{- else}}
+{{- template "site" .}}
+{{- end}}
+{{- end}}
+{{- /* A domain pointer that sends every visitor to its main domain. */ -}}
+{{define "forward"}}
+{{- template "suspended" .}}
+
+    location / {
+        return 301 $scheme://{{.ForwardTo}}$request_uri;
+    }
+{{- end}}
+{{- /* Exists only while the account is suspended (the glob makes a missing file fine). */ -}}
+{{define "suspended"}}
+
+    include {{.NginxAccountDir}}/suspended*.inc;
+{{- end}}
+{{- /* Serving the website itself. */ -}}
 {{define "site"}}
 
     root {{.DocumentRoot}};
@@ -55,10 +76,19 @@ server {
     # link to another account's wp-config.php.
     disable_symlinks if_not_owner from=$document_root;
     client_max_body_size 256m;
+{{- template "suspended" .}}
+{{- range .Redirects}}
 
-    # Exists only while the account is suspended (the glob makes a missing
-    # file fine).
-    include {{.NginxAccountDir}}/suspended*.inc;
+    # Redirect {{.Path}}{{if .Wildcard}} and everything under it{{end}}.
+    location ~ {{.Location}} {
+{{- if .Wildcard}}
+        if ($request_uri ~ "{{.RequestPattern}}") {
+            return {{.Status}} "{{.Target}}$nusa_rest{{.Query}}";
+        }
+{{- end}}
+        return {{.Status}} "{{.Target}}{{.Query}}";
+    }
+{{- end}}
 
     location ~ /\.ht {
         deny all;

@@ -2,6 +2,7 @@ import { usePage } from '@inertiajs/react';
 import {
     Globe,
     House,
+    Milestone,
     ListChecks,
     Package,
     ScrollText,
@@ -15,6 +16,7 @@ import { index as packagesIndex } from '@/routes/admin/packages';
 import { index as tasksIndex } from '@/routes/admin/tasks';
 import { index as domainsIndex } from '@/routes/domains';
 import { edit as profileEdit } from '@/routes/profile';
+import { index as redirectsIndex } from '@/routes/redirects';
 import type { NavItem } from '@/types';
 
 export type NavSection = {
@@ -91,8 +93,17 @@ export function useNavigation(): {
             icon: Globe,
         };
 
-        sections.push({ label: 'Menu', items: [dashboardItem, domains] });
-        dockItems = [dashboardItem, domains, settingsItem];
+        const redirects: NavItem = {
+            title: 'Redirects',
+            href: redirectsIndex(),
+            icon: Milestone,
+        };
+
+        sections.push({
+            label: 'Menu',
+            items: [dashboardItem, domains, redirects],
+        });
+        dockItems = [dashboardItem, domains, redirects, settingsItem];
     } else {
         sections.push({ label: 'Menu', items: [dashboardItem] });
         dockItems = [dashboardItem, settingsItem];

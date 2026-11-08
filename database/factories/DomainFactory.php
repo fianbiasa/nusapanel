@@ -3,6 +3,8 @@
 namespace Database\Factories;
 
 use App\Enums\DomainStatus;
+use App\Enums\DomainType;
+use App\Enums\PointerMode;
 use App\Enums\SslStatus;
 use App\Models\Domain;
 use App\Models\User;
@@ -36,6 +38,33 @@ class DomainFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'is_primary' => true,
+        ]);
+    }
+
+    /**
+     * Indicate that the website is a subdomain of the given domain.
+     */
+    public function subdomainOf(Domain $parent, string $label = 'blog'): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'user_id' => $parent->user_id,
+            'parent_id' => $parent->id,
+            'name' => $label.'.'.$parent->name,
+            'type' => DomainType::Subdomain,
+        ]);
+    }
+
+    /**
+     * Indicate that the website is a pointer to the given domain.
+     */
+    public function pointerOf(Domain $parent, PointerMode $mode = PointerMode::Alias): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'user_id' => $parent->user_id,
+            'parent_id' => $parent->id,
+            'type' => DomainType::Pointer,
+            'pointer_mode' => $mode,
+            'php_version' => $parent->php_version,
         ]);
     }
 

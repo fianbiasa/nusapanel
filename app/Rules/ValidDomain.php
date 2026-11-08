@@ -65,7 +65,11 @@ class ValidDomain implements ValidationRule
         return $value === '' ? null : $value;
     }
 
-    private static function isWellFormed(string $value): bool
+    /**
+     * Whether the value is a domain name in the stored form, without the
+     * checks against "www." and the panel's own hostname.
+     */
+    public static function isWellFormed(string $value): bool
     {
         if (strlen($value) > 253) {
             return false;

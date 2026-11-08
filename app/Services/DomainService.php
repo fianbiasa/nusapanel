@@ -4,11 +4,14 @@ namespace App\Services;
 
 use App\Enums\AccountStatus;
 use App\Enums\DomainStatus;
+use App\Enums\DomainType;
+use App\Enums\PointerMode;
 use App\Enums\Role;
 use App\Enums\SslStatus;
 use App\Listeners\ApplyDomainTaskResult;
 use App\Listeners\ApplySslTaskResult;
 use App\Models\Domain;
+use App\Models\UrlRedirect;
 use App\Models\User;
 use App\Rules\ValidDomain;
 use App\Support\AccountLimits;
@@ -18,13 +21,14 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use LogicException;
 
 /**
- * Adds and removes the domains (websites) of hosting accounts and their
- * Let's Encrypt certificates. The panel record is updated right away and
- * the matching change on the server is queued for the agent;
- * {@see ApplyDomainTaskResult} and {@see ApplySslTaskResult} apply the
- * results.
+ * Adds and removes the websites of hosting accounts (domains, their
+ * subdomains and pointers) and their Let's Encrypt certificates. The panel
+ * record is updated right away and the matching change on the server is
+ * queued for the agent; {@see ApplyDomainTaskResult} and
+ * {@see ApplySslTaskResult} apply the results.
  */
 class DomainService
 {
@@ -45,50 +49,128 @@ class DomainService
      */
     public function create(User $account, string $name, User $actor, bool $primary = false): Domain
     {
+        return $this->addWebsite($account, $name, $actor, 'domain', [
+            'type' => DomainType::Domain,
+            'php_version' => (string) config('hosting.default_php_version'),
+            'is_primary' => $primary,
+        ]);
+    }
+
+    /**
+     * Add a subdomain of one of the account's domains, within its package's
+     * subdomain limit. It gets a folder of its own,
+     * domains/<label>.<domain>/public_html.
+     *
+     * @param  string  $label  One lowercase DNS label, not "www".
+     *
+     * @throws ValidationException
+     */
+    public function createSubdomain(Domain $parent, string $label, User $actor): Domain
+    {
+        $this->ensureCanHaveChildren($parent);
+
+        return $this->addWebsite($parent->account, $label.'.'.$parent->name, $actor, 'name', [
+            'type' => DomainType::Subdomain,
+            'php_version' => (string) config('hosting.default_php_version'),
+        ], $parent);
+    }
+
+    /**
+     * Add a domain pointer to one of the account's domains, within its
+     * package's pointer limit. It shows that domain's website (alias) or
+     * redirects its visitors there; an alias uses the same PHP version.
+     *
+     * @param  string  $name  Lowercase ASCII (punycode) name that passed {@see ValidDomain}.
+     *
+     * @throws ValidationException
+     */
+    public function createPointer(Domain $parent, string $name, PointerMode $mode, User $actor): Domain
+    {
+        $this->ensureCanHaveChildren($parent);
+
+        return $this->addWebsite($parent->account, $name, $actor, 'name', [
+            'type' => DomainType::Pointer,
+            'pointer_mode' => $mode,
+            'php_version' => $parent->php_version,
+        ], $parent);
+    }
+
+    /**
+     * Save a new website and queue its set-up: right away for active
+     * accounts, and once the account itself has been created for accounts
+     * that are still pending.
+     *
+     * @param  string  $errorKey  The form field validation errors belong to.
+     * @param  array{type: DomainType, php_version: string, is_primary?: bool, pointer_mode?: PointerMode}  $attributes
+     *
+     * @throws ValidationException
+     */
+    private function addWebsite(User $account, string $name, User $actor, string $errorKey, array $attributes, ?Domain $parent = null): Domain
+    {
         if (! $account->hasRole(Role::User)) {
             throw ValidationException::withMessages([
-                'domain' => __('Domains can only be added to hosting accounts.'),
+                $errorKey => __('Domains can only be added to hosting accounts.'),
             ]);
         }
 
         if (! in_array($account->status, [AccountStatus::Active, AccountStatus::Pending], true)) {
             throw ValidationException::withMessages([
-                'domain' => __('Domains cannot be added while the account is suspended, failed or being deleted.'),
+                $errorKey => __('Domains cannot be added while the account is suspended, failed or being deleted.'),
             ]);
         }
 
+        $type = $attributes['type'];
+
         try {
-            return DB::transaction(function () use ($account, $name, $actor, $primary): Domain {
-                $this->ensureDomainLimitIsNotReached($account, $actor);
+            return DB::transaction(function () use ($account, $name, $actor, $errorKey, $attributes, $parent, $type): Domain {
+                $this->ensureLimitIsNotReached($account, $actor, $type, $errorKey);
 
                 $conflict = $this->findConflict($account, $name, lock: true);
 
                 if ($conflict !== null) {
-                    throw ValidationException::withMessages(['domain' => $conflict]);
+                    throw ValidationException::withMessages([$errorKey => $conflict]);
                 }
 
-                $domain = $account->domains()->make([
-                    'name' => $name,
-                    'php_version' => (string) config('hosting.default_php_version'),
-                    'is_primary' => $primary,
-                ]);
-
+                $domain = $account->domains()->make(['name' => $name, ...$attributes]);
+                $domain->parent()->associate($parent);
                 $domain->forceFill(['status' => DomainStatus::Pending])->save();
 
                 if ($account->status === AccountStatus::Active) {
                     $this->dispatchApply($domain, $account, $actor);
                 }
 
-                $this->audit->record('domain.created', $domain, [
+                $this->audit->record($type->value.'.created', $domain, array_filter([
                     'domain' => $domain->name,
+                    'parent' => $parent?->name,
+                    'mode' => $domain->pointer_mode?->value,
                     'username' => $account->username,
-                ], $actor);
+                ]), $actor);
 
                 return $domain;
             }, 3);
         } catch (UniqueConstraintViolationException) {
             throw ValidationException::withMessages([
-                'domain' => $this->findConflict($account, $name) ?? __('This domain is already in use by another account.'),
+                $errorKey => $this->findConflict($account, $name) ?? __('This domain is already in use by another account.'),
+            ]);
+        }
+    }
+
+    /**
+     * Refuse subdomains and pointers of anything but a domain that stays.
+     *
+     * @throws ValidationException
+     */
+    private function ensureCanHaveChildren(Domain $parent): void
+    {
+        if ($parent->type !== DomainType::Domain) {
+            throw ValidationException::withMessages([
+                'domain_id' => __('Subdomains and pointers can only be added to a domain.'),
+            ]);
+        }
+
+        if ($parent->status === DomainStatus::Deleting) {
+            throw ValidationException::withMessages([
+                'domain_id' => __('This domain is being deleted.'),
             ]);
         }
     }
@@ -102,45 +184,58 @@ class DomainService
      */
     public function delete(Domain $domain, User $actor): void
     {
-        if (! $domain->status->canBeDeleted()) {
-            throw ValidationException::withMessages([
-                'domain' => __('This domain is still being set up or is already being deleted.'),
-            ]);
-        }
-
-        if ($domain->ssl_status?->isBusy()) {
-            throw ValidationException::withMessages([
-                'domain' => __('Wait until the SSL certificate has been installed or removed.'),
-            ]);
-        }
+        $this->ensureCanBeDeleted($domain, $domain);
 
         $account = $domain->account;
 
         DB::transaction(function () use ($domain, $account, $actor): void {
+            $children = $domain->children()->lockForUpdate()->get();
+
+            foreach ($children as $child) {
+                if ($child->status !== DomainStatus::Deleting) {
+                    $this->ensureCanBeDeleted($child, $domain);
+                }
+            }
+
             $domain->forceFill(['status' => DomainStatus::Deleting])->save();
+            $this->recordDeletion($domain, $account, $actor);
 
-            $this->tasks->dispatch('web.remove_domain', [
-                'username' => $account->username,
-                'domain' => $domain->name,
-            ], $account, $actor);
+            foreach ($children as $child) {
+                if ($child->status === DomainStatus::Deleting) {
+                    continue;
+                }
 
-            $this->audit->record('domain.deleted', $domain, [
-                'domain' => $domain->name,
-                'username' => $account->username,
-            ], $actor);
+                $child->forceFill(['status' => DomainStatus::Deleting])->save();
+                $this->dispatchRemove($child, $account, $actor);
+                $this->recordDeletion($child, $account, $actor);
+            }
+
+            // A domain is only removed from the server once its subdomains
+            // and pointers are gone; completeRemoval() queues it then.
+            if ($children->isEmpty()) {
+                $this->dispatchRemove($domain, $account, $actor);
+            }
         });
     }
 
     /**
-     * Delete the panel record of a domain the agent has removed, and remove
-     * the account's PHP-FPM pool when no other domain uses that version.
+     * Delete the panel record of a website the agent has removed, and
+     * remove the account's PHP-FPM pool when no other website uses that
+     * version. The parent of a subdomain or pointer that is being deleted
+     * itself is removed from the server once its last child is gone.
      */
     public function completeRemoval(Domain $domain, ?User $actor): void
     {
         $account = $domain->account;
 
         DB::transaction(function () use ($domain, $account, $actor): void {
+            $parent = $domain->parent;
+
             $domain->delete();
+
+            if ($parent?->status === DomainStatus::Deleting && ! $parent->children()->exists()) {
+                $this->dispatchRemove($parent, $account, $actor);
+            }
 
             if ($account->domains()->where('php_version', $domain->php_version)->exists()) {
                 return;
@@ -154,6 +249,23 @@ class DomainService
     }
 
     /**
+     * Mark a website the agent could not remove as failed, so it can be
+     * deleted again; so is its parent, which was waiting for it.
+     */
+    public function failRemoval(Domain $domain): void
+    {
+        DB::transaction(function () use ($domain): void {
+            $domain->forceFill(['status' => DomainStatus::Failed])->save();
+
+            $parent = $domain->parent;
+
+            if ($parent?->status === DomainStatus::Deleting) {
+                $parent->forceFill(['status' => DomainStatus::Failed])->save();
+            }
+        });
+    }
+
+    /**
      * Queue the set-up of domains that were added while the account was
      * still being created.
      */
@@ -161,6 +273,7 @@ class DomainService
     {
         $account->domains()
             ->where('status', DomainStatus::Pending)
+            ->orderBy('id')
             ->each(fn (Domain $domain) => $this->dispatchApply($domain, $account, $actor));
     }
 
@@ -368,7 +481,7 @@ class DomainService
         $queued = 0;
 
         Domain::query()
-            ->with('account')
+            ->with(['account', 'parent', 'urlRedirects'])
             ->where('status', DomainStatus::Active)
             ->whereHas('account', fn (Builder $query) => $query->whereIn('status', [
                 AccountStatus::Active,
@@ -384,44 +497,123 @@ class DomainService
     }
 
     /**
-     * Queue the (re)configuration of the domain's website. It is served over
-     * HTTPS only while its certificate is active.
+     * Queue the configuration of a website again, e.g. after its URL
+     * redirects changed.
+     */
+    public function reapply(Domain $domain, User $actor): void
+    {
+        $this->dispatchApply($domain, $domain->account, $actor);
+    }
+
+    /**
+     * Queue the (re)configuration of the website. It is served over HTTPS
+     * only while its certificate is active. A pointer tells the agent what
+     * it does and which domain it belongs to; redirects are only sent when
+     * there are any, so the payload of a plain website stays as it was.
      */
     private function dispatchApply(Domain $domain, User $account, ?User $actor): void
     {
         $ssl = $domain->hasActiveSsl();
 
-        $this->tasks->dispatch('web.apply_domain', [
+        $params = [
             'username' => $account->username,
             'domain' => $domain->name,
             'php_version' => $domain->php_version,
             'ssl' => $ssl,
             'force_https' => $ssl && $domain->force_https,
+        ];
+
+        if ($domain->type === DomainType::Pointer) {
+            $params['kind'] = ($domain->pointer_mode ?? PointerMode::Alias)->agentKind();
+            $params['parent'] = $domain->parent->name ?? throw new LogicException("Pointer {$domain->name} has no parent.");
+        }
+
+        if ($domain->canHaveRedirects()) {
+            $redirects = $domain->urlRedirects->sortBy('path')->values();
+
+            if ($redirects->isNotEmpty()) {
+                $params['redirects'] = $redirects->map(fn (UrlRedirect $redirect): array => $redirect->toAgentParams())->all();
+            }
+        }
+
+        $this->tasks->dispatch('web.apply_domain', $params, $account, $actor);
+    }
+
+    /**
+     * Queue the removal of a website from the server.
+     */
+    private function dispatchRemove(Domain $domain, User $account, ?User $actor): void
+    {
+        $this->tasks->dispatch('web.remove_domain', [
+            'username' => $account->username,
+            'domain' => $domain->name,
         ], $account, $actor);
     }
 
     /**
-     * Refuse a domain the account's package has no room for. The account's
-     * row stays locked until the domain is saved, so two requests cannot
-     * both take the last free place.
+     * @throws ValidationException
+     */
+    private function ensureCanBeDeleted(Domain $domain, Domain $deleted): void
+    {
+        $replace = ['domain' => $domain->display_name];
+
+        if (! $domain->status->canBeDeleted()) {
+            throw ValidationException::withMessages([
+                'domain' => $domain->is($deleted)
+                    ? __('This domain is still being set up or is already being deleted.')
+                    : __('Wait until :domain has been set up, then delete the domain again.', $replace),
+            ]);
+        }
+
+        if ($domain->ssl_status?->isBusy()) {
+            throw ValidationException::withMessages([
+                'domain' => $domain->is($deleted)
+                    ? __('Wait until the SSL certificate has been installed or removed.')
+                    : __('Wait until the SSL certificate of :domain has been installed or removed.', $replace),
+            ]);
+        }
+    }
+
+    private function recordDeletion(Domain $domain, User $account, User $actor): void
+    {
+        $this->audit->record($domain->type->value.'.deleted', $domain, [
+            'domain' => $domain->name,
+            'username' => $account->username,
+        ], $actor);
+    }
+
+    /**
+     * Refuse a website the account's package has no room for. The
+     * account's row stays locked until the website is saved, so two
+     * requests cannot both take the last free place.
      *
      * @throws ValidationException
      */
-    private function ensureDomainLimitIsNotReached(User $account, User $actor): void
+    private function ensureLimitIsNotReached(User $account, User $actor, DomainType $type, string $errorKey): void
     {
         $locked = User::query()->with('package')->lockForUpdate()->findOrFail($account->id);
         $limits = AccountLimits::for($locked);
+        $key = $type->limitKey();
 
-        if (! $limits->isReached('domains')) {
+        if (! $limits->isReached($key)) {
             return;
         }
 
-        $replace = ['limit' => $limits->limit('domains')];
+        $replace = ['limit' => $limits->limit($key)];
+        $own = $actor->is($account);
 
         throw ValidationException::withMessages([
-            'domain' => $actor->is($account)
-                ? __('Your package allows :limit domains. Remove a domain or ask your provider for a bigger package.', $replace)
-                : __("This account's package allows :limit domains.", $replace),
+            $errorKey => match ($type) {
+                DomainType::Domain => $own
+                    ? __('Your package allows :limit domains. Remove a domain or ask your provider for a bigger package.', $replace)
+                    : __("This account's package allows :limit domains.", $replace),
+                DomainType::Subdomain => $own
+                    ? __('Your package allows :limit subdomains. Remove a subdomain or ask your provider for a bigger package.', $replace)
+                    : __("This account's package allows :limit subdomains.", $replace),
+                DomainType::Pointer => $own
+                    ? __('Your package allows :limit pointers. Remove a pointer or ask your provider for a bigger package.', $replace)
+                    : __("This account's package allows :limit pointers.", $replace),
+            },
         ]);
     }
 

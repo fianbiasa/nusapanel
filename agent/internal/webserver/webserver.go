@@ -174,6 +174,48 @@ type Site struct {
 	// ForceHTTPS redirects HTTP to HTTPS, except Let's Encrypt challenges.
 	// It needs SSL.
 	ForceHTTPS bool
+	// Kind is what the domain serves; empty means KindDomain.
+	Kind Kind
+	// Parent is the domain of the same account an alias shows or a
+	// forward redirects to; empty for KindDomain.
+	Parent string
+	// Redirects are the domain's URL redirects. A forward has none.
+	Redirects []Redirect
+}
+
+// kind returns the Kind of the site, KindDomain when it is not set.
+func (s Site) kind() Kind {
+	if s.Kind == "" {
+		return KindDomain
+	}
+
+	return s.Kind
+}
+
+// Validate checks every field of the site that reaches a config file. The
+// manager's methods call it too, so a caller's mistake can never inject
+// config syntax.
+func (s Site) Validate() error {
+	if err := checkNames(s.User, s.Domain); err != nil {
+		return err
+	}
+
+	if s.ForceHTTPS && !s.SSL {
+		return errors.New("forcing HTTPS needs SSL")
+	}
+
+	if err := validate.PHPVersion(s.PHPVersion); err != nil {
+		return err
+	}
+
+	site := s
+	site.Kind = s.kind()
+
+	if err := validateKind(site); err != nil {
+		return err
+	}
+
+	return validateRedirects(s.Redirects)
 }
 
 // PHPInstalled reports whether PHP-FPM of version is installed.
@@ -242,29 +284,70 @@ func (m *Manager) DocumentRoot(user, domain string) string {
 }
 
 // ApplyDomain creates the folders of site, its PHP-FPM pool and its Nginx
-// and Apache vhosts, and returns its document root. Running it again
-// renders the same configuration, so a failed call can be retried. HTTPS
-// for a domain without a certificate fails with ErrNoCertificate before
-// anything changes.
+// and Apache vhosts, and returns its document root. An alias serves the
+// folder of its parent, which is created when missing; a forward only has
+// an Nginx vhost and no document root. Running it again renders the same
+// configuration, so a failed call can be retried. HTTPS for a domain
+// without a certificate fails with ErrNoCertificate before anything
+// changes.
 func (m *Manager) ApplyDomain(ctx context.Context, site Site) (string, error) {
-	if err := checkSite(site); err != nil {
+	if err := site.Validate(); err != nil {
 		return "", err
 	}
+
+	site.Kind = site.kind()
 
 	if site.SSL && !m.HasCertificate(site.Domain) {
 		return "", fmt.Errorf("%w: %s", ErrNoCertificate, site.Domain)
 	}
 
-	index, err := render("index.html.tmpl", m.siteData(site))
-	if err != nil {
+	if site.Kind != KindForward {
+		if err := m.prepareFolders(ctx, site); err != nil {
+			return "", err
+		}
+	}
+
+	if err := m.ensureLogDir(); err != nil {
 		return "", err
 	}
 
-	err = m.cfg.PrepareSite(ctx, sysuser.Site{
+	if site.Kind != KindForward {
+		if err := m.applyPool(ctx, site.User, site.PHPVersion); err != nil {
+			return "", err
+		}
+	}
+
+	if err := m.applyVhosts(ctx, site); err != nil {
+		return "", err
+	}
+
+	return m.siteDocumentRoot(site), nil
+}
+
+// prepareFolders creates the folder a domain or an alias serves. A new
+// folder of a domain gets a default index.html; that of an alias's parent
+// stays empty until the parent itself is applied.
+func (m *Manager) prepareFolders(ctx context.Context, site Site) error {
+	folder := site.Domain
+
+	var index []byte
+
+	if site.Kind == KindAlias {
+		folder = site.Parent
+	} else {
+		page, err := render("index.html.tmpl", m.siteData(site))
+		if err != nil {
+			return err
+		}
+
+		index = page
+	}
+
+	err := m.cfg.PrepareSite(ctx, sysuser.Site{
 		Home: m.home(site.User),
 		Dirs: []sysuser.Dir{
 			{Name: "domains", Mode: 0o711},
-			{Name: site.Domain, Mode: 0o711},
+			{Name: folder, Mode: 0o711},
 			{Name: "public_html", Mode: 0o755},
 		},
 		UID:   site.UID,
@@ -272,22 +355,23 @@ func (m *Manager) ApplyDomain(ctx context.Context, site Site) (string, error) {
 		Index: index,
 	})
 	if err != nil {
-		return "", fmt.Errorf("prepare the folders of %s: %w", site.Domain, err)
+		return fmt.Errorf("prepare the folders of %s: %w", site.Domain, err)
 	}
 
-	if err := m.ensureLogDir(); err != nil {
-		return "", err
-	}
+	return nil
+}
 
-	if err := m.applyPool(ctx, site.User, site.PHPVersion); err != nil {
-		return "", err
+// siteDocumentRoot returns the folder site is served from: its own, its
+// parent's for an alias, or none for a forward.
+func (m *Manager) siteDocumentRoot(site Site) string {
+	switch site.kind() {
+	case KindAlias:
+		return m.DocumentRoot(site.User, site.Parent)
+	case KindForward:
+		return ""
+	default:
+		return m.DocumentRoot(site.User, site.Domain)
 	}
-
-	if err := m.applyVhosts(ctx, site); err != nil {
-		return "", err
-	}
-
-	return m.DocumentRoot(site.User, site.Domain), nil
 }
 
 // RemoveDomain removes the Nginx and Apache vhosts of domain, reloads both,
@@ -565,7 +649,8 @@ func (m *Manager) changeSuspension(ctx context.Context, user string, page []byte
 }
 
 // applyVhosts writes the Nginx and Apache vhosts of site, then tests and
-// reloads both servers.
+// reloads both servers. A forward is answered by Nginx alone, so it has no
+// Apache vhost; one left from when it was an alias is deleted.
 func (m *Manager) applyVhosts(ctx context.Context, site Site) error {
 	data := m.siteData(site)
 
@@ -574,9 +659,13 @@ func (m *Manager) applyVhosts(ctx context.Context, site Site) error {
 		return err
 	}
 
-	apache, err := render("apache-vhost.conf.tmpl", data)
-	if err != nil {
-		return err
+	var apache []byte
+
+	if site.kind() != KindForward {
+		apache, err = render("apache-vhost.conf.tmpl", data)
+		if err != nil {
+			return err
+		}
 	}
 
 	m.mu.Lock()
@@ -649,19 +738,6 @@ func (m *Manager) logger() *slog.Logger {
 	}
 
 	return slog.Default()
-}
-
-// checkSite validates every field of site that reaches a config file.
-func checkSite(site Site) error {
-	if err := checkNames(site.User, site.Domain); err != nil {
-		return err
-	}
-
-	if site.ForceHTTPS && !site.SSL {
-		return errors.New("forcing HTTPS needs SSL")
-	}
-
-	return validate.PHPVersion(site.PHPVersion)
 }
 
 func checkNames(user, domain string) error {

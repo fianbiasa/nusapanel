@@ -24,25 +24,59 @@ type webServer interface {
 	DeleteCertificate(ctx context.Context, user, domain string) error
 }
 
-// applyDomainParams are the params of web.apply_domain. SSL and ForceHTTPS
-// are optional, so callers from before HTTPS existed keep working.
+// applyDomainParams are the params of web.apply_domain. Everything after
+// php_version is optional, so callers from before those features existed
+// keep working: a missing kind is "domain", which also serves subdomains.
 type applyDomainParams struct {
 	Username   string `json:"username"`
 	Domain     string `json:"domain"`
 	PHPVersion string `json:"php_version"`
 	SSL        bool   `json:"ssl"`
 	ForceHTTPS bool   `json:"force_https"`
+	// Kind is "domain", "alias" (a pointer showing the website of parent)
+	// or "forward" (a pointer redirecting to parent).
+	Kind      string           `json:"kind"`
+	Parent    string           `json:"parent"`
+	Redirects []redirectParams `json:"redirects"`
+}
+
+// redirectParams are one URL redirect of web.apply_domain.
+type redirectParams struct {
+	Path        string `json:"path"`
+	Destination string `json:"destination"`
+	Status      int    `json:"status"`
+	Wildcard    bool   `json:"wildcard"`
 }
 
 func (p applyDomainParams) account() string { return p.Username }
 
 func (p applyDomainParams) validate() error {
-	var httpsErr error
 	if p.ForceHTTPS && !p.SSL {
-		httpsErr = errors.New("force_https needs ssl")
+		return errors.New("force_https needs ssl")
 	}
 
-	return firstError(validate.Username(p.Username), validate.Domain(p.Domain), validate.PHPVersion(p.PHPVersion), httpsErr)
+	return p.site(sysuser.User{Name: p.Username}).Validate()
+}
+
+// site returns the website the params describe, for the account user.
+func (p applyDomainParams) site(user sysuser.User) webserver.Site {
+	redirects := make([]webserver.Redirect, len(p.Redirects))
+	for i, redirect := range p.Redirects {
+		redirects[i] = webserver.Redirect(redirect)
+	}
+
+	return webserver.Site{
+		User:       user.Name,
+		UID:        user.UID,
+		GID:        user.GID,
+		Domain:     p.Domain,
+		PHPVersion: p.PHPVersion,
+		SSL:        p.SSL,
+		ForceHTTPS: p.ForceHTTPS,
+		Kind:       webserver.Kind(p.Kind),
+		Parent:     p.Parent,
+		Redirects:  redirects,
+	}
 }
 
 // domainParams are the params of web.remove_domain, ssl.issue and
@@ -141,7 +175,9 @@ func decodeWebParams[P webParams](raw json.RawMessage) (P, error) {
 // applyDomain implements web.apply_domain: it creates the domain's folders,
 // the account's PHP-FPM pool for the requested version, and the domain's
 // Nginx and Apache vhosts, with HTTPS when ssl is set (the certificate must
-// exist) and HTTP redirected to HTTPS when force_https is set. Calling it
+// exist), HTTP redirected to HTTPS when force_https is set, and the given
+// URL redirects. An alias serves the folder of its parent; a forward
+// redirects to its parent and has neither folder nor pool. Calling it
 // again renders the same configuration.
 func (w webActions) applyDomain(ctx context.Context, raw json.RawMessage) (any, error) {
 	params, err := decodeWebParams[applyDomainParams](raw)
@@ -162,15 +198,7 @@ func (w webActions) applyDomain(ctx context.Context, raw json.RawMessage) (any, 
 		return nil, err
 	}
 
-	documentRoot, err := w.web.ApplyDomain(ctx, webserver.Site{
-		User:       user.Name,
-		UID:        user.UID,
-		GID:        user.GID,
-		Domain:     params.Domain,
-		PHPVersion: params.PHPVersion,
-		SSL:        params.SSL,
-		ForceHTTPS: params.ForceHTTPS,
-	})
+	documentRoot, err := w.web.ApplyDomain(ctx, params.site(user))
 	if err != nil {
 		return nil, webError(err, params.Domain)
 	}

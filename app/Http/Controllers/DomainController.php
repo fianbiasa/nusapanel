@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\DomainType;
 use App\Enums\SslStatus;
 use App\Http\Requests\StoreDomainRequest;
 use App\Models\Domain;
@@ -18,22 +19,36 @@ class DomainController extends Controller
     public function __construct(private DomainService $domains) {}
 
     /**
-     * List the signed-in account's domains, primary domain first, with the
-     * server's public IP address to point them to and what the account's
-     * package allows.
+     * List the signed-in account's websites: its domains, primary domain
+     * first, each followed by its subdomains and then its pointers. With
+     * the server's public IP address to point them to and what the
+     * account's package allows.
      */
     public function index(Request $request): Response
     {
         $account = $request->user();
 
-        $domains = $account->domains()
-            ->orderByDesc('is_primary')
-            ->orderBy('name')
-            ->get()
+        $websites = $account->domains()->orderBy('name')->get();
+        $childrenByParent = $websites->whereNotNull('parent_id')->groupBy('parent_id');
+
+        $domains = $websites
+            ->filter(fn (Domain $domain): bool => $domain->parent_id === null)
+            ->sortBy([['is_primary', 'desc'], ['name', 'asc']])
+            ->flatMap(fn (Domain $domain): array => [
+                $domain,
+                ...($childrenByParent->get($domain->id)
+                    ?->sortBy(fn (Domain $child): array => [$child->type === DomainType::Subdomain ? 0 : 1, $child->name])
+                    ->all() ?? []),
+            ])
             ->map(fn (Domain $domain): array => [
                 'id' => $domain->id,
                 'name' => $domain->name,
                 'display_name' => $domain->display_name,
+                'type' => $domain->type->value,
+                'pointer_mode' => $domain->pointer_mode?->value,
+                'parent_id' => $domain->parent_id,
+                'parent_display_name' => $domain->parent_id === null ? null : $websites->firstWhere('id', $domain->parent_id)?->display_name,
+                'children_count' => $childrenByParent->get($domain->id)?->count() ?? 0,
                 'php_version' => $domain->php_version,
                 'is_primary' => $domain->is_primary,
                 'status' => $domain->status->value,
@@ -42,7 +57,8 @@ class DomainController extends Controller
                 'ssl_error' => $domain->ssl_error,
                 'force_https' => $domain->force_https,
                 'created_at' => $domain->created_at?->toIso8601String(),
-            ]);
+            ])
+            ->values();
 
         return Inertia::render('domains/index', [
             'domains' => $domains,

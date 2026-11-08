@@ -53,7 +53,9 @@ Pekerjaan:
 - paket hosting ✅: admin membuat paket (kuota disk, bandwidth, domain, subdomain, email, database, FTP, cron; fitur SSL), memilihnya saat membuat akun dan menggantinya kapan saja; batas domain dan fitur SSL sudah diterapkan, batas lain berlaku begitu fiturnya ada; pemakaian tampil di dashboard customer;
 - kuota disk & inode ✅: `setup.sh` mengaktifkan kuota user ext4 tanpa reboot (fstab dicadangkan, divalidasi, dikembalikan kalau gagal), agent memasang batas per akun dari paketnya, pemakaian diukur tiap 15 menit dan tampil di dashboard & daftar akun; teruji: menulis melebihi kuota ditolak "Disk quota exceeded".
 
-Berikutnya: subdomain/pointer/redirect, pilihan versi PHP, sertifikat kustom.
+- subdomain, pointer & redirect ✅: subdomain punya folder sendiri (`domains/blog.<domain>/public_html`, bukan di dalam `public_html` domain induk supaya `.htaccess`-nya tidak ikut berlaku) dan dihitung ke batas subdomain; pointer (batas baru di paket) menampilkan website domain induk (alias) atau mengalihkan pengunjungnya ke sana (301); halaman Redirects mengalihkan path (301/302, bisa termasuk semua halaman di bawahnya); SSL & Paksa HTTPS berlaku per nama; hapus domain ikut menghapus subdomain & pointer-nya (anak dulu, lalu domainnya); teruji di nginx sungguhan.
+
+Berikutnya: pilihan versi PHP, sertifikat kustom.
 
 - Akun user & paket user, buat/suspend/hapus akun, quota disk & inode.
 - Domain, subdomain, pointer, redirect, www/HTTPS.

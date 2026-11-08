@@ -76,7 +76,7 @@ class ApplyDomainTaskResult
         if ($task->status === TaskStatus::Success) {
             $this->domains->completeRemoval($domain, $task->actor);
         } elseif ($task->status === TaskStatus::Failed) {
-            $domain->forceFill(['status' => DomainStatus::Failed])->save();
+            $this->domains->failRemoval($domain);
         }
     }
 }

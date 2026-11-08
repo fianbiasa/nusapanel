@@ -37,7 +37,7 @@ class PackageManagementTest extends TestCase
                     ->where('limits.domains', 3)
                     ->where('limits.disk_mb', 1024)
                     ->where('limits.inodes', 50000)
-                    ->has('limits', 9)
+                    ->has('limits', 10)
                     ->where('ssl', true)
                     ->where('accounts_count', 2))
                 ->where('packages.1.id', $pro->id)
@@ -355,6 +355,7 @@ class PackageManagementTest extends TestCase
             'bandwidth_mb' => '10240',
             'domains' => '3',
             'subdomains' => '10',
+            'pointers' => '5',
             'email_accounts' => '10',
             'databases' => '5',
             'ftp_accounts' => '0',

@@ -40,6 +40,12 @@ type siteData struct {
 	ForceHTTPS     bool
 	Certificate    string
 	CertificateKey string
+	// ForwardTo is the domain a forward redirects every request to; empty
+	// for a site that serves a folder.
+	ForwardTo string
+	// Redirects are the site's URL redirects, in the order Nginx checks
+	// them.
+	Redirects []redirectData
 }
 
 // poolData is what the pool template sees.
@@ -81,10 +87,17 @@ func render(name string, data any) ([]byte, error) {
 func (m *Manager) siteData(site Site) siteData {
 	pool := m.poolData(site.User, site.PHPVersion)
 
+	var forwardTo string
+	if site.kind() == KindForward {
+		forwardTo = site.Parent
+	}
+
 	return siteData{
 		User:            site.User,
 		Domain:          site.Domain,
-		DocumentRoot:    m.DocumentRoot(site.User, site.Domain),
+		DocumentRoot:    m.siteDocumentRoot(site),
+		ForwardTo:       forwardTo,
+		Redirects:       redirectsData(site.Redirects),
 		LogDir:          m.cfg.LogDir,
 		NginxAccountDir: m.nginxAccountDir(site.User),
 		Backend:         m.cfg.Backend,

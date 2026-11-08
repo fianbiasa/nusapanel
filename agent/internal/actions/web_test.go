@@ -222,6 +222,15 @@ func TestWebMethodsRejectInvalidParams(t *testing.T) {
 			{"username": "budi", "domain": "example.com", "php_version": "8.4", "ssl": false, "force_https": true},
 			{"username": "budi", "domain": "example.com", "php_version": "8.4", "ssl": "yes"},
 			{"username": "budi", "domain": "example.com", "php_version": "8.4", "ssl": 1},
+			{"username": "budi", "domain": "example.com", "php_version": "8.4", "kind": "proxy"},
+			{"username": "budi", "domain": "example.com", "php_version": "8.4", "kind": "alias"},
+			{"username": "budi", "domain": "example.com", "php_version": "8.4", "kind": "alias", "parent": "example.com"},
+			{"username": "budi", "domain": "example.com", "php_version": "8.4", "kind": "forward", "parent": "../etc"},
+			{"username": "budi", "domain": "example.com", "php_version": "8.4", "parent": "example.org"},
+			{"username": "budi", "domain": "example.com", "php_version": "8.4", "redirects": []map[string]any{{"path": "/a b", "destination": "https://example.org/", "status": 301}}},
+			{"username": "budi", "domain": "example.com", "php_version": "8.4", "redirects": []map[string]any{{"path": "/a", "destination": "https://example.org/$host", "status": 301}}},
+			{"username": "budi", "domain": "example.com", "php_version": "8.4", "redirects": []map[string]any{{"path": "/a", "destination": "https://example.org/", "status": 200}}},
+			{"username": "budi", "domain": "example.com", "php_version": "8.4", "redirects": []map[string]any{{"path": "/a", "destination": "https://example.org/", "status": 301, "regex": true}}},
 		},
 		"web.remove_domain": {
 			{"username": "budi"},
@@ -291,6 +300,47 @@ func TestApplyDomainSetsUpTheWebsite(t *testing.T) {
 	again, err := env.call("web.apply_domain", applyParams("example.com", "8.4"))
 	if err != nil || string(again) != string(result) {
 		t.Fatalf("second apply: %s, %v", again, err)
+	}
+}
+
+func TestApplyDomainSetsUpPointersAndRedirects(t *testing.T) {
+	env := newWebEnv(t)
+
+	params := map[string]any{
+		"username":    "budi",
+		"domain":      "example.net",
+		"php_version": "8.4",
+		"kind":        "alias",
+		"parent":      "example.com",
+		"redirects": []map[string]any{
+			{"path": "/promo", "destination": "https://example.com/sale", "status": 302, "wildcard": true},
+		},
+	}
+
+	result, err := env.call("web.apply_domain", params)
+	if err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+
+	if string(result) != `{"domain":"example.net","document_root":"/home/budi/domains/example.com/public_html"}` {
+		t.Fatalf("unexpected result %s", result)
+	}
+
+	nginx, err := os.ReadFile(env.cfg.NginxDir + "/budi/example.net.conf")
+	if err != nil || !strings.Contains(string(nginx), `return 302 "https://example.com/sale/$nusa_rest$is_args$args";`) {
+		t.Fatalf("the redirect is missing from the vhost (%v):\n%s", err, nginx)
+	}
+
+	params["kind"] = "forward"
+	delete(params, "redirects")
+
+	result, err = env.call("web.apply_domain", params)
+	if err != nil || string(result) != `{"domain":"example.net","document_root":""}` {
+		t.Fatalf("forward: %s, %v", result, err)
+	}
+
+	if _, err := os.Stat(env.cfg.ApacheDir + "/budi/example.net.conf"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("a forward kept its Apache vhost (%v)", err)
 	}
 }
 

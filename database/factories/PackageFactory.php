@@ -25,6 +25,7 @@ class PackageFactory extends Factory
             'bandwidth_mb' => 10240,
             'domains' => 3,
             'subdomains' => 10,
+            'pointers' => 5,
             'email_accounts' => 10,
             'databases' => 5,
             'ftp_accounts' => 5,

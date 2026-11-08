@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Enums\DomainStatus;
+use App\Enums\DomainType;
+use App\Enums\PointerMode;
 use App\Enums\SslStatus;
 use Database\Factories\DomainFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -10,11 +12,15 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
- * A website of a hosting account, served from
- * /home/<username>/domains/<name>/public_html.
+ * A website of a hosting account. Domains and subdomains are served from
+ * /home/<username>/domains/<name>/public_html; a pointer shows the website
+ * of its parent domain or redirects to it ({@see PointerMode}). Subdomains
+ * and pointers belong to a domain of the same account, their parent, and
+ * are removed together with it.
  *
  * `name` is always stored in its ASCII (punycode) form; `display_name`
  * gives the Unicode form of internationalized names. `user_id`, `status`
@@ -25,7 +31,10 @@ use Illuminate\Support\Carbon;
  *
  * @property int $id
  * @property int $user_id
+ * @property int|null $parent_id
  * @property string $name
+ * @property DomainType $type
+ * @property PointerMode|null $pointer_mode Only set for pointers.
  * @property-read string $display_name
  * @property string $php_version
  * @property bool $is_primary
@@ -38,7 +47,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['name', 'php_version', 'is_primary'])]
+#[Fillable(['name', 'type', 'pointer_mode', 'php_version', 'is_primary'])]
 class Domain extends Model
 {
     /** @use HasFactory<DomainFactory> */
@@ -48,6 +57,7 @@ class Domain extends Model
      * @var array<string, mixed>
      */
     protected $attributes = [
+        'type' => 'domain',
         'force_https' => false,
     ];
 
@@ -60,6 +70,8 @@ class Domain extends Model
     {
         return [
             'is_primary' => 'boolean',
+            'type' => DomainType::class,
+            'pointer_mode' => PointerMode::class,
             'status' => DomainStatus::class,
             'ssl_status' => SslStatus::class,
             'ssl_names' => 'array',
@@ -92,6 +104,54 @@ class Domain extends Model
     public function hasActiveSsl(): bool
     {
         return $this->ssl_status === SslStatus::Active;
+    }
+
+    /**
+     * Whether the website serves a folder of its own: domains and
+     * subdomains do, pointers never.
+     */
+    public function hasOwnFolder(): bool
+    {
+        return $this->type !== DomainType::Pointer;
+    }
+
+    /**
+     * Whether the website may have URL redirects: every website except a
+     * pointer that redirects everything to its parent anyway.
+     */
+    public function canHaveRedirects(): bool
+    {
+        return $this->pointer_mode !== PointerMode::Redirect;
+    }
+
+    /**
+     * The domain a subdomain or pointer belongs to.
+     *
+     * @return BelongsTo<Domain, $this>
+     */
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'parent_id');
+    }
+
+    /**
+     * The subdomains and pointers of a domain.
+     *
+     * @return HasMany<Domain, $this>
+     */
+    public function children(): HasMany
+    {
+        return $this->hasMany(self::class, 'parent_id');
+    }
+
+    /**
+     * The website's URL redirects.
+     *
+     * @return HasMany<UrlRedirect, $this>
+     */
+    public function urlRedirects(): HasMany
+    {
+        return $this->hasMany(UrlRedirect::class);
     }
 
     /**

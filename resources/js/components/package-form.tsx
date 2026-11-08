@@ -29,6 +29,10 @@ const quotaFields: Record<
     bandwidth_mb: { label: 'Bandwidth per bulan', unit: 'MB' },
     domains: { label: 'Domain' },
     subdomains: { label: 'Subdomain' },
+    pointers: {
+        label: 'Pointer domain',
+        hint: 'Domain lain yang menampilkan atau mengalihkan ke domain akun.',
+    },
     email_accounts: { label: 'Akun email' },
     databases: { label: 'Database' },
     ftp_accounts: { label: 'Akun FTP' },

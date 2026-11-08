@@ -30,6 +30,7 @@ use InvalidArgumentException;
  * @property int|null $bandwidth_mb
  * @property int|null $domains
  * @property int|null $subdomains
+ * @property int|null $pointers Domain pointers.
  * @property int|null $email_accounts
  * @property int|null $databases
  * @property int|null $ftp_accounts
@@ -38,7 +39,7 @@ use InvalidArgumentException;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['name', 'description', 'disk_mb', 'inodes', 'bandwidth_mb', 'domains', 'subdomains', 'email_accounts', 'databases', 'ftp_accounts', 'cron_jobs', 'ssl'])]
+#[Fillable(['name', 'description', 'disk_mb', 'inodes', 'bandwidth_mb', 'domains', 'subdomains', 'pointers', 'email_accounts', 'databases', 'ftp_accounts', 'cron_jobs', 'ssl'])]
 class Package extends Model
 {
     /** @use HasFactory<PackageFactory> */
@@ -55,6 +56,7 @@ class Package extends Model
         'bandwidth_mb',
         'domains',
         'subdomains',
+        'pointers',
         'email_accounts',
         'databases',
         'ftp_accounts',

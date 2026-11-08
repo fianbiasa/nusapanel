@@ -1,12 +1,12 @@
 import { Form, Head, router, usePoll } from '@inertiajs/react';
 import {
+    CornerDownRight,
     ExternalLink,
     Globe,
     Info,
     Lock,
     LockOpen,
     MoreHorizontal,
-    Plus,
     RotateCw,
     Trash2,
     X,
@@ -14,6 +14,7 @@ import {
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { AddWebsitePanel } from '@/components/add-website-panel';
 import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
 import { Panel, tableStyles } from '@/components/panel';
@@ -37,7 +38,6 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Input } from '@/components/ui/input';
 import { Spinner } from '@/components/ui/spinner';
 import {
     Tooltip,
@@ -45,7 +45,7 @@ import {
     TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { formatDate, formatDateTime } from '@/lib/format';
-import { destroy, store } from '@/routes/domains';
+import { destroy } from '@/routes/domains';
 import { update as updateForceHttps } from '@/routes/domains/force-https';
 import { destroy as destroySsl, store as storeSsl } from '@/routes/domains/ssl';
 import type { AccountLimits } from '@/types';
@@ -54,10 +54,17 @@ type DomainStatus = 'pending' | 'active' | 'failed' | 'deleting';
 
 type SslStatus = 'pending' | 'active' | 'failed' | 'removing';
 
+type WebsiteType = 'domain' | 'subdomain' | 'pointer';
+
 type DomainRow = {
     id: number;
     name: string;
     display_name: string;
+    type: WebsiteType;
+    pointer_mode: 'alias' | 'redirect' | null;
+    parent_id: number | null;
+    parent_display_name: string | null;
+    children_count: number;
     php_version: string;
     is_primary: boolean;
     status: DomainStatus;
@@ -77,6 +84,12 @@ type Props = {
     domains: DomainRow[];
     limits: AccountLimits;
     public_ip: string | null;
+};
+
+const typeLabels: Record<WebsiteType, string> = {
+    domain: 'domain',
+    subdomain: 'subdomain',
+    pointer: 'pointer',
 };
 
 const busyStatuses: DomainStatus[] = ['pending', 'deleting'];
@@ -105,9 +118,9 @@ export default function DomainsIndex({ domains, limits, public_ip }: Props) {
     const [action, setAction] = useState<DomainAction | null>(null);
     const [dialogOpen, setDialogOpen] = useState(false);
 
-    const domainLimit = limits.quotas.domains.limit;
-    const domainCount = limits.quotas.domains.used ?? domains.length;
-    const isAtDomainLimit = domainLimit !== null && domainCount >= domainLimit;
+    const parents = domains.filter(
+        (domain) => domain.type === 'domain' && domain.status !== 'deleting',
+    );
 
     // Refresh the list while the agent is still setting up or removing
     // domains or their certificates.
@@ -154,94 +167,14 @@ export default function DomainsIndex({ domains, limits, public_ip }: Props) {
 
             <PageHeader
                 title="Domains"
-                description="Website di akun kamu. Setiap domain bisa dibuka dengan dan tanpa www."
+                description="Website di akun kamu: domain, subdomain, dan pointer. Semuanya bisa dibuka dengan dan tanpa www."
             />
 
-            <Panel
-                title="Tambah domain"
-                description={
-                    <>
-                        File website diletakkan di{' '}
-                        <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
-                            domains/&lt;domain&gt;/public_html
-                        </code>{' '}
-                        di folder home kamu.
-                    </>
-                }
-                action={
-                    domainLimit !== null && (
-                        <span className="shrink-0 rounded-full bg-muted px-3 py-1 text-xs font-semibold whitespace-nowrap text-muted-foreground">
-                            {domainCount} dari {domainLimit} domain
-                        </span>
-                    )
-                }
-            >
-                <Form
-                    {...store.form()}
-                    resetOnSuccess
-                    options={{ preserveScroll: true }}
-                    className="grid max-w-2xl gap-2"
-                >
-                    {({ processing, errors }) => (
-                        <>
-                            <label htmlFor="domain" className="sr-only">
-                                Nama domain
-                            </label>
-                            <div className="flex flex-col gap-2 sm:flex-row">
-                                <div className="relative flex-1">
-                                    <Globe className="pointer-events-none absolute top-1/2 left-3.5 size-[18px] -translate-y-1/2 text-muted-foreground" />
-                                    <Input
-                                        id="domain"
-                                        name="domain"
-                                        required
-                                        disabled={isAtDomainLimit}
-                                        autoComplete="off"
-                                        autoCapitalize="none"
-                                        spellCheck={false}
-                                        maxLength={253}
-                                        placeholder="contoh.com"
-                                        className="pl-10"
-                                        aria-invalid={
-                                            errors.domain ? true : undefined
-                                        }
-                                        aria-describedby={
-                                            isAtDomainLimit
-                                                ? 'domain-limit'
-                                                : undefined
-                                        }
-                                    />
-                                </div>
-                                <Button
-                                    type="submit"
-                                    size="lg"
-                                    disabled={processing || isAtDomainLimit}
-                                >
-                                    {processing ? <Spinner /> : <Plus />}
-                                    Tambah domain
-                                </Button>
-                            </div>
-                            {isAtDomainLimit && (
-                                <p
-                                    id="domain-limit"
-                                    className="text-sm text-muted-foreground"
-                                >
-                                    {domainLimit === 0
-                                        ? 'Paket kamu tidak termasuk domain.'
-                                        : `Paket kamu sudah mencapai batas ${domainLimit} domain.`}{' '}
-                                    Hapus domain yang tidak dipakai, atau minta
-                                    paket yang lebih besar ke penyedia hosting
-                                    kamu.
-                                </p>
-                            )}
-                            <InputError message={errors.domain} />
-                        </>
-                    )}
-                </Form>
-            </Panel>
+            <AddWebsitePanel parents={parents} limits={limits} />
 
             <Panel
-                title="Daftar domain"
-                description={`${domains.length} domain`}
+                title="Daftar website"
+                description={`${domains.length} website`}
                 flush
             >
                 {domains.length === 0 ? (
@@ -299,7 +232,10 @@ export default function DomainsIndex({ domains, limits, public_ip }: Props) {
                                         </td>
                                         <td className={tableStyles.td}>
                                             <span className="font-medium">
-                                                {domain.php_version}
+                                                {domain.pointer_mode ===
+                                                'redirect'
+                                                    ? '—'
+                                                    : domain.php_version}
                                             </span>
                                         </td>
                                         <td
@@ -362,12 +298,17 @@ export default function DomainsIndex({ domains, limits, public_ip }: Props) {
 
 function DomainName({ domain }: { domain: DomainRow }) {
     const scheme = domain.ssl_status === 'active' ? 'https' : 'http';
+    const isChild = domain.parent_id !== null;
 
     return (
-        <div className="flex items-center gap-3">
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground">
-                <Globe className="size-4" />
-            </span>
+        <div className={`flex items-center gap-3 ${isChild ? 'pl-6' : ''}`}>
+            {isChild ? (
+                <CornerDownRight className="size-4 shrink-0 text-muted-foreground" />
+            ) : (
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground">
+                    <Globe className="size-4" />
+                </span>
+            )}
             <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                     {domain.status === 'active' ? (
@@ -390,11 +331,25 @@ function DomainName({ domain }: { domain: DomainRow }) {
                             Utama
                         </span>
                     )}
+                    {domain.type !== 'domain' && (
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+                            {domain.type === 'subdomain'
+                                ? 'Subdomain'
+                                : 'Pointer'}
+                        </span>
+                    )}
                 </div>
                 {domain.display_name !== domain.name && (
                     <code className="mt-0.5 block font-mono text-xs text-muted-foreground">
                         {domain.name}
                     </code>
+                )}
+                {domain.type === 'pointer' && (
+                    <span className="mt-0.5 block text-xs text-muted-foreground">
+                        {domain.pointer_mode === 'redirect'
+                            ? `Dialihkan ke ${domain.parent_display_name}`
+                            : `Menampilkan website ${domain.parent_display_name}`}
+                    </span>
                 )}
             </div>
         </div>
@@ -576,7 +531,7 @@ function RowActions({
                             variant="destructive"
                             onSelect={() => onAction('delete', domain)}
                         >
-                            <Trash2 /> Hapus domain
+                            <Trash2 /> Hapus {typeLabels[domain.type]}
                         </DropdownMenuItem>
                     )}
                 </DropdownMenuContent>
@@ -751,14 +706,22 @@ function DeleteDomainForm({
                     <DialogHeader>
                         <DialogTitle>Hapus {domain.display_name}?</DialogTitle>
                         <DialogDescription>
-                            Website ini tidak akan dilayani lagi oleh server.
-                            File di{' '}
-                            <code className="font-mono text-xs">
-                                domains/{domain.name}/public_html
-                            </code>{' '}
-                            tetap tersimpan di folder home kamu.
+                            {domain.type === 'pointer' ? (
+                                'Pointer ini tidak akan dilayani lagi oleh server. Website domain induknya tidak berubah.'
+                            ) : (
+                                <>
+                                    Website ini tidak akan dilayani lagi oleh
+                                    server. File di{' '}
+                                    <code className="font-mono text-xs">
+                                        domains/{domain.name}/public_html
+                                    </code>{' '}
+                                    tetap tersimpan di folder home kamu.
+                                </>
+                            )}
                             {domain.ssl_status === 'active' &&
                                 ' Sertifikat SSL-nya ikut dihapus.'}
+                            {domain.children_count > 0 &&
+                                ` ${domain.children_count} subdomain dan pointer milik domain ini ikut dihapus.`}
                         </DialogDescription>
                     </DialogHeader>
 
@@ -776,7 +739,7 @@ function DeleteDomainForm({
                             disabled={processing}
                         >
                             {processing && <Spinner />}
-                            Hapus domain
+                            Hapus {typeLabels[domain.type]}
                         </Button>
                     </DialogFooter>
                 </>
