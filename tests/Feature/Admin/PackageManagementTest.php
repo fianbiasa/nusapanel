@@ -2,10 +2,13 @@
 
 namespace Tests\Feature\Admin;
 
+use App\Enums\AccountStatus;
 use App\Models\AuditLog;
 use App\Models\Package;
+use App\Models\Task;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Inertia\Testing\AssertableInertia as Assert;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
@@ -18,7 +21,7 @@ class PackageManagementTest extends TestCase
     {
         $admin = User::factory()->admin()->create();
         $pro = Package::factory()->unlimited()->withoutSsl()->create(['name' => 'Pro']);
-        $basic = Package::factory()->create(['name' => 'Basic', 'description' => 'Small sites', 'domains' => 3, 'disk_mb' => 1024]);
+        $basic = Package::factory()->create(['name' => 'Basic', 'description' => 'Small sites', 'domains' => 3, 'disk_mb' => 1024, 'inodes' => 50000]);
         User::factory()->count(2)->create(['package_id' => $basic->id]);
 
         $this->actingAs($admin)
@@ -33,7 +36,8 @@ class PackageManagementTest extends TestCase
                     ->where('description', 'Small sites')
                     ->where('limits.domains', 3)
                     ->where('limits.disk_mb', 1024)
-                    ->has('limits', 8)
+                    ->where('limits.inodes', 50000)
+                    ->has('limits', 9)
                     ->where('ssl', true)
                     ->where('accounts_count', 2))
                 ->where('packages.1.id', $pro->id)
@@ -68,6 +72,7 @@ class PackageManagementTest extends TestCase
         $this->actingAs($admin)
             ->post(route('admin.packages.store'), $this->validPackageData([
                 'bandwidth_mb' => '',
+                'inodes' => '',
                 'cron_jobs' => '',
                 'ssl' => '0',
             ]))
@@ -80,6 +85,7 @@ class PackageManagementTest extends TestCase
         $this->assertSame('For small websites', $package->description);
         $this->assertSame($admin->id, $package->owner_id);
         $this->assertSame(1024, $package->disk_mb);
+        $this->assertNull($package->inodes);
         $this->assertSame(3, $package->domains);
         $this->assertSame(0, $package->ftp_accounts);
         $this->assertNull($package->bandwidth_mb);
@@ -104,6 +110,9 @@ class PackageManagementTest extends TestCase
             'description too long' => [['description' => str_repeat('a', 256)], 'description'],
             'negative limit' => [['domains' => '-1'], 'domains'],
             'fractional limit' => [['disk_mb' => '1.5'], 'disk_mb'],
+            'no disk space, which the server reads as unlimited' => [['disk_mb' => '0'], 'disk_mb'],
+            'no inodes, which the server reads as unlimited' => [['inodes' => '0'], 'inodes'],
+            'fractional inode limit' => [['inodes' => '2.5'], 'inodes'],
             'limit too large' => [['bandwidth_mb' => '1000000001'], 'bandwidth_mb'],
             'ssl not a boolean' => [['ssl' => 'yes'], 'ssl'],
         ];
@@ -162,7 +171,7 @@ class PackageManagementTest extends TestCase
         ]);
 
         $this->actingAs($admin)
-            ->put(route('admin.packages.update', $package), $this->validPackageData(['domains' => '5', 'disk_mb' => '']))
+            ->put(route('admin.packages.update', $package), $this->validPackageData(['domains' => '5', 'disk_mb' => '', 'inodes' => '80000']))
             ->assertSessionHasNoErrors()
             ->assertRedirect(route('admin.packages.index'));
 
@@ -171,6 +180,7 @@ class PackageManagementTest extends TestCase
         $this->assertSame('Basic', $package->name);
         $this->assertSame(5, $package->domains);
         $this->assertNull($package->disk_mb);
+        $this->assertSame(80000, $package->inodes);
 
         $log = AuditLog::query()->where('action', 'package.updated')->sole();
 
@@ -178,9 +188,53 @@ class PackageManagementTest extends TestCase
         $this->assertSame((string) $package->id, (string) $log->subject_id);
         $this->assertEquals([
             'name' => 'Basic',
-            'from' => ['disk_mb' => 1024, 'domains' => 3],
-            'to' => ['disk_mb' => null, 'domains' => 5],
+            'from' => ['disk_mb' => 1024, 'inodes' => 50000, 'domains' => 3],
+            'to' => ['disk_mb' => null, 'inodes' => 80000, 'domains' => 5],
         ], $log->changes);
+    }
+
+    public function test_changing_the_disk_or_inode_limit_queues_the_disk_quota_of_the_hosting_accounts_on_the_package()
+    {
+        Queue::fake();
+
+        $admin = User::factory()->admin()->create();
+        $package = Package::factory()->create(['name' => 'Basic', 'disk_mb' => 1024, 'inodes' => 50000]);
+        $budi = User::factory()->create(['username' => 'budi', 'package_id' => $package->id]);
+        User::factory()->suspended()->create(['username' => 'sari', 'package_id' => $package->id]);
+        foreach ([AccountStatus::Pending, AccountStatus::Deleting, AccountStatus::Failed] as $status) {
+            User::factory()->create(['status' => $status, 'package_id' => $package->id]);
+        }
+        User::factory()->create(['package_id' => Package::factory()->create()->id]);
+
+        $this->actingAs($admin)
+            ->put(route('admin.packages.update', $package), $this->validPackageData(['disk_mb' => '2048', 'inodes' => '']))
+            ->assertSessionHasNoErrors();
+
+        $tasks = Task::query()->where('action', 'account.set_quota')->get();
+
+        $this->assertCount(2, $tasks);
+        $this->assertSame([
+            ['username' => 'budi', 'disk_mb' => 2048, 'inodes' => 0],
+            ['username' => 'sari', 'disk_mb' => 2048, 'inodes' => 0],
+        ], $tasks->sortBy(fn (Task $task) => $task->payload['username'])->pluck('payload')->values()->all());
+        $this->assertSame($budi->id, $tasks->firstWhere('payload.username', 'budi')->user_id);
+        $this->assertSame([$admin->id], $tasks->pluck('actor_id')->unique()->values()->all());
+        $this->assertDatabaseCount('tasks', 2);
+    }
+
+    public function test_changing_other_limits_of_a_package_leaves_disk_quotas_alone()
+    {
+        Queue::fake();
+
+        $package = Package::factory()->create(['name' => 'Basic', 'disk_mb' => 1024, 'inodes' => 50000]);
+        User::factory()->create(['package_id' => $package->id]);
+
+        $this->actingAs(User::factory()->admin()->create())
+            ->put(route('admin.packages.update', $package), $this->validPackageData(['name' => 'Starter', 'domains' => '5', 'ssl' => '0']))
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame('Starter', $package->fresh()->name);
+        $this->assertDatabaseCount('tasks', 0);
     }
 
     public function test_saving_a_package_unchanged_records_nothing()
@@ -189,6 +243,7 @@ class PackageManagementTest extends TestCase
             'name' => 'Basic',
             'description' => 'For small websites',
             'disk_mb' => 1024,
+            'inodes' => 50000,
             'bandwidth_mb' => 10240,
             'domains' => 3,
             'subdomains' => 10,
@@ -296,6 +351,7 @@ class PackageManagementTest extends TestCase
             'name' => 'Basic',
             'description' => 'For small websites',
             'disk_mb' => '1024',
+            'inodes' => '50000',
             'bandwidth_mb' => '10240',
             'domains' => '3',
             'subdomains' => '10',

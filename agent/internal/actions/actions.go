@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"nusapanel/agent/internal/quota"
 	"nusapanel/agent/internal/rpc"
 	"nusapanel/agent/internal/sysinfo"
 	"nusapanel/agent/internal/sysuser"
@@ -19,8 +20,9 @@ func Register(registry *rpc.Registry) {
 	registry.Register("system.info", rpc.Method{Handler: systemInfo})
 
 	web := webserver.New(webserver.DefaultConfig())
+	quotas := quota.New(quota.DefaultConfig())
 
-	for name, method := range accountMethods(sysuser.System{}, web) {
+	for name, method := range accountMethods(sysuser.System{}, web, quotas) {
 		registry.Register(name, method)
 	}
 

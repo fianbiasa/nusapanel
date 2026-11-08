@@ -6,6 +6,7 @@ use App\Enums\AccountStatus;
 use App\Enums\DomainStatus;
 use App\Enums\Role;
 use App\Jobs\RunAgentTask;
+use App\Models\AccountUsage;
 use App\Models\AuditLog;
 use App\Models\Domain;
 use App\Models\Package;
@@ -41,6 +42,7 @@ class AccountManagementTest extends TestCase
         ]);
         Domain::factory()->for($account, 'account')->primary()->create(['name' => 'xn--bcher-kva.de']);
         Domain::factory()->for($account, 'account')->create(['name' => 'second.com']);
+        AccountUsage::factory()->for($account, 'account')->create(['disk_kb' => 120 * 1024 + 1]);
 
         $response = $this->actingAs($admin)->get(route('admin.accounts.index'));
 
@@ -61,7 +63,9 @@ class AccountManagementTest extends TestCase
                     ->where('package_id', $package->id)
                     ->where('package', 'Basic')
                     ->where('domain', 'bücher.de')
-                    ->has('created_at')));
+                    ->where('disk', ['used_mb' => 121, 'limit_mb' => 1024])
+                    ->has('created_at'))
+                ->where('accounts.data.1.disk', ['used_mb' => null, 'limit_mb' => null]));
 
         $response->assertDontSee($account->password, false);
     }

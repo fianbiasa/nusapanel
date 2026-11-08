@@ -212,6 +212,7 @@ return [
         'email' => 'email',
         'email_accounts' => 'batas akun email',
         'ftp_accounts' => 'batas akun FTP',
+        'inodes' => 'batas inode',
         'name' => 'nama',
         'package' => 'paket',
         'package_id' => 'paket',

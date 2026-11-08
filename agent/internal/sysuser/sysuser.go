@@ -112,6 +112,26 @@ func parsePasswd(line string) (User, error) {
 	}, nil
 }
 
+// parsePasswdList parses every entry printed by `getent passwd`.
+func parsePasswdList(output []byte) ([]User, error) {
+	var users []User
+
+	for line := range strings.Lines(string(output)) {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+
+		user, err := parsePasswd(line)
+		if err != nil {
+			return nil, err
+		}
+
+		users = append(users, user)
+	}
+
+	return users, nil
+}
+
 // parseGroup parses one group entry, as printed by `getent group`.
 func parseGroup(line string) (Group, error) {
 	fields := strings.Split(strings.TrimSuffix(line, "\n"), ":")

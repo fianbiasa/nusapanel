@@ -25,17 +25,20 @@ import { formatMegabytes } from '@/lib/format';
 import { create, destroy, edit } from '@/routes/admin/packages';
 import type { HostingPackage } from '@/types';
 
-/** "3 domain · 1 GB disk · SSL" */
+/** "3 domain · 1 GB disk · 50.000 inode · SSL"; the inode limit only when set. */
 function keyLimits(pkg: HostingPackage): string {
-    const { domains, disk_mb } = pkg.limits;
+    const { domains, disk_mb, inodes } = pkg.limits;
 
     return [
         domains === null ? 'Domain tanpa batas' : `${domains} domain`,
         disk_mb === null
             ? 'Disk tanpa batas'
             : `${formatMegabytes(disk_mb)} disk`,
+        inodes !== null && `${inodes.toLocaleString('id-ID')} inode`,
         pkg.ssl ? 'SSL' : 'Tanpa SSL',
-    ].join(' · ');
+    ]
+        .filter(Boolean)
+        .join(' · ');
 }
 
 /** "10 GB bandwidth · 10 email · 5 database", for the limits that are set. */

@@ -24,6 +24,25 @@ func TestParsePasswd(t *testing.T) {
 	}
 }
 
+func TestParsePasswdList(t *testing.T) {
+	users, err := parsePasswdList([]byte("root:x:0:0:root:/root:/bin/bash\n\nbudi:x:1001:1001:nusapanel:/home/budi:/usr/sbin/nologin\n"))
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+
+	want := []User{
+		{Name: "root", UID: 0, GID: 0, Comment: "root", Home: "/root", Shell: "/bin/bash"},
+		{Name: "budi", UID: 1001, GID: 1001, Comment: "nusapanel", Home: "/home/budi", Shell: "/usr/sbin/nologin"},
+	}
+	if !reflect.DeepEqual(users, want) {
+		t.Fatalf("got %+v, want %+v", users, want)
+	}
+
+	if _, err := parsePasswdList([]byte("root:x:0:0:root:/root:/bin/bash\nbroken\n")); err == nil {
+		t.Fatal("a malformed entry was accepted")
+	}
+}
+
 func TestParsePasswdRejectsMalformedEntries(t *testing.T) {
 	invalid := []string{
 		"",

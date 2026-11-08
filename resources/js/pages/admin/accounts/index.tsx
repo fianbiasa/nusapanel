@@ -36,7 +36,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { useInitials } from '@/hooks/use-initials';
-import { formatDateTime, roleLabels } from '@/lib/format';
+import { cn } from '@/lib/utils';
+import { formatDateTime, formatDiskUsage, roleLabels } from '@/lib/format';
 import {
     create,
     destroy,
@@ -59,6 +60,8 @@ type AccountRow = {
     package_id: number | null;
     package: string | null;
     domain: string | null;
+    /** Megabytes; `used_mb` is null until the server measured the account. */
+    disk: { used_mb: number | null; limit_mb: number | null };
     created_at: string | null;
 };
 
@@ -173,6 +176,7 @@ export default function AccountsIndex({ accounts, packages, filters }: Props) {
                                     <th className={tableStyles.th}>Akun</th>
                                     <th className={tableStyles.th}>Domain</th>
                                     <th className={tableStyles.th}>Paket</th>
+                                    <th className={tableStyles.th}>Disk</th>
                                     <th className={tableStyles.th}>Peran</th>
                                     <th className={tableStyles.th}>Status</th>
                                     <th className={tableStyles.th}>Pemilik</th>
@@ -218,6 +222,19 @@ export default function AccountsIndex({ accounts, packages, filters }: Props) {
                                                 <span className="text-muted-foreground">
                                                     —
                                                 </span>
+                                            )}
+                                        </td>
+                                        <td
+                                            className={cn(
+                                                tableStyles.td,
+                                                'whitespace-nowrap',
+                                                account.disk.used_mb === null &&
+                                                    'text-muted-foreground',
+                                            )}
+                                        >
+                                            {formatDiskUsage(
+                                                account.disk.used_mb,
+                                                account.disk.limit_mb,
                                             )}
                                         </td>
                                         <td className={tableStyles.td}>

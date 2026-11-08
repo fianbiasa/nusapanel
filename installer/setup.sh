@@ -33,6 +33,9 @@ readonly DNS_REPORT="$CONFIG_DIR/dns-records.txt"
 readonly RELEASE_REPO="fianbiasa/nusapanel"
 readonly POLICY_RC="/usr/sbin/policy-rc.d"
 readonly POLICY_RC_MARKER="# nusapanel setup.sh: temporary"
+# Journaled user quota options (vfsv1, in aquota.user) that configure_quota
+# adds to the /etc/fstab line of the filesystem holding /home.
+readonly QUOTA_OPTIONS="usrjquota=aquota.user,jqfmt=vfsv1"
 
 # Stamped by installer/build-release.sh into the setup.sh published with each
 # release, so that script installs its own version by default. Empty in the
@@ -63,6 +66,9 @@ stale_release=""
 ssl_status=""
 dkim_public_key=""
 dns_report_lines=()
+# Mount point whose user quotas configure_quota turned on or found on; empty
+# when disk quotas are not enforced on this server.
+quota_mount=""
 # Set while our temporary policy-rc.d is in place.
 policy_rc_created=0
 
@@ -594,7 +600,7 @@ postfix postfix/main_mailer_type select Internet Site
 postfix postfix/mailname string $server_hostname
 DEBCONF
 
-    quietly "${apt[@]}" install nginx mariadb-server postfix opendkim opendkim-tools certbot python3 \
+    quietly "${apt[@]}" install nginx mariadb-server postfix opendkim opendkim-tools certbot python3 quota \
         "php$PHP_VERSION-fpm" "php$PHP_VERSION-cli" "php$PHP_VERSION-common" "php$PHP_VERSION-mysql" \
         "php$PHP_VERSION-mbstring" "php$PHP_VERSION-xml" "php$PHP_VERSION-curl" "php$PHP_VERSION-intl" \
         "php$PHP_VERSION-zip" "php$PHP_VERSION-bcmath" "php$PHP_VERSION-opcache" "php$PHP_VERSION-readline" \
@@ -1124,6 +1130,236 @@ CONF
     info "Apache hanya mendengar di 127.0.0.1:8080, di belakang Nginx"
 }
 
+# Whether the mount options in $1 (comma separated) turn on user quotas, on
+# ext3/ext4 or XFS.
+has_user_quota_option() {
+    local option options
+    IFS=, read -ra options <<<"$1"
+
+    for option in "${options[@]}"; do
+        case "$option" in
+            usrquota | uquota | quota | usrjquota=?*) return 0 ;;
+        esac
+    done
+
+    return 1
+}
+
+# Whether user quotas are on for the filesystem mounted at $1. quotaon -p
+# exits with the number of quota types that are on, so only its output
+# tells "on" from a failure.
+user_quota_on() {
+    local line
+    while IFS= read -r line; do
+        if [[ "$line" == "user quota on $1 ("*") is on" ]]; then
+            return 0
+        fi
+    done < <(LC_ALL=C quotaon -p -u "$1" 2>/dev/null || true)
+
+    return 1
+}
+
+# Append $QUOTA_OPTIONS to the options (4th field) of the one /etc/fstab
+# line mounted at $1, after saving the file as $2. Every other line stays
+# byte for byte the same. Fails, with /etc/fstab unchanged, when the file
+# does not verify before or after the change. Every step is checked by hand:
+# callers test the result, which turns off set -e in here.
+add_fstab_quota_options() {
+    local target="$1" backup="$2" candidate=/etc/fstab.nusapanel-new
+
+    if ! findmnt --verify --tab-file /etc/fstab >>"$INSTALL_LOG" 2>&1; then
+        warn "/etc/fstab sudah bermasalah menurut findmnt --verify; tidak diubah, kuota disk dilewati"
+        return 1
+    fi
+
+    # The candidate is a copy first, so it gets the owner and mode of
+    # /etc/fstab.
+    if ! cp -p /etc/fstab "$backup" || ! cp -p /etc/fstab "$candidate" ||
+        ! awk -v target="$target" -v add=",$QUOTA_OPTIONS" '
+        $1 !~ /^#/ && $2 == target {
+            rest = $0; line = ""; field = 0
+            while (rest != "") {
+                match(rest, /^[ \t]*/)
+                line = line substr(rest, 1, RLENGTH)
+                rest = substr(rest, RLENGTH + 1)
+                if (rest == "") break
+                match(rest, /^[^ \t]+/)
+                word = substr(rest, 1, RLENGTH)
+                rest = substr(rest, RLENGTH + 1)
+                if (++field == 4) word = word add
+                line = line word
+            }
+            print line
+            next
+        }
+        { print }
+    ' /etc/fstab >"$candidate"; then
+        rm -f "$candidate"
+        warn "/etc/fstab tidak bisa disalin atau diubah; tidak diubah, kuota disk dilewati"
+        return 1
+    fi
+
+    if ! findmnt --verify --tab-file "$candidate" >>"$INSTALL_LOG" 2>&1; then
+        rm -f "$candidate"
+        warn "/etc/fstab dengan opsi kuota tidak lolos findmnt --verify; tidak diubah, kuota disk dilewati"
+        return 1
+    fi
+
+    if ! mv -f "$candidate" /etc/fstab; then
+        rm -f "$candidate"
+        warn "/etc/fstab tidak bisa diganti; tidak diubah, kuota disk dilewati"
+        return 1
+    fi
+
+    if ! findmnt --verify --tab-file /etc/fstab >>"$INSTALL_LOG" 2>&1; then
+        restore_fstab "$backup"
+        warn "/etc/fstab baru tidak lolos findmnt --verify; dikembalikan dari $backup, kuota disk dilewati"
+        return 1
+    fi
+
+    info "Opsi $QUOTA_OPTIONS ditambahkan untuk $target di /etc/fstab (cadangan: $backup)"
+}
+
+# Put back /etc/fstab from the backup $1. A failure is shouted about, since
+# the server would boot with the changed file.
+restore_fstab() {
+    if ! cp -p "$1" /etc/fstab; then
+        warn "/etc/fstab TIDAK bisa dikembalikan; kembalikan manual sebelum reboot: cp -p $1 /etc/fstab"
+    fi
+}
+
+# Undo a failed attempt to turn on quotas for the filesystem mounted at $1:
+# quotas off and, when /etc/fstab was changed (saved as $2), the old fstab
+# back and the filesystem remounted with it. $3 says what went wrong.
+undo_quota() {
+    local target="$1" backup="$2" reason="$3"
+
+    quotaoff -u "$target" >>"$INSTALL_LOG" 2>&1 || true
+
+    if [[ -n "$backup" ]]; then
+        restore_fstab "$backup"
+        if ! mount -o remount "$target" >>"$INSTALL_LOG" 2>&1; then
+            warn "$target tidak bisa di-remount dengan /etc/fstab lama; opsi lama berlaku lagi setelah reboot"
+        fi
+        systemctl daemon-reload >>"$INSTALL_LOG" 2>&1 || true
+        reason="$reason; /etc/fstab dikembalikan seperti semula"
+    fi
+
+    warn "$reason. Kuota disk tidak aktif: panel tetap jalan, tapi ukuran akun tidak dibatasi (detail di $INSTALL_LOG)"
+}
+
+# Turn on journaled user quotas for the ext3/ext4 filesystem mounted at $1,
+# whose current mount options are $2: add the options to its /etc/fstab line
+# when missing, remount it, build aquota.user and turn quotas on. Anything
+# that fails is undone.
+enable_journaled_quota() {
+    local target="$1" active_options="$2"
+    local lines fstab_options backup=""
+
+    lines="$(awk -v target="$target" '$1 !~ /^#/ && $2 == target {n++} END {print n + 0}' /etc/fstab)"
+    if ((lines != 1)); then
+        warn "/etc/fstab punya $lines baris untuk $target (seharusnya 1); kuota disk dilewati, ukuran akun tidak dibatasi"
+        return
+    fi
+
+    fstab_options="$(awk -v target="$target" '$1 !~ /^#/ && $2 == target {print $4}' /etc/fstab)"
+    if [[ -z "$fstab_options" ]]; then
+        warn "baris $target di /etc/fstab tidak punya kolom opsi; kuota disk dilewati, ukuran akun tidak dibatasi"
+        return
+    fi
+
+    if ! has_user_quota_option "$fstab_options"; then
+        backup="/etc/fstab.nusapanel-$(date +%Y%m%d-%H%M%S)"
+        add_fstab_quota_options "$target" "$backup" || return 0
+        systemctl daemon-reload >>"$INSTALL_LOG" 2>&1 || true
+    fi
+
+    # Without a source, mount takes the options of $target from /etc/fstab.
+    if ! has_user_quota_option "$active_options" && ! mount -o remount "$target" >>"$INSTALL_LOG" 2>&1; then
+        undo_quota "$target" "$backup" "kernel menolak opsi kuota saat remount $target"
+        return
+    fi
+
+    # quotacheck without -c keeps the limits in an aquota.user left by an
+    # earlier attempt; -m scans without remounting read-only.
+    if ! { [[ -s "${target%/}/aquota.user" ]] && quotacheck -um "$target" >>"$INSTALL_LOG" 2>&1; } &&
+        ! quotacheck -cum "$target" >>"$INSTALL_LOG" 2>&1; then
+        undo_quota "$target" "$backup" "quotacheck gagal untuk $target"
+        return
+    fi
+
+    if ! quotaon -u "$target" >>"$INSTALL_LOG" 2>&1 || ! user_quota_on "$target"; then
+        undo_quota "$target" "$backup" "kuota user tidak bisa dinyalakan di $target (kernel tanpa modul quota_v2?)"
+        return
+    fi
+
+    quota_mount="$target"
+    info "Kuota disk aktif di $target (journaled, aquota.user); tetap aktif setelah reboot"
+}
+
+# Disk quotas for hosting accounts: journaled user quotas on the filesystem
+# that holds /home, which the agent sets per account (account.set_quota).
+# Never fails the install: where quotas cannot be turned on safely, the
+# panel keeps working without them and the agent reports them as off. Only
+# the /etc/fstab line of that filesystem is changed, after a backup; nothing
+# is rebooted and group quotas are never used.
+configure_quota() {
+    step "Mengatur kuota disk akun hosting"
+
+    quota_mount=""
+
+    # Tested directly: a failing command inside $(...) would fire the ERR
+    # trap even here.
+    if systemd-detect-virt --container --quiet; then
+        warn "server ini container ($(systemd-detect-virt --container || true)), yang tidak bisa memakai kuota disk;" \
+            "ukuran akun tidak dibatasi"
+        return
+    fi
+
+    local target source fstype options
+    target="$(findmnt --noheadings --output TARGET --target /home 2>/dev/null || true)"
+    source="$(findmnt --noheadings --output SOURCE --target /home 2>/dev/null || true)"
+    fstype="$(findmnt --noheadings --output FSTYPE --target /home 2>/dev/null || true)"
+    options="$(findmnt --noheadings --output OPTIONS --target /home 2>/dev/null || true)"
+    printf 'configure_quota: /home is on %s (%s, %s, %s)\n' "$target" "$source" "$fstype" "$options" >>"$INSTALL_LOG"
+
+    if [[ -z "$target" || -z "$fstype" ]]; then
+        warn "filesystem /home tidak ditemukan; kuota disk dilewati, ukuran akun tidak dibatasi"
+        return
+    fi
+
+    if user_quota_on "$target"; then
+        quota_mount="$target"
+        info "Kuota disk sudah aktif di $target"
+    else
+        case "$fstype" in
+            ext4 | ext3)
+                enable_journaled_quota "$target" "$options"
+                ;;
+            xfs)
+                if has_user_quota_option "$options"; then
+                    quota_mount="$target"
+                    info "Kuota disk XFS sudah aktif di $target"
+                else
+                    warn "/home ada di XFS ($target): kuota XFS hanya bisa dinyalakan saat boot dengan opsi mount uquota" \
+                        "(untuk root filesystem: rootflags=uquota di kernel command line). Atur itu, reboot, lalu jalankan setup.sh lagi;" \
+                        "sampai saat itu ukuran akun tidak dibatasi"
+                fi
+                ;;
+            *)
+                warn "filesystem $fstype di $target belum didukung untuk kuota disk; ukuran akun tidak dibatasi"
+                ;;
+        esac
+    fi
+
+    # The quota package asks for a quotacheck -c of every filesystem at the
+    # next boot (quota.service), which would rebuild aquota.user without the
+    # limits the agent sets; the quota files are already checked.
+    if [[ -n "$quota_mount" ]]; then
+        rm -f /var/lib/quota/new
+    fi
+}
+
 configure_logrotate() {
     render "$release_dir/config/logrotate.conf" /etc/logrotate.d/nusapanel
     info "Rotasi log panel diatur (/etc/logrotate.d/nusapanel)"
@@ -1150,6 +1386,19 @@ rebuild_websites() {
         info "Konfigurasi semua website diperbarui di latar belakang (lihat Tasks di panel)"
     else
         warn "konfigurasi website tidak bisa diperbarui; jalankan lagi: runuser -u $PANEL_USER -- $PHP_BIN $INSTALL_DIR/current/panel/artisan nusapanel:rebuild-web"
+    fi
+}
+
+# Accounts created before quotas existed, or before they were turned on
+# here, get the limits of their package. Queued like rebuild_websites; when
+# quotas are off the agent reports that they could not be applied.
+apply_quotas() {
+    step "Menerapkan kuota disk akun hosting"
+
+    if artisan nusapanel:apply-quotas >>"$INSTALL_LOG" 2>&1; then
+        info "Kuota disk semua akun diterapkan di latar belakang (lihat Tasks di panel)"
+    else
+        warn "kuota disk akun tidak bisa diterapkan; jalankan lagi: runuser -u $PANEL_USER -- $PHP_BIN $INSTALL_DIR/current/panel/artisan nusapanel:apply-quotas"
     fi
 }
 
@@ -1206,6 +1455,15 @@ verify_install() {
 
     systemctl is-active --quiet opendkim || die "OpenDKIM tidak berjalan (cek: journalctl -u opendkim)"
     info "OpenDKIM aktif"
+
+    # Quotas are optional, so losing them only warns.
+    if [[ -n "$quota_mount" ]]; then
+        if user_quota_on "$quota_mount"; then
+            info "Kuota disk aktif di $quota_mount"
+        else
+            warn "kuota disk di $quota_mount tidak aktif lagi (cek: quotaon -p -u $quota_mount); jalankan setup.sh lagi"
+        fi
+    fi
 
     # With a real certificate, check it the way a browser would: by name, with
     # full chain verification (no -k).
@@ -1289,6 +1547,12 @@ summary() {
         info "SSL      : self-signed sementara; browser akan memberi peringatan"
     fi
 
+    if [[ -n "$quota_mount" ]]; then
+        info "Kuota    : disk & inode tiap akun dibatasi sesuai paketnya (kuota user di $quota_mount)"
+    else
+        info "Kuota    : tidak aktif di server ini; ukuran akun tidak dibatasi (alasan di $INSTALL_LOG)"
+    fi
+
     printf '\n'
     info "Rekaman DNS untuk email panel (disimpan juga di $DNS_REPORT):"
 
@@ -1348,10 +1612,12 @@ main() {
     configure_php_fpm
     configure_nginx
     configure_web
+    configure_quota
     configure_logrotate
     install_services
     verify_install
     rebuild_websites
+    apply_quotas
     # Last, right before the summary, so a failure in an earlier step can never
     # leave an admin whose generated password was not shown.
     create_admin

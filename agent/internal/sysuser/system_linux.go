@@ -65,6 +65,21 @@ func (System) LookupUser(ctx context.Context, name string) (User, error) {
 	return user, nil
 }
 
+// ListUsers returns every user NSS knows, in the order getent lists them.
+func (System) ListUsers(ctx context.Context) ([]User, error) {
+	output, err := runner.Run(ctx, getentProgram, "passwd")
+	if err != nil {
+		return nil, fmt.Errorf("list users: %w", err)
+	}
+
+	users, err := parsePasswdList(output)
+	if err != nil {
+		return nil, fmt.Errorf("list users: %w", err)
+	}
+
+	return users, nil
+}
+
 // EnsureGroupMember creates group as a system group when it is missing, adds
 // member to it when needed, and returns the group's GID.
 func (s System) EnsureGroupMember(ctx context.Context, group, member string) (int, error) {

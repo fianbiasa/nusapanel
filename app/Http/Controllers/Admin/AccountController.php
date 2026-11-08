@@ -7,6 +7,7 @@ use App\Http\Requests\Admin\StoreAccountRequest;
 use App\Models\Package;
 use App\Models\User;
 use App\Services\AccountService;
+use App\Support\AccountLimits;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -20,7 +21,8 @@ class AccountController extends Controller
     public function __construct(private AccountService $accounts) {}
 
     /**
-     * List accounts, newest first, optionally filtered by username, name or email.
+     * List accounts, newest first, optionally filtered by username, name or
+     * email, with each hosting account's disk usage as last measured.
      */
     public function index(Request $request): Response
     {
@@ -31,7 +33,7 @@ class AccountController extends Controller
         $search = trim((string) ($validated['search'] ?? ''));
 
         $accounts = User::query()
-            ->with(['owner:id,username', 'package:id,name', 'primaryDomain:id,user_id,name'])
+            ->with(['owner:id,username', 'package:id,name,disk_mb', 'primaryDomain:id,user_id,name', 'diskUsage'])
             ->when($search !== '', fn (Builder $query) => $query->where(fn (Builder $query) => $query
                 ->where('username', 'like', "%{$search}%")
                 ->orWhere('name', 'like', "%{$search}%")
@@ -51,6 +53,7 @@ class AccountController extends Controller
                 'package_id' => $account->package_id,
                 'package' => $account->package?->name,
                 'domain' => $account->primaryDomain?->display_name,
+                'disk' => $this->diskUsage($account),
                 'created_at' => $account->created_at?->toIso8601String(),
             ]);
 
@@ -160,6 +163,19 @@ class AccountController extends Controller
         ]);
 
         return back();
+    }
+
+    /**
+     * The account's disk usage and limit in megabytes; usage is null when it
+     * was never measured.
+     *
+     * @return array{used_mb: int|null, limit_mb: int|null}
+     */
+    private function diskUsage(User $account): array
+    {
+        $limits = AccountLimits::for($account);
+
+        return ['used_mb' => $limits->usage('disk_mb'), 'limit_mb' => $limits->limit('disk_mb')];
     }
 
     /**

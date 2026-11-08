@@ -1,16 +1,25 @@
 package actions
 
 import (
+	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
+	"log/slog"
+	"maps"
+	"path/filepath"
 	"reflect"
 	"runtime"
 	"slices"
+	"strings"
 	"testing"
 
+	"nusapanel/agent/internal/quota"
 	"nusapanel/agent/internal/rpc"
+	"nusapanel/agent/internal/runner"
 	"nusapanel/agent/internal/sysuser"
 	"nusapanel/agent/internal/webserver"
 )
@@ -61,18 +70,30 @@ func TestAccountMethodsRejectUnknownParams(t *testing.T) {
 }
 
 func TestAccountMethodsLockTheAccount(t *testing.T) {
+	params := map[string]string{"account.set_quota": `{"username":"budi","disk_mb":1024,"inodes":0}`}
+
 	system := newFakeSystem()
-	for name, method := range accountMethods(system, system) {
+	for name, method := range accountMethods(system, system, system.quotaManager()) {
+		if name == "quota.report" {
+			if method.LockKey != nil {
+				t.Fatal("quota.report only reads, but locks")
+			}
+
+			continue
+		}
+
 		if method.LockKey == nil {
 			t.Fatalf("%s has no lock key", name)
 		}
 
-		key, err := method.LockKey(json.RawMessage(`{"username":"budi"}`))
+		raw := cmp.Or(params[name], `{"username":"budi"}`)
+
+		key, err := method.LockKey(json.RawMessage(raw))
 		if err != nil || key != "account:budi" {
 			t.Fatalf("%s lock key = %q, %v; want account:budi", name, key, err)
 		}
 
-		_, err = method.LockKey(json.RawMessage(`{"username":"root"}`))
+		_, err = method.LockKey(json.RawMessage(strings.Replace(raw, "budi", "root", 1)))
 		assertCode(t, err, rpc.CodeInvalidParams)
 	}
 }
@@ -240,7 +261,8 @@ func TestDeleteRemovesWebsitesKillsProcessesThenRemovesTheAccount(t *testing.T) 
 		t.Fatalf("unexpected result %s", result)
 	}
 
-	assertCalls(t, system, "lookup budi", "web remove budi", "kill 1001", "userdel budi")
+	assertCalls(t, system, "lookup budi", "web remove budi", "kill 1001",
+		"quotaon -p -u /", "setquota -u -- budi 0 0 0 0 /", "userdel budi")
 
 	if _, exists := system.users["budi"]; exists {
 		t.Fatal("the user still exists")
@@ -341,8 +363,8 @@ func TestUnsupportedPlatformsGetAReadableError(t *testing.T) {
 	}
 }
 
-// callAccount runs method the way the server does: lock key first, then the
-// handler. The result is returned as JSON.
+// callAccount runs method the way the server does: lock key first (when it
+// has one), then the handler. The result is returned as JSON.
 func callAccount(t *testing.T, system accountSystem, method string, params any) (json.RawMessage, error) {
 	t.Helper()
 
@@ -356,13 +378,20 @@ func callAccount(t *testing.T, system accountSystem, method string, params any) 
 		web = unreachableWeb{t}
 	}
 
-	registered, ok := accountMethods(system, web)[method]
+	var quotas accountQuota = unreachableQuota{t}
+	if fake, ok := system.(*fakeSystem); ok {
+		quotas = fake.quotaManager()
+	}
+
+	registered, ok := accountMethods(system, web, quotas)[method]
 	if !ok {
 		t.Fatalf("unknown method %s", method)
 	}
 
-	if _, err := registered.LockKey(raw); err != nil {
-		return nil, err
+	if registered.LockKey != nil {
+		if _, err := registered.LockKey(raw); err != nil {
+			return nil, err
+		}
 	}
 
 	result, err := registered.Handler(context.Background(), raw)
@@ -414,15 +443,65 @@ type fakeSystem struct {
 	failWith error
 	// webFailWith, when set, is returned by the web methods.
 	webFailWith error
+
+	// quotaState is what quotaon -p reports for /, the filesystem of
+	// /home: "on", "off", "none" (mounted without quota options) or
+	// "missing" (the quota tools are not installed).
+	quotaState string
+	// repquota is the output of repquota.
+	repquota string
+	// quotaFailWith, when set, is returned by setquota and repquota.
+	quotaFailWith error
+	// quotaLogs receives what the quota manager logs.
+	quotaLogs bytes.Buffer
 }
 
 func newFakeSystem() *fakeSystem {
 	return &fakeSystem{
-		users:  map[string]sysuser.User{},
-		groups: map[string]*sysuser.Group{},
-		homes:  map[string]sysuser.Home{},
-		nextID: 1001,
+		users:      map[string]sysuser.User{},
+		groups:     map[string]*sysuser.Group{},
+		homes:      map[string]sysuser.Home{},
+		nextID:     1001,
+		quotaState: "on",
 	}
+}
+
+// quotaManager returns a real quota manager whose programs are faked by
+// runQuota, which records them as calls.
+func (f *fakeSystem) quotaManager() *quota.Manager {
+	return quota.New(quota.Config{
+		HomeRoot:   "/home",
+		MountPoint: func(string) (string, error) { return "/", nil },
+		Run:        f.runQuota,
+		Logger:     slog.New(slog.NewTextHandler(&f.quotaLogs, nil)),
+	})
+}
+
+func (f *fakeSystem) runQuota(_ context.Context, program string, args ...string) ([]byte, error) {
+	name := filepath.Base(program)
+	f.calls = append(f.calls, name+" "+strings.Join(args, " "))
+
+	switch name {
+	case "quotaon":
+		switch f.quotaState {
+		case "on":
+			// quotaon -p exits with the number of quota types that are on.
+			return []byte("user quota on / (/dev/vda1) is on\n"),
+				&runner.Error{Program: program, ExitCode: 1, Err: errors.New("exit status 1")}
+		case "off":
+			return []byte("user quota on / (/dev/vda1) is off\n"), nil
+		case "none":
+			return []byte("quotaon: Mountpoint (or device) / not found or has no quota enabled.\n"), nil
+		case "missing":
+			return nil, &runner.Error{Program: program, ExitCode: -1, Err: fmt.Errorf("fork/exec %s: %w", program, fs.ErrNotExist)}
+		}
+	case "setquota":
+		return nil, f.quotaFailWith
+	case "repquota":
+		return []byte(f.repquota), f.quotaFailWith
+	}
+
+	return nil, fmt.Errorf("unexpected program %s", program)
 }
 
 // addAccount adds a user that looks like one account.create made.
@@ -509,6 +588,15 @@ func (f *fakeSystem) SetShell(_ context.Context, name, shell string) error {
 	return nil
 }
 
+func (f *fakeSystem) ListUsers(context.Context) ([]sysuser.User, error) {
+	f.calls = append(f.calls, "list users")
+
+	users := slices.Collect(maps.Values(f.users))
+	slices.SortFunc(users, func(a, b sysuser.User) int { return cmp.Compare(a.UID, b.UID) })
+
+	return users, nil
+}
+
 func (f *fakeSystem) KillProcesses(_ context.Context, uid int) error {
 	return f.record("kill %d", uid)
 }
@@ -570,3 +658,28 @@ func (u unreachableWeb) fail(user string) error {
 func (u unreachableWeb) SuspendAccount(_ context.Context, user string) error   { return u.fail(user) }
 func (u unreachableWeb) UnsuspendAccount(_ context.Context, user string) error { return u.fail(user) }
 func (u unreachableWeb) RemoveAccount(_ context.Context, user string) error    { return u.fail(user) }
+
+// unreachableQuota fails the test when an account method gets as far as the
+// disk quotas, for systems that must fail before that.
+type unreachableQuota struct {
+	t *testing.T
+}
+
+func (u unreachableQuota) SetUserLimits(_ context.Context, user string, _ quota.Limits) (bool, error) {
+	u.t.Helper()
+	u.t.Errorf("the quotas were reached for %s", user)
+
+	return false, errors.New("unreachable")
+}
+
+func (u unreachableQuota) ClearUserLimits(_ context.Context, user string) {
+	u.t.Helper()
+	u.t.Errorf("the quotas were reached for %s", user)
+}
+
+func (u unreachableQuota) Report(context.Context) (quota.Report, error) {
+	u.t.Helper()
+	u.t.Error("the quotas were reached")
+
+	return quota.Report{}, errors.New("unreachable")
+}

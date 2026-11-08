@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\QuotaService;
 use App\Support\AccountLimits;
 use Database\Factories\PackageFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -15,7 +16,8 @@ use InvalidArgumentException;
 /**
  * A hosting package: what the hosting accounts on it may use. Every
  * quantity limit is null when the package does not limit it.
- * {@see AccountLimits} reads the limits of an account.
+ * {@see AccountLimits} reads the limits of an account; the server enforces
+ * `disk_mb` and `inodes` as the account's disk quota ({@see QuotaService}).
  *
  * `owner_id` is deliberately not mass assignable.
  *
@@ -24,6 +26,7 @@ use InvalidArgumentException;
  * @property string $name
  * @property string|null $description
  * @property int|null $disk_mb
+ * @property int|null $inodes The number of files and directories.
  * @property int|null $bandwidth_mb
  * @property int|null $domains
  * @property int|null $subdomains
@@ -35,7 +38,7 @@ use InvalidArgumentException;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['name', 'description', 'disk_mb', 'bandwidth_mb', 'domains', 'subdomains', 'email_accounts', 'databases', 'ftp_accounts', 'cron_jobs', 'ssl'])]
+#[Fillable(['name', 'description', 'disk_mb', 'inodes', 'bandwidth_mb', 'domains', 'subdomains', 'email_accounts', 'databases', 'ftp_accounts', 'cron_jobs', 'ssl'])]
 class Package extends Model
 {
     /** @use HasFactory<PackageFactory> */
@@ -48,6 +51,7 @@ class Package extends Model
      */
     public const LIMITS = [
         'disk_mb',
+        'inodes',
         'bandwidth_mb',
         'domains',
         'subdomains',

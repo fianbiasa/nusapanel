@@ -81,14 +81,16 @@ Konvensi nama: `namespace.aksi`. "Sebagai user" = agent turun ke UID user sebelu
 
 ### account
 
-| Aksi                            | Fungsi                                                                                                                                                                                                      | Fase    |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
-| `account.create`                | Buat user & grup Linux (penanda GECOS `nusapanel`), home `0710 <user>:nusa-access`, `domains`/`tmp`/`backups`/`.trash`; quota & slice systemd menyusul                                                      | P1 ✅   |
-| `account.apply_limits`          | Quota disk/inode; batas CPU, RAM, proses, IO                                                                                                                                                                | P1 / P3 |
-| `account.suspend` / `unsuspend` | ✅ kunci password + akun kedaluwarsa (blok SSH-key/SFTP), semua website menampilkan halaman 503, PHP-FPM dihentikan (tetap mati setelah reboot); menyusul: cron. Mail & FTP otomatis ditolak lewat view SQL | P1      |
-| `account.delete`                | ✅ matikan & hapus pool PHP-FPM, hapus vhost & log domain, hentikan proses, hapus home & user Linux (akun sistem ditolak); menyusul: database, mail, dst.                                                   | P1      |
-| `account.set_password`          | Password Linux (untuk SFTP/SSH)                                                                                                                                                                             | P1      |
-| `account.rename`                | Ganti username                                                                                                                                                                                              | P6      |
+| Aksi                            | Fungsi                                                                                                                                                                                                      | Fase  |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| `account.create`                | Buat user & grup Linux (penanda GECOS `nusapanel`), home `0710 <user>:nusa-access`, `domains`/`tmp`/`backups`/`.trash`; quota & slice systemd menyusul                                                      | P1 ✅ |
+| `account.set_quota`             | ✅ `{username, disk_mb, inodes}` (0 = tanpa batas): kuota user filesystem lewat `setquota` (soft = hard). `{applied: false}` kalau kuota server belum aktif. `account.delete` membersihkan kuota UID-nya    | P1    |
+| `quota.report`                  | ✅ Pemakaian & batas disk/inode semua akun nusapanel (`repquota`), dikumpulkan panel tiap 15 menit                                                                                                          | P1    |
+| `account.apply_limits`          | Batas CPU, RAM, proses, IO (cgroups)                                                                                                                                                                        | P3    |
+| `account.suspend` / `unsuspend` | ✅ kunci password + akun kedaluwarsa (blok SSH-key/SFTP), semua website menampilkan halaman 503, PHP-FPM dihentikan (tetap mati setelah reboot); menyusul: cron. Mail & FTP otomatis ditolak lewat view SQL | P1    |
+| `account.delete`                | ✅ matikan & hapus pool PHP-FPM, hapus vhost & log domain, hentikan proses, hapus home & user Linux (akun sistem ditolak); menyusul: database, mail, dst.                                                   | P1    |
+| `account.set_password`          | Password Linux (untuk SFTP/SSH)                                                                                                                                                                             | P1    |
+| `account.rename`                | Ganti username                                                                                                                                                                                              | P6    |
 
 ### web
 
@@ -273,6 +275,8 @@ Konvensi nama: `namespace.aksi`. "Sebagai user" = agent turun ke UID user sebelu
 /etc/letsencrypt/live/<hostname>/       sertifikat Let's Encrypt hostname (certbot)
 /etc/letsencrypt/live/<domain>/         sertifikat Let's Encrypt domain customer (certbot, nama sertifikat = domain)
 /var/www/nusapanel-acme/                webroot verifikasi Let's Encrypt (port 80), dipakai hostname dan semua domain
+/aquota.user                            data kuota user (journaled, vfsv1); fstab filesystem /home mendapat usrjquota=aquota.user,jqfmt=vfsv1
+/etc/fstab.nusapanel-<waktu>            cadangan fstab sebelum setup.sh mengaktifkan kuota
 /etc/opendkim/keys/<hostname>/          kunci DKIM email panel (0600 opendkim)
 /var/lib/nusapanel/                     home user nusapanel; state agent, backup admin
 /var/lib/nusapanel/storage/             storage Laravel (log, cache view), dipakai semua rilis

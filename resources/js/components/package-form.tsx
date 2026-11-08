@@ -12,9 +12,20 @@ import { formatMegabytes, quotaKeys } from '@/lib/format';
 import { index, store, update } from '@/routes/admin/packages';
 import type { HostingPackage, QuotaKey } from '@/types';
 
-/** How each limit is asked for in the form. */
-const quotaFields: Record<QuotaKey, { label: string; unit?: string }> = {
-    disk_mb: { label: 'Disk', unit: 'MB' },
+/**
+ * How each limit is asked for in the form. Disk space and inodes start at 1:
+ * the server reads a disk quota of 0 as unlimited.
+ */
+const quotaFields: Record<
+    QuotaKey,
+    { label: string; unit?: string; min?: number; hint?: string }
+> = {
+    disk_mb: { label: 'Disk', unit: 'MB', min: 1 },
+    inodes: {
+        label: 'Inode (jumlah file)',
+        min: 1,
+        hint: 'Jumlah file dan folder yang boleh dimiliki akun.',
+    },
     bandwidth_mb: { label: 'Bandwidth per bulan', unit: 'MB' },
     domains: { label: 'Domain' },
     subdomains: { label: 'Subdomain' },
@@ -78,7 +89,7 @@ export function PackageForm({ pkg = null }: { pkg?: HostingPackage | null }) {
 
                     <Panel
                         title="Kuota"
-                        description="Centang “Tanpa batas” untuk kuota yang tidak dibatasi. Saat ini baru batas domain yang diterapkan; batas lainnya disimpan dan mulai berlaku begitu fiturnya tersedia."
+                        description="Centang “Tanpa batas” untuk kuota yang tidak dibatasi. Batas domain, SSL, disk, dan inode langsung diterapkan (disk dan inode oleh kuota disk server, bila sudah aktif). Batas email, database, FTP, cron job, subdomain, dan bandwidth disimpan dan mulai berlaku begitu fiturnya tersedia."
                     >
                         <div className="grid gap-5 md:grid-cols-2">
                             {quotaKeys.map((key) => (
@@ -87,6 +98,8 @@ export function PackageForm({ pkg = null }: { pkg?: HostingPackage | null }) {
                                     name={key}
                                     label={quotaFields[key].label}
                                     unit={quotaFields[key].unit}
+                                    min={quotaFields[key].min}
+                                    hint={quotaFields[key].hint}
                                     defaultValue={pkg ? pkg.limits[key] : null}
                                     error={errors[key]}
                                 />
@@ -142,12 +155,16 @@ function QuotaField({
     name,
     label,
     unit,
+    min = 0,
+    hint,
     defaultValue,
     error,
 }: {
     name: QuotaKey;
     label: string;
     unit?: string;
+    min?: number;
+    hint?: string;
     defaultValue: number | null;
     error?: string;
 }) {
@@ -169,13 +186,13 @@ function QuotaField({
                         name={unlimited ? undefined : name}
                         type="number"
                         inputMode="numeric"
-                        min={0}
+                        min={min}
                         step={1}
                         required={!unlimited}
                         disabled={unlimited}
                         value={unlimited ? '' : value}
                         onChange={(event) => setValue(event.target.value)}
-                        placeholder={unlimited ? 'Tanpa batas' : '0'}
+                        placeholder={unlimited ? 'Tanpa batas' : String(min)}
                         aria-invalid={error ? true : undefined}
                         className={unit ? 'pr-12' : undefined}
                     />
@@ -209,6 +226,7 @@ function QuotaField({
                         : '1 GB = 1.024 MB.'}
                 </p>
             )}
+            {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
             <InputError message={error} />
         </div>
     );

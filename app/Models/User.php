@@ -113,6 +113,16 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     }
 
     /**
+     * The hosting account's disk usage as last measured, if it ever was.
+     *
+     * @return HasOne<AccountUsage, $this>
+     */
+    public function diskUsage(): HasOne
+    {
+        return $this->hasOne(AccountUsage::class);
+    }
+
+    /**
      * The domain the account was created with, if any.
      *
      * @return HasOne<Domain, $this>

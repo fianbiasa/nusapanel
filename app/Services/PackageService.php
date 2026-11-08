@@ -9,11 +9,15 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Creates, changes and deletes hosting packages. Accounts on a package
- * follow its new limits right away; nothing changes on the server.
+ * follow its new limits right away; when its disk or inode limit changes,
+ * their disk quotas on the server are queued for the agent.
  */
 class PackageService
 {
-    public function __construct(private AuditLogger $audit) {}
+    public function __construct(
+        private AuditLogger $audit,
+        private QuotaService $quotas,
+    ) {}
 
     /**
      * Create a package owned by the actor.
@@ -35,7 +39,8 @@ class PackageService
 
     /**
      * Change a package. The audit log records the old and new value of
-     * every field that changed.
+     * every field that changed. When the disk or inode limit changed, the
+     * disk quota of every account on the package is queued again.
      *
      * @param  array<string, mixed>  $data  Validated name, description, limits and ssl.
      */
@@ -59,6 +64,10 @@ class PackageService
                 'from' => $from,
                 'to' => $package->only($changed),
             ], $actor);
+
+            if (array_intersect($changed, ['disk_mb', 'inodes']) !== []) {
+                $this->quotas->applyToPackage($package, $actor);
+            }
         });
     }
 

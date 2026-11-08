@@ -23,6 +23,7 @@ class AccountService
         private TaskDispatcher $tasks,
         private AuditLogger $audit,
         private DomainService $domains,
+        private QuotaService $quotas,
     ) {}
 
     /**
@@ -141,7 +142,8 @@ class AccountService
     /**
      * Move a hosting account to another package, or take it off packages so
      * nothing is limited. An account that already uses more than the new
-     * package allows keeps what it has, but cannot add more.
+     * package allows keeps what it has, but cannot add more. The account's
+     * disk quota on the server follows the new package.
      *
      * @throws AuthorizationException
      * @throws ValidationException
@@ -167,6 +169,8 @@ class AccountService
         DB::transaction(function () use ($account, $package, $previous, $actor): void {
             $account->forceFill(['package_id' => $package?->id])->save();
             $account->setRelation('package', $package);
+
+            $this->quotas->apply($account, $actor);
 
             $this->audit->record('account.package_changed', $account, [
                 'username' => $account->username,

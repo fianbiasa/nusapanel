@@ -31,6 +31,7 @@ export const auditActionLabels: Record<string, string> = {
 /** The quantities a package limits, in the order the panel shows them. */
 export const quotaKeys: QuotaKey[] = [
     'disk_mb',
+    'inodes',
     'bandwidth_mb',
     'domains',
     'subdomains',
@@ -43,6 +44,7 @@ export const quotaKeys: QuotaKey[] = [
 /** Display names of the quantities a package limits. */
 export const quotaLabels: Record<QuotaKey, string> = {
     disk_mb: 'Disk',
+    inodes: 'Inode',
     bandwidth_mb: 'Bandwidth',
     domains: 'Domain',
     subdomains: 'Subdomain',
@@ -66,6 +68,20 @@ export function formatMegabytes(megabytes: number): string {
     return `${value.toLocaleString('id-ID', { maximumFractionDigits: 1 })} ${units[unit]}`;
 }
 
+/** Disk usage against its limit: "120 MB / 1 GB", "120 MB" or "—". */
+export function formatDiskUsage(
+    usedMb: number | null,
+    limitMb: number | null,
+): string {
+    if (usedMb === null) {
+        return '—';
+    }
+
+    return limitMb === null
+        ? formatMegabytes(usedMb)
+        : `${formatMegabytes(usedMb)} / ${formatMegabytes(limitMb)}`;
+}
+
 /** A package limit as people read it: "1 GB", "5" or "Tanpa batas". */
 export function formatQuota(key: QuotaKey, value: number | null): string {
     if (value === null) {
@@ -83,6 +99,7 @@ export const taskActionLabels: Record<string, string> = {
     'account.suspend': 'Suspend akun',
     'account.unsuspend': 'Buka suspend akun',
     'account.delete': 'Hapus akun dari server',
+    'account.set_quota': 'Atur kuota disk',
     'web.apply_domain': 'Pasang website domain',
     'web.remove_domain': 'Lepas website domain',
     'php.remove_pool': 'Hapus pool PHP',

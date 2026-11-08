@@ -9,6 +9,7 @@ use App\Enums\DomainStatus;
 use App\Enums\TaskStatus;
 use App\Jobs\RunAgentTask;
 use App\Models\Domain;
+use App\Models\Package;
 use App\Models\Task;
 use App\Models\User;
 use App\Services\AccountService;
@@ -96,7 +97,7 @@ class ApplyAccountTaskResultTest extends TestCase
         Queue::assertPushed(RunAgentTask::class, fn (RunAgentTask $job) => $job->task->is($task));
     }
 
-    public function test_a_failed_create_task_fails_the_accounts_pending_domains()
+    public function test_a_failed_create_task_fails_the_accounts_pending_domains_and_sets_no_quota()
     {
         Queue::fake();
 
@@ -106,12 +107,56 @@ class ApplyAccountTaskResultTest extends TestCase
             'email' => 'budi@example.com',
             'password' => 'correct-horse-battery',
             'domain' => 'example.com',
+            'package_id' => Package::factory()->create(['disk_mb' => 1024])->id,
         ], User::factory()->admin()->create());
 
         $this->runQueuedTask('account.create', new AgentException('useradd: user budi already exists'));
 
         $this->assertSame(DomainStatus::Failed, Domain::query()->sole()->status);
         $this->assertFalse(Task::query()->where('action', 'web.apply_domain')->exists());
+        $this->assertFalse(Task::query()->where('action', 'account.set_quota')->exists());
+    }
+
+    public function test_a_successful_create_task_queues_the_disk_quota_of_the_accounts_package()
+    {
+        Queue::fake();
+
+        $admin = User::factory()->admin()->create();
+        $account = $this->app->make(AccountService::class)->create([
+            'username' => 'budi',
+            'name' => 'Budi Santoso',
+            'email' => 'budi@example.com',
+            'password' => 'correct-horse-battery',
+            'package_id' => Package::factory()->create(['disk_mb' => 2048, 'inodes' => null])->id,
+        ], $admin);
+
+        $this->runQueuedTask('account.create', ['username' => 'budi', 'uid' => 1001]);
+
+        $task = Task::query()->where('action', 'account.set_quota')->sole();
+
+        $this->assertSame(['username' => 'budi', 'disk_mb' => 2048, 'inodes' => 0], $task->payload);
+        $this->assertSame($account->id, $task->user_id);
+        $this->assertSame($admin->id, $task->actor_id);
+
+        Queue::assertPushed(RunAgentTask::class, fn (RunAgentTask $job) => $job->task->is($task));
+    }
+
+    public function test_a_new_account_whose_package_limits_no_disk_space_gets_no_quota()
+    {
+        Queue::fake();
+
+        $this->app->make(AccountService::class)->create([
+            'username' => 'budi',
+            'name' => 'Budi Santoso',
+            'email' => 'budi@example.com',
+            'password' => 'correct-horse-battery',
+            'package_id' => Package::factory()->create(['disk_mb' => null, 'inodes' => null])->id,
+        ], User::factory()->admin()->create());
+
+        $this->runQueuedTask('account.create', ['username' => 'budi', 'uid' => 1001]);
+
+        $this->assertSame(AccountStatus::Active, User::query()->where('username', 'budi')->sole()->status);
+        $this->assertFalse(Task::query()->where('action', 'account.set_quota')->exists());
     }
 
     public function test_a_successful_delete_task_removes_the_account()

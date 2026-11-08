@@ -22,6 +22,11 @@ func (System) LookupUser(context.Context, string) (User, error) {
 	return User{}, unsupported()
 }
 
+// ListUsers is not supported on this platform.
+func (System) ListUsers(context.Context) ([]User, error) {
+	return nil, unsupported()
+}
+
 // EnsureGroupMember is not supported on this platform.
 func (System) EnsureGroupMember(context.Context, string, string) (int, error) {
 	return 0, unsupported()

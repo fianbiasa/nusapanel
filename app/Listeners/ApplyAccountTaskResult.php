@@ -8,18 +8,23 @@ use App\Events\AgentTaskFinished;
 use App\Models\Task;
 use App\Models\User;
 use App\Services\DomainService;
+use App\Services\QuotaService;
 
 /**
  * Bring an account's panel record in line with what the agent did on the
  * server. Failed suspend/unsuspend tasks leave the account untouched; the
  * task's error is shown in the task list instead.
  *
- * Domains added while the account was being created are set up once it
- * exists on the server, or fail with it.
+ * Once a new account exists on the server, it gets the disk quota of its
+ * package and the domains added while it was being created are set up;
+ * those domains fail with it when it could not be created.
  */
 class ApplyAccountTaskResult
 {
-    public function __construct(private DomainService $domains) {}
+    public function __construct(
+        private DomainService $domains,
+        private QuotaService $quotas,
+    ) {}
 
     public function handle(AgentTaskFinished $event): void
     {
@@ -61,6 +66,8 @@ class ApplyAccountTaskResult
             'status' => AccountStatus::Active,
             'uid' => $uid === false ? $account->uid : $uid,
         ])->save();
+
+        $this->quotas->applyToNewAccount($account, $task->actor);
 
         $this->domains->dispatchPendingDomains($account, $task->actor);
     }

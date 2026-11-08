@@ -21,6 +21,7 @@ class PackageFactory extends Factory
             'name' => fake()->unique()->word().' '.fake()->numberBetween(1, 999),
             'description' => null,
             'disk_mb' => 1024,
+            'inodes' => 50000,
             'bandwidth_mb' => 10240,
             'domains' => 3,
             'subdomains' => 10,

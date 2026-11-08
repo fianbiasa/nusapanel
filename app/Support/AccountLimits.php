@@ -5,6 +5,7 @@ namespace App\Support;
 use App\Enums\DomainStatus;
 use App\Models\Package;
 use App\Models\User;
+use App\Services\QuotaService;
 use Illuminate\Contracts\Support\Arrayable;
 
 /**
@@ -12,8 +13,10 @@ use Illuminate\Contracts\Support\Arrayable;
  * uses. Both enforcement and the pages read limits from here.
  *
  * Accounts without a package (admins, resellers and accounts created before
- * packages existed) have no limits and may use SSL. Only usage the panel
- * can count today is measured (domains); the other limits are stored and
+ * packages existed) have no limits and may use SSL. The panel counts the
+ * account's domains itself; disk space and inodes are measured by the
+ * server ({@see QuotaService}), which also enforces their limits, so the
+ * panel never blocks anything on them. The other limits are stored and
  * shown, and are enforced once their features exist.
  *
  * @implements Arrayable<string, mixed>
@@ -39,7 +42,8 @@ final class AccountLimits implements Arrayable
 
     /**
      * How much of the quantity the account uses, or null while the panel
-     * cannot measure it yet. Domains that are being removed do not count.
+     * cannot measure it (yet). Domains that are being removed do not count;
+     * disk space is in whole megabytes, rounded up, as last measured.
      */
     public function usage(string $key): ?int
     {
@@ -47,6 +51,8 @@ final class AccountLimits implements Arrayable
             'domains' => $this->domainCount ??= $this->account->domains()
                 ->where('status', '!=', DomainStatus::Deleting)
                 ->count(),
+            'disk_mb' => $this->account->diskUsage?->diskMegabytes(),
+            'inodes' => $this->account->diskUsage?->inodes,
             default => null,
         };
     }
@@ -71,9 +77,10 @@ final class AccountLimits implements Arrayable
     }
 
     /**
-     * The limits and usage for the pages.
+     * The limits and usage for the pages: when disk usage was last measured,
+     * and whether the server enforces disk quotas (null until it reported).
      *
-     * @return array{package: string|null, ssl: bool, quotas: array<string, array{limit: int|null, used: int|null}>}
+     * @return array{package: string|null, ssl: bool, quotas: array<string, array{limit: int|null, used: int|null}>, measured_at: string|null, quota_enabled: bool|null}
      */
     public function toArray(): array
     {
@@ -87,6 +94,8 @@ final class AccountLimits implements Arrayable
             'package' => $this->account->package?->name,
             'ssl' => $this->allowsSsl(),
             'quotas' => $quotas,
+            'measured_at' => $this->account->diskUsage?->measured_at->toIso8601String(),
+            'quota_enabled' => QuotaService::isEnabled(),
         ];
     }
 }

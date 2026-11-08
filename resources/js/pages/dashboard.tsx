@@ -32,6 +32,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
     auditActionLabels,
+    formatMegabytes,
     formatQuota,
     formatRelative,
     formatUptime,
@@ -44,7 +45,7 @@ import { create as accountsCreate } from '@/routes/admin/accounts';
 import { index as auditLogsIndex } from '@/routes/admin/audit-logs';
 import { index as tasksIndex } from '@/routes/admin/tasks';
 import { index as domainsIndex } from '@/routes/domains';
-import type { AccountLimits } from '@/types';
+import type { AccountLimits, QuotaKey } from '@/types';
 
 type SystemInfo = {
     hostname: string;
@@ -595,12 +596,18 @@ function ActivityList({ items }: { items: Activity[] }) {
     );
 }
 
+/** Quantities whose usage the dashboard shows as a bar rather than a plain limit. */
+const measuredQuotas: QuotaKey[] = ['domains', 'disk_mb', 'inodes'];
+
 /**
- * The account's package: domain usage against its limit, and the other
- * limits as plain values (the panel cannot measure their usage yet).
+ * The account's package: domain, disk and inode usage against their limits,
+ * and the other limits as plain values (the panel cannot measure their
+ * usage yet). The server measures disk space and inodes periodically, and
+ * only once disk quotas are enabled on it.
  */
 function PackageUsage({ limits }: { limits: AccountLimits }) {
-    const domains = limits.quotas.domains;
+    const { domains, disk_mb: disk, inodes } = limits.quotas;
+    const quotaInactive = limits.quota_enabled === false;
 
     return (
         <div className="flex flex-col gap-5">
@@ -620,7 +627,40 @@ function PackageUsage({ limits }: { limits: AccountLimits }) {
                 label="Domain"
                 used={domains.used ?? 0}
                 limit={domains.limit}
+                tone={(share) => (share >= 100 ? 'warning' : 'normal')}
             />
+
+            <div className="flex flex-col gap-3">
+                <UsageBar
+                    label="Disk"
+                    used={quotaInactive ? null : disk.used}
+                    limit={disk.limit}
+                    format={formatMegabytes}
+                    tone={quotaTone}
+                />
+                {inodes.limit !== null && (
+                    <UsageBar
+                        label="Inode"
+                        used={quotaInactive ? null : inodes.used}
+                        limit={inodes.limit}
+                        tone={quotaTone}
+                    />
+                )}
+                <p className="text-xs text-muted-foreground">
+                    {quotaInactive ? (
+                        'Kuota disk belum aktif di server ini; pemakaian belum diukur.'
+                    ) : limits.measured_at ? (
+                        <>
+                            Diperbarui{' '}
+                            <time dateTime={limits.measured_at}>
+                                {formatRelative(limits.measured_at)}
+                            </time>
+                        </>
+                    ) : (
+                        'Pemakaian disk belum diukur.'
+                    )}
+                </p>
+            </div>
 
             {limits.package === null ? (
                 <p className="text-sm text-muted-foreground">
@@ -630,7 +670,7 @@ function PackageUsage({ limits }: { limits: AccountLimits }) {
                 <>
                     <dl className="grid grid-cols-2 gap-x-6 gap-y-4 rounded-xl bg-muted/60 p-4 text-sm">
                         {quotaKeys
-                            .filter((key) => key !== 'domains')
+                            .filter((key) => !measuredQuotas.includes(key))
                             .map((key) => (
                                 <Fact
                                     key={key}
@@ -647,8 +687,9 @@ function PackageUsage({ limits }: { limits: AccountLimits }) {
                         />
                     </dl>
                     <p className="text-xs text-muted-foreground">
-                        Batas selain domain dan SSL mulai berlaku begitu
-                        fiturnya tersedia di panel.
+                        Batas email, database, FTP, cron job, subdomain, dan
+                        bandwidth mulai berlaku begitu fiturnya tersedia di
+                        panel.
                     </p>
                 </>
             )}
@@ -656,22 +697,46 @@ function PackageUsage({ limits }: { limits: AccountLimits }) {
     );
 }
 
+type BarTone = 'normal' | 'warning' | 'danger';
+
+const barToneStyles: Record<BarTone, string> = {
+    normal: 'bg-chart-1',
+    warning: 'bg-warning',
+    danger: 'bg-destructive',
+};
+
+/** Disk space and inodes: warn from 80%; at 100% the server refuses writes. */
+function quotaTone(share: number): BarTone {
+    if (share >= 100) {
+        return 'danger';
+    }
+
+    return share >= 80 ? 'warning' : 'normal';
+}
+
+/**
+ * "120 MB / 1 GB" with a bar while the quantity is limited. `used` is null
+ * while it has not been measured.
+ */
 function UsageBar({
     label,
     used,
     limit,
+    format = (value) => value.toLocaleString('id-ID'),
+    tone,
 }: {
     label: string;
-    used: number;
+    used: number | null;
     limit: number | null;
+    format?: (value: number) => string;
+    tone: (share: number) => BarTone;
 }) {
-    const isFull = limit !== null && used >= limit;
     const share =
-        limit === null
+        used === null || limit === null
             ? undefined
             : limit === 0
               ? 100
-              : Math.min(100, Math.round((used / limit) * 100));
+              : (used / limit) * 100;
 
     return (
         <div className="space-y-2">
@@ -679,9 +744,9 @@ function UsageBar({
                 <span className="font-medium">{label}</span>
                 <span className="text-muted-foreground">
                     <span className="font-semibold text-foreground">
-                        {used.toLocaleString('id-ID')}
+                        {used === null ? '—' : format(used)}
                     </span>{' '}
-                    / {limit === null ? 'Tanpa batas' : limit}
+                    / {limit === null ? 'Tanpa batas' : format(limit)}
                 </span>
             </div>
             {share !== undefined && (
@@ -691,14 +756,14 @@ function UsageBar({
                     aria-label={label}
                     aria-valuemin={0}
                     aria-valuemax={limit ?? undefined}
-                    aria-valuenow={used}
+                    aria-valuenow={used ?? undefined}
                 >
                     <div
                         className={cn(
                             'h-full rounded-full',
-                            isFull ? 'bg-warning' : 'bg-chart-1',
+                            barToneStyles[tone(share)],
                         )}
-                        style={{ width: `${share}%` }}
+                        style={{ width: `${Math.min(100, share)}%` }}
                     />
                 </div>
             )}

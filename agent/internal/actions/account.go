@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"strings"
 
+	"nusapanel/agent/internal/quota"
 	"nusapanel/agent/internal/rpc"
 	"nusapanel/agent/internal/sysuser"
 	"nusapanel/agent/internal/validate"
@@ -49,6 +50,8 @@ type accountSystem interface {
 	AddUser(ctx context.Context, user sysuser.NewUser) error
 	SetPasswordLock(ctx context.Context, name string, locked bool) error
 	SetShell(ctx context.Context, name, shell string) error
+	// ListUsers returns every user, for quota.report.
+	ListUsers(ctx context.Context) ([]sysuser.User, error)
 	KillProcesses(ctx context.Context, uid int) error
 	DeleteUser(ctx context.Context, name string) error
 	PrepareHome(ctx context.Context, home sysuser.Home) error
@@ -61,6 +64,18 @@ type accountWeb interface {
 	SuspendAccount(ctx context.Context, user string) error
 	UnsuspendAccount(ctx context.Context, user string) error
 	RemoveAccount(ctx context.Context, user string) error
+}
+
+// accountQuota is what the account actions need from disk quotas.
+// *quota.Manager implements it.
+type accountQuota interface {
+	// SetUserLimits returns false, changing nothing, when user quotas are
+	// off on the filesystem of the homes.
+	SetUserLimits(ctx context.Context, user string, limits quota.Limits) (applied bool, err error)
+	// ClearUserLimits removes the limits of a user about to be deleted. It
+	// never fails; problems are logged.
+	ClearUserLimits(ctx context.Context, user string)
+	Report(ctx context.Context) (quota.Report, error)
 }
 
 // accountParams are the params of every account.* method.
@@ -76,22 +91,27 @@ type accountInfo struct {
 	Home     string `json:"home"`
 }
 
-// accountActions implements the account.* methods on top of a system.
+// accountActions implements the account.* and quota.* methods on top of a
+// system.
 type accountActions struct {
 	system accountSystem
 	web    accountWeb
+	quotas accountQuota
 }
 
-// accountMethods returns the account.* methods by name. Calls for the same
-// username run one at a time.
-func accountMethods(system accountSystem, web accountWeb) map[string]rpc.Method {
-	accounts := accountActions{system: system, web: web}
+// accountMethods returns the account.* and quota.* methods by name. Calls
+// for the same username run one at a time; quota.report only reads and
+// locks nothing.
+func accountMethods(system accountSystem, web accountWeb, quotas accountQuota) map[string]rpc.Method {
+	accounts := accountActions{system: system, web: web, quotas: quotas}
 
 	return map[string]rpc.Method{
 		"account.create":    {Handler: accounts.create, LockKey: accountLockKey},
 		"account.suspend":   {Handler: accounts.suspend, LockKey: accountLockKey},
 		"account.unsuspend": {Handler: accounts.unsuspend, LockKey: accountLockKey},
 		"account.delete":    {Handler: accounts.remove, LockKey: accountLockKey},
+		"account.set_quota": {Handler: accounts.setQuota, LockKey: setQuotaLockKey},
+		"quota.report":      {Handler: accounts.quotaReport},
 	}
 }
 
@@ -227,9 +247,10 @@ func (a accountActions) unsuspend(ctx context.Context, raw json.RawMessage) (any
 }
 
 // remove implements account.delete: it removes the account's websites and
-// PHP pools, kills its processes, then removes the user and its home.
-// Deleting an account that no longer exists succeeds, after removing any
-// web configuration it left behind.
+// PHP pools, kills its processes, clears its disk quota (when quotas are
+// on), then removes the user and its home. Deleting an account that no
+// longer exists succeeds, after removing any web configuration it left
+// behind.
 func (a accountActions) remove(ctx context.Context, raw json.RawMessage) (any, error) {
 	params, err := decodeAccountParams(raw)
 	if err != nil {
@@ -255,6 +276,10 @@ func (a accountActions) remove(ctx context.Context, raw json.RawMessage) (any, e
 		return nil, systemError(err)
 	}
 
+	// Quota limits belong to the UID, not the user: without this, the next
+	// account that gets the UID would inherit them.
+	a.quotas.ClearUserLimits(ctx, user.Name)
+
 	if err := a.system.DeleteUser(ctx, user.Name); err != nil {
 		return nil, systemError(err)
 	}
@@ -270,9 +295,15 @@ func (a accountActions) existingAccount(ctx context.Context, raw json.RawMessage
 		return sysuser.User{}, err
 	}
 
-	user, found, err := a.findAccount(ctx, params.Username)
+	return a.requireAccount(ctx, params.Username)
+}
+
+// requireAccount returns the nusapanel account called name, failing when it
+// does not exist.
+func (a accountActions) requireAccount(ctx context.Context, name string) (sysuser.User, error) {
+	user, found, err := a.findAccount(ctx, name)
 	if err == nil && !found {
-		err = rpc.Errorf(rpc.CodeActionFailed, "account %s does not exist", params.Username)
+		err = rpc.Errorf(rpc.CodeActionFailed, "account %s does not exist", name)
 	}
 
 	return user, err

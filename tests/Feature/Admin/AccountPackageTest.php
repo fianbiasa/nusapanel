@@ -6,6 +6,7 @@ use App\Enums\AccountStatus;
 use App\Models\AuditLog;
 use App\Models\Domain;
 use App\Models\Package;
+use App\Models\Task;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
@@ -113,11 +114,11 @@ class AccountPackageTest extends TestCase
         $this->assertSame('example.com', Domain::query()->sole()->name);
     }
 
-    public function test_admins_can_move_an_account_to_another_package()
+    public function test_admins_can_move_an_account_to_another_package_and_its_disk_quota_follows()
     {
         $admin = User::factory()->admin()->create();
         $basic = Package::factory()->create(['name' => 'Basic']);
-        $pro = Package::factory()->create(['name' => 'Pro']);
+        $pro = Package::factory()->create(['name' => 'Pro', 'disk_mb' => 5120, 'inodes' => 200000]);
         $account = User::factory()->create(['username' => 'budi', 'package_id' => $basic->id]);
 
         $this->actingAs($admin)
@@ -133,13 +134,19 @@ class AccountPackageTest extends TestCase
         $this->assertSame($admin->id, $log->actor_id);
         $this->assertSame((string) $account->id, (string) $log->subject_id);
         $this->assertSame(['username' => 'budi', 'from' => 'Basic', 'to' => 'Pro'], $log->changes);
-        $this->assertDatabaseCount('tasks', 0);
+
+        $task = Task::query()->sole();
+
+        $this->assertSame('account.set_quota', $task->action);
+        $this->assertSame(['username' => 'budi', 'disk_mb' => 5120, 'inodes' => 200000], $task->payload);
+        $this->assertSame($account->id, $task->user_id);
+        $this->assertSame($admin->id, $task->actor_id);
     }
 
-    public function test_admins_can_take_an_account_off_packages()
+    public function test_admins_can_take_an_account_off_packages_which_lifts_its_disk_quota()
     {
         $package = Package::factory()->create(['name' => 'Basic']);
-        $account = User::factory()->create(['package_id' => $package->id]);
+        $account = User::factory()->suspended()->create(['username' => 'budi', 'package_id' => $package->id]);
 
         $this->actingAs(User::factory()->admin()->create())
             ->put(route('admin.accounts.package.update', $account), ['package_id' => ''])
@@ -150,6 +157,23 @@ class AccountPackageTest extends TestCase
             AuditLog::query()->where('action', 'account.package_changed')->sole()->changes,
             ['from' => true, 'to' => true],
         ));
+        $this->assertSame(
+            ['username' => 'budi', 'disk_mb' => 0, 'inodes' => 0],
+            Task::query()->where('action', 'account.set_quota')->sole()->payload,
+        );
+    }
+
+    public function test_an_account_that_is_still_being_created_gets_its_disk_quota_once_it_exists()
+    {
+        $package = Package::factory()->create();
+        $account = User::factory()->create(['status' => AccountStatus::Pending]);
+
+        $this->actingAs(User::factory()->admin()->create())
+            ->put(route('admin.accounts.package.update', $account), ['package_id' => (string) $package->id])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame($package->id, $account->fresh()->package_id);
+        $this->assertDatabaseCount('tasks', 0);
     }
 
     public function test_an_account_can_be_moved_to_a_package_it_already_uses_more_than()
