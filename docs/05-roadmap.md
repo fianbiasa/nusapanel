@@ -49,9 +49,10 @@ Pekerjaan:
 - akun hosting ✅: buat, suspend, unsuspend, hapus dari panel;
 - domain & website ✅: tambah/hapus domain (halaman Domains user, domain utama saat admin membuat akun), Nginx → Apache → PHP-FPM 8.4 per user, `www.` otomatis, halaman 503 saat suspend, isolasi antar akun & proteksi symlink teruji;
 - SSL Let's Encrypt ✅: pasang/lepas SSL dan Paksa HTTPS dari halaman Domains, cek dulu domain sampai ke server (A record atau proxy Cloudflare), diperpanjang otomatis `certbot.timer`; teruji dengan domain asli lewat Cloudflare;
-- `nusapanel:rebuild-web` ✅: semua website ditulis ulang otomatis setiap upgrade (`setup.sh`), jadi perubahan template ikut terpasang.
+- `nusapanel:rebuild-web` ✅: semua website ditulis ulang otomatis setiap upgrade (`setup.sh`), jadi perubahan template ikut terpasang;
+- paket hosting ✅: admin membuat paket (kuota disk, bandwidth, domain, subdomain, email, database, FTP, cron; fitur SSL), memilihnya saat membuat akun dan menggantinya kapan saja; batas domain dan fitur SSL sudah diterapkan, batas lain berlaku begitu fiturnya ada; pemakaian tampil di dashboard customer.
 
-Berikutnya: paket hosting (batas domain, disk, dsb.), lalu subdomain/pointer/redirect, pilihan versi PHP, sertifikat kustom.
+Berikutnya: kuota disk sungguhan (quota filesystem + pengukuran pemakaian), lalu subdomain/pointer/redirect, pilihan versi PHP, sertifikat kustom.
 
 - Akun user & paket user, buat/suspend/hapus akun, quota disk & inode.
 - Domain, subdomain, pointer, redirect, www/HTTPS.

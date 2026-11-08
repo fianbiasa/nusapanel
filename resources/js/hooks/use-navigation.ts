@@ -3,6 +3,7 @@ import {
     Globe,
     House,
     ListChecks,
+    Package,
     ScrollText,
     Settings,
     Users,
@@ -10,6 +11,7 @@ import {
 import { dashboard } from '@/routes';
 import { index as accountsIndex } from '@/routes/admin/accounts';
 import { index as auditLogsIndex } from '@/routes/admin/audit-logs';
+import { index as packagesIndex } from '@/routes/admin/packages';
 import { index as tasksIndex } from '@/routes/admin/tasks';
 import { index as domainsIndex } from '@/routes/domains';
 import { edit as profileEdit } from '@/routes/profile';
@@ -54,6 +56,11 @@ export function useNavigation(): {
             href: accountsIndex(),
             icon: Users,
         };
+        const packages: NavItem = {
+            title: 'Packages',
+            href: packagesIndex(),
+            icon: Package,
+        };
         const tasks: NavItem = {
             title: 'Tasks',
             href: tasksIndex(),
@@ -66,10 +73,17 @@ export function useNavigation(): {
         };
 
         sections.push(
-            { label: 'Menu', items: [dashboardItem, accounts] },
+            { label: 'Menu', items: [dashboardItem, accounts, packages] },
             { label: 'Server', items: [tasks, auditLog] },
         );
-        dockItems = [dashboardItem, accounts, tasks, auditLog, settingsItem];
+        dockItems = [
+            dashboardItem,
+            accounts,
+            packages,
+            tasks,
+            auditLog,
+            settingsItem,
+        ];
     } else if (role === 'user') {
         const domains: NavItem = {
             title: 'Domains',

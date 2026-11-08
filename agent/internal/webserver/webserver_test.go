@@ -367,7 +367,10 @@ func TestRenderedNginxVhost(t *testing.T) {
 		"proxy_set_header X-Forwarded-Proto $scheme;",
 		"proxy_http_version 1.1;",
 		`proxy_set_header Connection "";`,
-		"proxy_read_timeout 300s;\n    }",
+		"proxy_read_timeout 300s;",
+		"proxy_buffer_size 32k;",
+		"proxy_buffers 16 16k;",
+		"proxy_busy_buffers_size 64k;\n    }",
 	)
 	assertNotContains(t, "nginx vhost", nginx, "[::]", "443", "<no value>")
 

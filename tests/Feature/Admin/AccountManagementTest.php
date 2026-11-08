@@ -8,6 +8,7 @@ use App\Enums\Role;
 use App\Jobs\RunAgentTask;
 use App\Models\AuditLog;
 use App\Models\Domain;
+use App\Models\Package;
 use App\Models\Task;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -31,10 +32,12 @@ class AccountManagementTest extends TestCase
     public function test_admins_can_list_accounts_without_seeing_secrets()
     {
         $admin = User::factory()->admin()->create();
+        $package = Package::factory()->create(['name' => 'Basic']);
         $account = User::factory()->for($admin, 'owner')->suspended('Unpaid invoice')->create([
             'username' => 'budi',
             'name' => 'Budi Santoso',
             'email' => 'budi@example.com',
+            'package_id' => $package->id,
         ]);
         Domain::factory()->for($account, 'account')->primary()->create(['name' => 'xn--bcher-kva.de']);
         Domain::factory()->for($account, 'account')->create(['name' => 'second.com']);
@@ -55,6 +58,8 @@ class AccountManagementTest extends TestCase
                     ->where('status', 'suspended')
                     ->where('suspend_reason', 'Unpaid invoice')
                     ->where('owner', $admin->username)
+                    ->where('package_id', $package->id)
+                    ->where('package', 'Basic')
                     ->where('domain', 'bücher.de')
                     ->has('created_at')));
 

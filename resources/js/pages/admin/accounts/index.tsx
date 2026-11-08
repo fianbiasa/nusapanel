@@ -1,6 +1,7 @@
 import { Form, Head, Link, usePage, usePoll } from '@inertiajs/react';
 import {
     MoreHorizontal,
+    Package,
     Plus,
     Search,
     ShieldCheck,
@@ -10,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import InputError from '@/components/input-error';
+import { PackageSelect } from '@/components/package-select';
 import { PageHeader } from '@/components/page-header';
 import { Pagination } from '@/components/pagination';
 import { Panel, tableStyles } from '@/components/panel';
@@ -42,7 +44,8 @@ import {
     suspend,
     unsuspend,
 } from '@/routes/admin/accounts';
-import type { AccountStatus, Paginated, Role } from '@/types';
+import { update as updatePackage } from '@/routes/admin/accounts/package';
+import type { AccountStatus, PackageOption, Paginated, Role } from '@/types';
 
 type AccountRow = {
     id: number;
@@ -53,17 +56,20 @@ type AccountRow = {
     status: AccountStatus;
     suspend_reason: string | null;
     owner: string | null;
+    package_id: number | null;
+    package: string | null;
     domain: string | null;
     created_at: string | null;
 };
 
 type AccountAction = {
-    type: 'suspend' | 'unsuspend' | 'delete';
+    type: 'suspend' | 'unsuspend' | 'delete' | 'package';
     account: AccountRow;
 };
 
 type Props = {
     accounts: Paginated<AccountRow>;
+    packages: PackageOption[];
     filters: { search: string };
 };
 
@@ -71,7 +77,7 @@ const busyStatuses: AccountStatus[] = ['pending', 'deleting'];
 
 const deletableStatuses: AccountStatus[] = ['active', 'suspended', 'failed'];
 
-export default function AccountsIndex({ accounts, filters }: Props) {
+export default function AccountsIndex({ accounts, packages, filters }: Props) {
     const { auth } = usePage().props;
     const getInitials = useInitials();
     const [action, setAction] = useState<AccountAction | null>(null);
@@ -166,6 +172,7 @@ export default function AccountsIndex({ accounts, filters }: Props) {
                                 <tr>
                                     <th className={tableStyles.th}>Akun</th>
                                     <th className={tableStyles.th}>Domain</th>
+                                    <th className={tableStyles.th}>Paket</th>
                                     <th className={tableStyles.th}>Peran</th>
                                     <th className={tableStyles.th}>Status</th>
                                     <th className={tableStyles.th}>Pemilik</th>
@@ -201,6 +208,13 @@ export default function AccountsIndex({ accounts, filters }: Props) {
                                         </td>
                                         <td className={tableStyles.td}>
                                             {account.domain ?? (
+                                                <span className="text-muted-foreground">
+                                                    —
+                                                </span>
+                                            )}
+                                        </td>
+                                        <td className={tableStyles.td}>
+                                            {account.package ?? (
                                                 <span className="text-muted-foreground">
                                                     —
                                                 </span>
@@ -259,10 +273,19 @@ export default function AccountsIndex({ accounts, filters }: Props) {
 
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
                 <DialogContent className="rounded-2xl">
-                    {action && (
+                    {action?.type === 'package' && (
+                        <ChangePackageForm
+                            key={`package-${action.account.id}`}
+                            account={action.account}
+                            packages={packages}
+                            onSuccess={() => setDialogOpen(false)}
+                        />
+                    )}
+                    {action && action.type !== 'package' && (
                         <AccountActionForm
                             key={`${action.type}-${action.account.id}`}
-                            action={action}
+                            type={action.type}
+                            account={action.account}
                             onSuccess={() => setDialogOpen(false)}
                         />
                     )}
@@ -272,14 +295,75 @@ export default function AccountsIndex({ accounts, filters }: Props) {
     );
 }
 
-function AccountActionForm({
-    action,
+function ChangePackageForm({
+    account,
+    packages,
     onSuccess,
 }: {
-    action: AccountAction;
+    account: AccountRow;
+    packages: PackageOption[];
     onSuccess: () => void;
 }) {
-    const { type, account } = action;
+    return (
+        <Form
+            {...updatePackage.form(account.id)}
+            options={{ preserveScroll: true }}
+            onSuccess={onSuccess}
+            className="grid gap-4"
+        >
+            {({ processing, errors }) => (
+                <>
+                    <DialogHeader>
+                        <DialogTitle>
+                            Ganti paket {account.username}
+                        </DialogTitle>
+                        <DialogDescription>
+                            Batas paket baru langsung berlaku. Kalau akun ini
+                            sudah memakai lebih dari batas paket barunya, yang
+                            sudah ada tetap jalan, tapi akun tidak bisa menambah
+                            lagi.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="grid gap-2">
+                        <Label htmlFor="package_id">Paket</Label>
+                        <PackageSelect
+                            id="package_id"
+                            packages={packages}
+                            defaultValue={account.package_id}
+                            invalid={Boolean(errors.package_id)}
+                        />
+                        <InputError message={errors.package_id} />
+                    </div>
+
+                    <InputError message={errors.account} />
+
+                    <DialogFooter className="gap-2">
+                        <DialogClose asChild>
+                            <Button type="button" variant="secondary">
+                                Batal
+                            </Button>
+                        </DialogClose>
+                        <Button type="submit" disabled={processing}>
+                            {processing && <Spinner />}
+                            Simpan paket
+                        </Button>
+                    </DialogFooter>
+                </>
+            )}
+        </Form>
+    );
+}
+
+function AccountActionForm({
+    type,
+    account,
+    onSuccess,
+}: {
+    type: 'suspend' | 'unsuspend' | 'delete';
+    account: AccountRow;
+    onSuccess: () => void;
+}) {
     const username = account.username;
 
     const copy = {
@@ -369,12 +453,14 @@ function RowActions({
     isProtected: boolean;
     onAction: (type: AccountAction['type'], account: AccountRow) => void;
 }) {
+    const canChangePackage =
+        account.role === 'user' && account.status !== 'deleting';
     const canSuspend = account.status === 'active' && !isProtected;
     const canUnsuspend = account.status === 'suspended';
     const canDelete =
         deletableStatuses.includes(account.status) && !isProtected;
 
-    if (!canSuspend && !canUnsuspend && !canDelete) {
+    if (!canChangePackage && !canSuspend && !canUnsuspend && !canDelete) {
         return null;
     }
 
@@ -394,6 +480,13 @@ function RowActions({
                     align="end"
                     className="min-w-44 rounded-xl"
                 >
+                    {canChangePackage && (
+                        <DropdownMenuItem
+                            onSelect={() => onAction('package', account)}
+                        >
+                            <Package /> Ganti paket
+                        </DropdownMenuItem>
+                    )}
                     {canSuspend && (
                         <DropdownMenuItem
                             onSelect={() => onAction('suspend', account)}

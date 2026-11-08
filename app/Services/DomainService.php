@@ -11,6 +11,7 @@ use App\Listeners\ApplySslTaskResult;
 use App\Models\Domain;
 use App\Models\User;
 use App\Rules\ValidDomain;
+use App\Support\AccountLimits;
 use Carbon\CarbonImmutable;
 use Carbon\Exceptions\InvalidFormatException;
 use Illuminate\Database\Eloquent\Builder;
@@ -33,9 +34,10 @@ class DomainService
     ) {}
 
     /**
-     * Add a domain to a hosting account. It is set up on the server right
-     * away for active accounts, and once the account itself has been
-     * created for accounts that are still pending.
+     * Add a domain to a hosting account, within its package's domain limit.
+     * It is set up on the server right away for active accounts, and once
+     * the account itself has been created for accounts that are still
+     * pending.
      *
      * @param  string  $name  Lowercase ASCII (punycode) name that passed {@see ValidDomain}.
      *
@@ -57,6 +59,8 @@ class DomainService
 
         try {
             return DB::transaction(function () use ($account, $name, $actor, $primary): Domain {
+                $this->ensureDomainLimitIsNotReached($account, $actor);
+
                 $conflict = $this->findConflict($account, $name, lock: true);
 
                 if ($conflict !== null) {
@@ -188,6 +192,12 @@ class DomainService
         }
 
         $account = $domain->account;
+
+        if (! AccountLimits::for($account)->allowsSsl()) {
+            throw ValidationException::withMessages([
+                'domain' => __('SSL is not included in your package.'),
+            ]);
+        }
 
         DB::transaction(function () use ($domain, $account, $actor): void {
             $domain->forceFill([
@@ -388,6 +398,31 @@ class DomainService
             'ssl' => $ssl,
             'force_https' => $ssl && $domain->force_https,
         ], $account, $actor);
+    }
+
+    /**
+     * Refuse a domain the account's package has no room for. The account's
+     * row stays locked until the domain is saved, so two requests cannot
+     * both take the last free place.
+     *
+     * @throws ValidationException
+     */
+    private function ensureDomainLimitIsNotReached(User $account, User $actor): void
+    {
+        $locked = User::query()->with('package')->lockForUpdate()->findOrFail($account->id);
+        $limits = AccountLimits::for($locked);
+
+        if (! $limits->isReached('domains')) {
+            return;
+        }
+
+        $replace = ['limit' => $limits->limit('domains')];
+
+        throw ValidationException::withMessages([
+            'domain' => $actor->is($account)
+                ? __('Your package allows :limit domains. Remove a domain or ask your provider for a bigger package.', $replace)
+                : __("This account's package allows :limit domains.", $replace),
+        ]);
     }
 
     /**

@@ -12,6 +12,10 @@ import {
     LockOpen,
     LogIn,
     Gauge,
+    Package,
+    PackageCheck,
+    PackagePlus,
+    PackageX,
     Plus,
     Server,
     ShieldOff,
@@ -28,15 +32,19 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
     auditActionLabels,
+    formatQuota,
     formatRelative,
     formatUptime,
     percentage,
+    quotaKeys,
+    quotaLabels,
 } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { create as accountsCreate } from '@/routes/admin/accounts';
 import { index as auditLogsIndex } from '@/routes/admin/audit-logs';
 import { index as tasksIndex } from '@/routes/admin/tasks';
 import { index as domainsIndex } from '@/routes/domains';
+import type { AccountLimits } from '@/types';
 
 type SystemInfo = {
     hostname: string;
@@ -79,6 +87,7 @@ type Props = {
     };
     recentActivity?: Activity[];
     domains?: DomainSummary[];
+    limits?: AccountLimits;
     systemInfo?: SystemInfoResult;
 };
 
@@ -86,6 +95,7 @@ export default function Dashboard({
     stats,
     recentActivity = [],
     domains = [],
+    limits,
     systemInfo,
 }: Props) {
     const { auth } = usePage().props;
@@ -234,16 +244,25 @@ export default function Dashboard({
                         />
                     </section>
 
-                    <Panel
-                        title="Domain Kamu"
-                        action={
-                            <PanelLink href={domainsIndex()}>
-                                Kelola domain
-                            </PanelLink>
-                        }
-                    >
-                        <DomainList domains={domains} />
-                    </Panel>
+                    <section className="grid gap-5 xl:grid-cols-3">
+                        <Panel
+                            title="Domain Kamu"
+                            className="xl:col-span-2"
+                            action={
+                                <PanelLink href={domainsIndex()}>
+                                    Kelola domain
+                                </PanelLink>
+                            }
+                        >
+                            <DomainList domains={domains} />
+                        </Panel>
+
+                        {limits && (
+                            <Panel title="Paket kamu">
+                                <PackageUsage limits={limits} />
+                            </Panel>
+                        )}
+                    </section>
                 </>
             )}
         </>
@@ -528,6 +547,10 @@ const activityIcons: Record<string, LucideIcon> = {
     'domain.ssl_cancelled': LockOpen,
     'domain.https_forced': Lock,
     'domain.https_unforced': LockOpen,
+    'account.package_changed': PackageCheck,
+    'package.created': PackagePlus,
+    'package.updated': Package,
+    'package.deleted': PackageX,
 };
 
 function ActivityList({ items }: { items: Activity[] }) {
@@ -569,6 +592,117 @@ function ActivityList({ items }: { items: Activity[] }) {
                 );
             })}
         </ul>
+    );
+}
+
+/**
+ * The account's package: domain usage against its limit, and the other
+ * limits as plain values (the panel cannot measure their usage yet).
+ */
+function PackageUsage({ limits }: { limits: AccountLimits }) {
+    const domains = limits.quotas.domains;
+
+    return (
+        <div className="flex flex-col gap-5">
+            <div className="flex items-center gap-3">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground">
+                    <Package className="size-4" />
+                </span>
+                <div className="min-w-0">
+                    <p className="text-xs text-muted-foreground">Paket</p>
+                    <p className="truncate font-semibold">
+                        {limits.package ?? 'Tanpa batas'}
+                    </p>
+                </div>
+            </div>
+
+            <UsageBar
+                label="Domain"
+                used={domains.used ?? 0}
+                limit={domains.limit}
+            />
+
+            {limits.package === null ? (
+                <p className="text-sm text-muted-foreground">
+                    Akun kamu tidak dibatasi paket.
+                </p>
+            ) : (
+                <>
+                    <dl className="grid grid-cols-2 gap-x-6 gap-y-4 rounded-xl bg-muted/60 p-4 text-sm">
+                        {quotaKeys
+                            .filter((key) => key !== 'domains')
+                            .map((key) => (
+                                <Fact
+                                    key={key}
+                                    label={quotaLabels[key]}
+                                    value={formatQuota(
+                                        key,
+                                        limits.quotas[key].limit,
+                                    )}
+                                />
+                            ))}
+                        <Fact
+                            label="SSL"
+                            value={limits.ssl ? 'Termasuk' : 'Tidak termasuk'}
+                        />
+                    </dl>
+                    <p className="text-xs text-muted-foreground">
+                        Batas selain domain dan SSL mulai berlaku begitu
+                        fiturnya tersedia di panel.
+                    </p>
+                </>
+            )}
+        </div>
+    );
+}
+
+function UsageBar({
+    label,
+    used,
+    limit,
+}: {
+    label: string;
+    used: number;
+    limit: number | null;
+}) {
+    const isFull = limit !== null && used >= limit;
+    const share =
+        limit === null
+            ? undefined
+            : limit === 0
+              ? 100
+              : Math.min(100, Math.round((used / limit) * 100));
+
+    return (
+        <div className="space-y-2">
+            <div className="flex items-baseline justify-between gap-3 text-sm">
+                <span className="font-medium">{label}</span>
+                <span className="text-muted-foreground">
+                    <span className="font-semibold text-foreground">
+                        {used.toLocaleString('id-ID')}
+                    </span>{' '}
+                    / {limit === null ? 'Tanpa batas' : limit}
+                </span>
+            </div>
+            {share !== undefined && (
+                <div
+                    className="h-1.5 overflow-hidden rounded-full bg-muted"
+                    role="meter"
+                    aria-label={label}
+                    aria-valuemin={0}
+                    aria-valuemax={limit ?? undefined}
+                    aria-valuenow={used}
+                >
+                    <div
+                        className={cn(
+                            'h-full rounded-full',
+                            isFull ? 'bg-warning' : 'bg-chart-1',
+                        )}
+                        style={{ width: `${share}%` }}
+                    />
+                </div>
+            )}
+        </div>
     );
 }
 

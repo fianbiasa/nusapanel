@@ -23,8 +23,8 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * A panel account. Admins, resellers and users all live in this table,
  * and every account is also a Linux user on the server.
  *
- * `role`, `status` and `owner_id` are deliberately not mass assignable so
- * that profile forms can never escalate privileges.
+ * `role`, `status`, `owner_id` and `package_id` are deliberately not mass
+ * assignable so that profile forms can never escalate privileges.
  *
  * @property int $id
  * @property string $username
@@ -35,6 +35,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property string $password
  * @property Role $role
  * @property int|null $owner_id
+ * @property int|null $package_id Null for accounts without limits.
  * @property AccountStatus $status
  * @property string|null $suspend_reason
  * @property Carbon|null $last_login_at
@@ -61,6 +62,7 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     {
         return [
             'uid' => 'integer',
+            'package_id' => 'integer',
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'role' => Role::class,
@@ -88,6 +90,16 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     public function ownedAccounts(): HasMany
     {
         return $this->hasMany(User::class, 'owner_id');
+    }
+
+    /**
+     * The hosting package that limits this account, if any.
+     *
+     * @return BelongsTo<Package, $this>
+     */
+    public function package(): BelongsTo
+    {
+        return $this->belongsTo(Package::class);
     }
 
     /**

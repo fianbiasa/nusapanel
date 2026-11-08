@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Agent\AgentClient;
 use App\Agent\AgentException;
 use App\Models\Domain;
+use App\Models\Package;
 use App\Models\User;
 use App\Services\AuditLogger;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -84,6 +85,28 @@ class DashboardTest extends TestCase
                 ->has('domains', 1)
                 ->where('domains.0.name', 'mine.example')
                 ->missing('recentActivity'));
+    }
+
+    public function test_hosting_accounts_see_what_their_package_allows_and_uses()
+    {
+        $package = Package::factory()->create(['name' => 'Basic', 'domains' => 3, 'email_accounts' => 10, 'ssl' => false]);
+        $account = User::factory()->create(['package_id' => $package->id]);
+        Domain::factory()->for($account, 'account')->create();
+
+        $this->actingAs($account)
+            ->get(route('dashboard'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('limits.package', 'Basic')
+                ->where('limits.ssl', false)
+                ->where('limits.quotas.domains', ['limit' => 3, 'used' => 1])
+                ->where('limits.quotas.email_accounts', ['limit' => 10, 'used' => null]));
+    }
+
+    public function test_admins_do_not_receive_package_limits()
+    {
+        $this->actingAs(User::factory()->admin()->create())
+            ->get(route('dashboard'))
+            ->assertInertia(fn (Assert $page) => $page->missing('limits'));
     }
 
     public function test_admins_see_an_error_when_the_agent_is_unreachable()

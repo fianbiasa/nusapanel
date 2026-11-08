@@ -4,6 +4,7 @@ namespace App\Http\Requests\Admin;
 
 use App\Concerns\PasswordValidationRules;
 use App\Concerns\ProfileValidationRules;
+use App\Models\Package;
 use App\Models\User;
 use App\Rules\ValidDomain;
 use App\Rules\ValidUsername;
@@ -27,6 +28,7 @@ class StoreAccountRequest extends FormRequest
             ...$this->profileRules(),
             'password' => $this->passwordRules(),
             'domain' => ['nullable', 'string', new ValidDomain],
+            'package_id' => ['nullable', 'integer', Rule::exists(Package::class, 'id')],
         ];
     }
 

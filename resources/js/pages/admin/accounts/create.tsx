@@ -1,19 +1,25 @@
 import { Form, Head, Link } from '@inertiajs/react';
 import { UserPlus } from 'lucide-react';
 import InputError from '@/components/input-error';
+import { PackageSelect } from '@/components/package-select';
 import { PageHeader } from '@/components/page-header';
 import { Panel } from '@/components/panel';
 import PasswordInput from '@/components/password-input';
+import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { index, store } from '@/routes/admin/accounts';
+import { create as packagesCreate } from '@/routes/admin/packages';
+import type { PackageOption } from '@/types';
 
 export default function AccountsCreate({
     passwordRules,
+    packages,
 }: {
     passwordRules: string;
+    packages: PackageOption[];
 }) {
     return (
         <>
@@ -82,6 +88,30 @@ export default function AccountsCreate({
                                     />
                                     <InputError message={errors.email} />
                                 </div>
+                            </div>
+                        </Panel>
+
+                        <Panel
+                            title="Paket"
+                            description="Batas yang berlaku untuk akun ini. Tanpa paket berarti tanpa batas."
+                        >
+                            <div className="grid gap-2">
+                                <Label htmlFor="package_id">Paket</Label>
+                                <PackageSelect
+                                    id="package_id"
+                                    packages={packages}
+                                    invalid={Boolean(errors.package_id)}
+                                />
+                                {packages.length === 0 && (
+                                    <p className="text-xs text-muted-foreground">
+                                        Belum ada paket.{' '}
+                                        <TextLink href={packagesCreate()}>
+                                            Buat paket
+                                        </TextLink>{' '}
+                                        untuk membatasi akun.
+                                    </p>
+                                )}
+                                <InputError message={errors.package_id} />
                             </div>
                         </Panel>
 

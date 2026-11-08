@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\AccountStatus;
 use App\Enums\Role;
 use App\Listeners\ApplyAccountTaskResult;
+use App\Models\Package;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Arr;
@@ -25,11 +26,12 @@ class AccountService
     ) {}
 
     /**
-     * Create a pending hosting account owned by the actor and queue its
-     * creation on the server. A primary domain, if given, is set up once
-     * the account exists on the server.
+     * Create a pending hosting account owned by the actor, on the given
+     * package if any, and queue its creation on the server. A primary
+     * domain, if given, must fit the package and is set up once the account
+     * exists on the server.
      *
-     * @param  array{username: string, name: string, email: string, password: string, domain?: string|null}  $data
+     * @param  array{username: string, name: string, email: string, password: string, domain?: string|null, package_id?: int|null}  $data
      *
      * @throws ValidationException When the primary domain cannot be used.
      */
@@ -42,6 +44,7 @@ class AccountService
                 'role' => Role::User,
                 'status' => AccountStatus::Pending,
                 'owner_id' => $actor->id,
+                'package_id' => $data['package_id'] ?? null,
                 'email_verified_at' => now(),
             ])->save();
 
@@ -50,6 +53,7 @@ class AccountService
             $this->audit->record('account.created', $account, [
                 'username' => $account->username,
                 'role' => Role::User->value,
+                'package' => $account->package?->name,
             ], $actor);
 
             $domain = $data['domain'] ?? null;
@@ -131,6 +135,44 @@ class AccountService
             $this->tasks->dispatch('account.delete', ['username' => $account->username], $account, $actor);
 
             $this->audit->record('account.deleted', $account, ['username' => $account->username], $actor);
+        });
+    }
+
+    /**
+     * Move a hosting account to another package, or take it off packages so
+     * nothing is limited. An account that already uses more than the new
+     * package allows keeps what it has, but cannot add more.
+     *
+     * @throws AuthorizationException
+     * @throws ValidationException
+     */
+    public function changePackage(User $account, ?Package $package, User $actor): void
+    {
+        if (! $account->hasRole(Role::User)) {
+            throw new AuthorizationException(__('Only hosting accounts can be put on a package.'));
+        }
+
+        $this->ensureStatus(
+            $account,
+            [AccountStatus::Pending, AccountStatus::Active, AccountStatus::Suspended, AccountStatus::Failed],
+            __('This account is being deleted.'),
+        );
+
+        if ($account->package_id === $package?->id) {
+            return;
+        }
+
+        $previous = $account->package;
+
+        DB::transaction(function () use ($account, $package, $previous, $actor): void {
+            $account->forceFill(['package_id' => $package?->id])->save();
+            $account->setRelation('package', $package);
+
+            $this->audit->record('account.package_changed', $account, [
+                'username' => $account->username,
+                'from' => $previous?->name,
+                'to' => $package?->name,
+            ], $actor);
         });
     }
 

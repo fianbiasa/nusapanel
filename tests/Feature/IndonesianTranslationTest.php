@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Domain;
+use App\Models\Package;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
@@ -45,5 +46,20 @@ class IndonesianTranslationTest extends TestCase
 
         $this->assertDatabaseCount('domains', 1);
         Queue::assertNothingPushed();
+    }
+
+    public function test_the_domain_limit_of_a_package_is_reported_in_indonesian()
+    {
+        $account = User::factory()->create([
+            'package_id' => Package::factory()->create(['domains' => 0])->id,
+        ]);
+
+        $this->actingAs($account)
+            ->post(route('domains.store'), ['domain' => 'example.com'])
+            ->assertSessionHasErrors([
+                'domain' => 'Paket Anda hanya mengizinkan 0 domain. Hapus salah satu domain atau minta paket yang lebih besar ke penyedia hosting Anda.',
+            ]);
+
+        $this->assertDatabaseCount('domains', 0);
     }
 }

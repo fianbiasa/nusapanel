@@ -6,6 +6,7 @@ use App\Enums\SslStatus;
 use App\Http\Requests\StoreDomainRequest;
 use App\Models\Domain;
 use App\Services\DomainService;
+use App\Support\AccountLimits;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -18,11 +19,14 @@ class DomainController extends Controller
 
     /**
      * List the signed-in account's domains, primary domain first, with the
-     * server's public IP address to point them to.
+     * server's public IP address to point them to and what the account's
+     * package allows.
      */
     public function index(Request $request): Response
     {
-        $domains = $request->user()->domains()
+        $account = $request->user();
+
+        $domains = $account->domains()
             ->orderByDesc('is_primary')
             ->orderBy('name')
             ->get()
@@ -42,6 +46,7 @@ class DomainController extends Controller
 
         return Inertia::render('domains/index', [
             'domains' => $domains,
+            'limits' => AccountLimits::for($account)->toArray(),
             'public_ip' => config('hosting.public_ip') ?: null,
         ]);
     }

@@ -10,6 +10,7 @@ use App\Models\AuditLog;
 use App\Models\Domain;
 use App\Models\Task;
 use App\Models\User;
+use App\Support\AccountLimits;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -21,7 +22,7 @@ class DashboardController extends Controller
      * Show the dashboard. Admins get counts for the whole server, recent
      * activity and live server information from the agent (deferred, so a
      * slow agent never blocks the page); hosting accounts get their own
-     * domains.
+     * domains and what their package allows.
      */
     public function __invoke(Request $request, AgentClient $agent): Response
     {
@@ -48,6 +49,7 @@ class DashboardController extends Controller
                     'is_primary' => $domain->is_primary,
                     'ssl_active' => $domain->hasActiveSsl(),
                 ]);
+            $props['limits'] = AccountLimits::for($user)->toArray();
         }
 
         return Inertia::render('dashboard', $props);

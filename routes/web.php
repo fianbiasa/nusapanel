@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\AccountController;
 use App\Http\Controllers\Admin\AuditLogController;
+use App\Http\Controllers\Admin\PackageController;
 use App\Http\Controllers\Admin\TaskController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DomainController;
@@ -27,7 +28,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('accounts', [AccountController::class, 'store'])->name('accounts.store');
         Route::post('accounts/{account}/suspend', [AccountController::class, 'suspend'])->name('accounts.suspend');
         Route::post('accounts/{account}/unsuspend', [AccountController::class, 'unsuspend'])->name('accounts.unsuspend');
+        Route::put('accounts/{account}/package', [AccountController::class, 'updatePackage'])->name('accounts.package.update');
         Route::delete('accounts/{account}', [AccountController::class, 'destroy'])->name('accounts.destroy');
+        Route::get('packages', [PackageController::class, 'index'])->name('packages.index');
+        Route::get('packages/create', [PackageController::class, 'create'])->name('packages.create');
+        Route::post('packages', [PackageController::class, 'store'])->name('packages.store');
+        Route::get('packages/{package}/edit', [PackageController::class, 'edit'])->name('packages.edit');
+        Route::put('packages/{package}', [PackageController::class, 'update'])->name('packages.update');
+        Route::delete('packages/{package}', [PackageController::class, 'destroy'])->name('packages.destroy');
         Route::get('tasks', [TaskController::class, 'index'])->name('tasks.index');
         Route::get('audit-logs', [AuditLogController::class, 'index'])->name('audit-logs.index');
     });

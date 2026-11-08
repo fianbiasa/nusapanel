@@ -2,6 +2,7 @@ import { Form, Head, router, usePoll } from '@inertiajs/react';
 import {
     ExternalLink,
     Globe,
+    Info,
     Lock,
     LockOpen,
     MoreHorizontal,
@@ -38,10 +39,16 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Spinner } from '@/components/ui/spinner';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { formatDate, formatDateTime } from '@/lib/format';
 import { destroy, store } from '@/routes/domains';
 import { update as updateForceHttps } from '@/routes/domains/force-https';
 import { destroy as destroySsl, store as storeSsl } from '@/routes/domains/ssl';
+import type { AccountLimits } from '@/types';
 
 type DomainStatus = 'pending' | 'active' | 'failed' | 'deleting';
 
@@ -68,6 +75,7 @@ type DomainAction = {
 
 type Props = {
     domains: DomainRow[];
+    limits: AccountLimits;
     public_ip: string | null;
 };
 
@@ -93,9 +101,13 @@ function toastFirstError(errors: Record<string, string>) {
     }
 }
 
-export default function DomainsIndex({ domains, public_ip }: Props) {
+export default function DomainsIndex({ domains, limits, public_ip }: Props) {
     const [action, setAction] = useState<DomainAction | null>(null);
     const [dialogOpen, setDialogOpen] = useState(false);
+
+    const domainLimit = limits.quotas.domains.limit;
+    const domainCount = limits.quotas.domains.used ?? domains.length;
+    const isAtDomainLimit = domainLimit !== null && domainCount >= domainLimit;
 
     // Refresh the list while the agent is still setting up or removing
     // domains or their certificates.
@@ -104,7 +116,7 @@ export default function DomainsIndex({ domains, public_ip }: Props) {
     );
     const { start, stop } = usePoll(
         3000,
-        { only: ['domains'] },
+        { only: ['domains', 'limits'] },
         { autoStart: false },
     );
 
@@ -156,6 +168,13 @@ export default function DomainsIndex({ domains, public_ip }: Props) {
                         di folder home kamu.
                     </>
                 }
+                action={
+                    domainLimit !== null && (
+                        <span className="shrink-0 rounded-full bg-muted px-3 py-1 text-xs font-semibold whitespace-nowrap text-muted-foreground">
+                            {domainCount} dari {domainLimit} domain
+                        </span>
+                    )
+                }
             >
                 <Form
                     {...store.form()}
@@ -175,6 +194,7 @@ export default function DomainsIndex({ domains, public_ip }: Props) {
                                         id="domain"
                                         name="domain"
                                         required
+                                        disabled={isAtDomainLimit}
                                         autoComplete="off"
                                         autoCapitalize="none"
                                         spellCheck={false}
@@ -184,17 +204,35 @@ export default function DomainsIndex({ domains, public_ip }: Props) {
                                         aria-invalid={
                                             errors.domain ? true : undefined
                                         }
+                                        aria-describedby={
+                                            isAtDomainLimit
+                                                ? 'domain-limit'
+                                                : undefined
+                                        }
                                     />
                                 </div>
                                 <Button
                                     type="submit"
                                     size="lg"
-                                    disabled={processing}
+                                    disabled={processing || isAtDomainLimit}
                                 >
                                     {processing ? <Spinner /> : <Plus />}
                                     Tambah domain
                                 </Button>
                             </div>
+                            {isAtDomainLimit && (
+                                <p
+                                    id="domain-limit"
+                                    className="text-sm text-muted-foreground"
+                                >
+                                    {domainLimit === 0
+                                        ? 'Paket kamu tidak termasuk domain.'
+                                        : `Paket kamu sudah mencapai batas ${domainLimit} domain.`}{' '}
+                                    Hapus domain yang tidak dipakai, atau minta
+                                    paket yang lebih besar ke penyedia hosting
+                                    kamu.
+                                </p>
+                            )}
                             <InputError message={errors.domain} />
                         </>
                     )}
@@ -250,6 +288,7 @@ export default function DomainsIndex({ domains, public_ip }: Props) {
                                         <td className={tableStyles.td}>
                                             <SslCell
                                                 domain={domain}
+                                                sslAllowed={limits.ssl}
                                                 onRequest={() =>
                                                     openDialog(
                                                         'request-ssl',
@@ -275,6 +314,7 @@ export default function DomainsIndex({ domains, public_ip }: Props) {
                                         <td className={tableStyles.td}>
                                             <RowActions
                                                 domain={domain}
+                                                sslAllowed={limits.ssl}
                                                 onAction={openDialog}
                                                 onToggleForceHttps={
                                                     toggleForceHttps
@@ -361,15 +401,20 @@ function DomainName({ domain }: { domain: DomainRow }) {
     );
 }
 
-/** The certificate of one domain, with a shortcut to (re)request it. */
+/**
+ * The certificate of one domain, with a shortcut to (re)request it when
+ * the account's package includes SSL.
+ */
 function SslCell({
     domain,
+    sslAllowed,
     onRequest,
 }: {
     domain: DomainRow;
+    sslAllowed: boolean;
     onRequest: () => void;
 }) {
-    const canRequest = domain.status === 'active';
+    const canRequest = domain.status === 'active' && sslAllowed;
 
     switch (domain.ssl_status) {
         case 'active':
@@ -414,26 +459,51 @@ function SslCell({
                             <Lock /> Pasang SSL
                         </Button>
                     )}
+                    {!sslAllowed && <SslNotIncluded />}
                 </div>
             );
     }
 }
 
+/** Why "Pasang SSL" is missing: the package does not include SSL. */
+function SslNotIncluded() {
+    return (
+        <Tooltip>
+            <TooltipTrigger asChild>
+                <span
+                    tabIndex={0}
+                    className="inline-flex cursor-help items-center gap-1 text-xs whitespace-nowrap text-muted-foreground"
+                >
+                    <Info className="size-3.5" />
+                    Tidak termasuk paket
+                </span>
+            </TooltipTrigger>
+            <TooltipContent>
+                SSL tidak termasuk dalam paket kamu. Minta paket dengan SSL ke
+                penyedia hosting kamu.
+            </TooltipContent>
+        </Tooltip>
+    );
+}
+
 /** The "⋯" menu of one domain row, with the actions its state allows. */
 function RowActions({
     domain,
+    sslAllowed,
     onAction,
     onToggleForceHttps,
     onCancelSsl,
 }: {
     domain: DomainRow;
+    sslAllowed: boolean;
     onAction: (type: DomainAction['type'], domain: DomainRow) => void;
     onToggleForceHttps: (domain: DomainRow) => void;
     onCancelSsl: (domain: DomainRow) => void;
 }) {
     const isActive = domain.status === 'active';
-    const canRequestSsl = isActive && domain.ssl_status === null;
-    const canRetrySsl = isActive && domain.ssl_status === 'failed';
+    const canRequestSsl = isActive && sslAllowed && domain.ssl_status === null;
+    const canRetrySsl =
+        isActive && sslAllowed && domain.ssl_status === 'failed';
     const canCancelSsl = domain.ssl_status === 'failed';
     const hasActiveSsl = isActive && domain.ssl_status === 'active';
     const hasSslActions =

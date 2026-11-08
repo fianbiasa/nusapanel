@@ -1,4 +1,4 @@
-import type { Role } from '@/types';
+import type { QuotaKey, Role } from '@/types';
 
 /** Display names of the account roles. */
 export const roleLabels: Record<Role, string> = {
@@ -14,6 +14,7 @@ export const auditActionLabels: Record<string, string> = {
     'account.suspended': 'Akun disuspend',
     'account.unsuspended': 'Suspend akun dibuka',
     'account.password_reset': 'Kata sandi direset',
+    'account.package_changed': 'Paket akun diganti',
     'auth.login': 'Masuk ke panel',
     'domain.created': 'Domain ditambahkan',
     'domain.deleted': 'Domain dihapus',
@@ -22,7 +23,59 @@ export const auditActionLabels: Record<string, string> = {
     'domain.ssl_cancelled': 'Permintaan SSL dibatalkan',
     'domain.https_forced': 'Paksa HTTPS diaktifkan',
     'domain.https_unforced': 'Paksa HTTPS dimatikan',
+    'package.created': 'Paket dibuat',
+    'package.updated': 'Paket diubah',
+    'package.deleted': 'Paket dihapus',
 };
+
+/** The quantities a package limits, in the order the panel shows them. */
+export const quotaKeys: QuotaKey[] = [
+    'disk_mb',
+    'bandwidth_mb',
+    'domains',
+    'subdomains',
+    'email_accounts',
+    'databases',
+    'ftp_accounts',
+    'cron_jobs',
+];
+
+/** Display names of the quantities a package limits. */
+export const quotaLabels: Record<QuotaKey, string> = {
+    disk_mb: 'Disk',
+    bandwidth_mb: 'Bandwidth',
+    domains: 'Domain',
+    subdomains: 'Subdomain',
+    email_accounts: 'Akun email',
+    databases: 'Database',
+    ftp_accounts: 'Akun FTP',
+    cron_jobs: 'Cron job',
+};
+
+/** "500 MB", "1 GB", "1,5 TB" */
+export function formatMegabytes(megabytes: number): string {
+    const units = ['MB', 'GB', 'TB'];
+    let value = megabytes;
+    let unit = 0;
+
+    while (value >= 1024 && unit < units.length - 1) {
+        value /= 1024;
+        unit++;
+    }
+
+    return `${value.toLocaleString('id-ID', { maximumFractionDigits: 1 })} ${units[unit]}`;
+}
+
+/** A package limit as people read it: "1 GB", "5" or "Tanpa batas". */
+export function formatQuota(key: QuotaKey, value: number | null): string {
+    if (value === null) {
+        return 'Tanpa batas';
+    }
+
+    return key === 'disk_mb' || key === 'bandwidth_mb'
+        ? formatMegabytes(value)
+        : value.toLocaleString('id-ID');
+}
 
 /** What a task asks the server agent to do, by its agent method. */
 export const taskActionLabels: Record<string, string> = {
