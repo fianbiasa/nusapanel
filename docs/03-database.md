@@ -41,15 +41,15 @@ Satu tabel untuk admin, reseller, dan user (sama seperti DirectAdmin: setiap lev
 
 ### `packages`
 
-| Kolom               | Keterangan                                                                                                                                                                                                              |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| owner_id → users    | Admin atau reseller pemilik paket                                                                                                                                                                                       |
-| type                | `user` atau `reseller`                                                                                                                                                                                                  |
-| name                |                                                                                                                                                                                                                         |
+| Kolom               | Keterangan                                                                                                                                                                                                       |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| owner_id → users    | Admin atau reseller pemilik paket                                                                                                                                                                                |
+| type                | `user` atau `reseller`                                                                                                                                                                                           |
+| name                |                                                                                                                                                                                                                  |
 | **Kuantitas**       | `disk_mb`, `inodes`, `bandwidth_mb`, `domains`, `subdomains`, `pointers`, `email_accounts`, `email_forwarders`, `autoresponders`, `mailing_lists`, `databases`, `ftp_accounts`, `cron_jobs`, `email_daily_limit` |
-| **Resource**        | `cpu_percent`, `memory_mb`, `max_processes`, `io_weight`                                                                                                                                                                |
-| **Fitur (bool)**    | `php`, `cgi`, `ssl`, `ssh`, `dns_control`, `cron`, `spam_filter`, `catchall`, `git`, `nodejs`, `wordpress`, `login_keys`, `suspend_on_exceed`                                                                           |
-| **Khusus reseller** | `max_users`, `allow_oversell`, `ip_mode` (`shared`/`assigned`)                                                                                                                                                          |
+| **Resource**        | `cpu_percent`, `memory_mb`, `max_processes`, `io_weight`                                                                                                                                                         |
+| **Fitur (bool)**    | `php`, `cgi`, `ssl`, `ssh`, `dns_control`, `cron`, `spam_filter`, `catchall`, `git`, `nodejs`, `wordpress`, `login_keys`, `suspend_on_exceed`                                                                    |
+| **Khusus reseller** | `max_users`, `allow_oversell`, `ip_mode` (`shared`/`assigned`)                                                                                                                                                   |
 
 ### `account_usage`
 
@@ -103,39 +103,39 @@ Untuk grafik. Unique `(user_id, date)`.
 
 ### `domains`
 
-| Kolom                             | Keterangan                                    |
-| --------------------------------- | --------------------------------------------- |
-| user_id → users                   |                                               |
+| Kolom                             | Keterangan                                       |
+| --------------------------------- | ------------------------------------------------ |
+| user_id → users                   |                                                  |
 | parent_id → domains               | Domain induk subdomain & pointer (null = domain) |
-| name                              | unique, dalam bentuk punycode                 |
-| type                              | `domain`, `subdomain`, `pointer`              |
-| pointer_mode                      | `alias` atau `redirect` (hanya pointer)       |
-| name_unicode                      | Untuk tampilan (domain IDN)                   |
-| is_primary                        | Domain utama akun                             |
-| document_root                     | Default `domains/<domain>/public_html`        |
-| php_enabled, php_version          |                                               |
-| cgi_enabled                       |                                               |
-| ssl_enabled, force_https          |                                               |
-| www_mode                          | `both`, `redirect_to_www`, `redirect_to_bare` |
-| ip_address_id → ip_addresses      |                                               |
-| bandwidth_limit_mb, disk_limit_mb | null                                          |
-| mail_mode                         | `local` atau `remote`                         |
-| status                            | `pending`, `active`, `suspended`, `failed`    |
+| name                              | unique, dalam bentuk punycode                    |
+| type                              | `domain`, `subdomain`, `pointer`                 |
+| pointer_mode                      | `alias` atau `redirect` (hanya pointer)          |
+| name_unicode                      | Untuk tampilan (domain IDN)                      |
+| is_primary                        | Domain utama akun                                |
+| document_root                     | Default `domains/<domain>/public_html`           |
+| php_enabled, php_version          |                                                  |
+| cgi_enabled                       |                                                  |
+| ssl_enabled, force_https          |                                                  |
+| www_mode                          | `both`, `redirect_to_www`, `redirect_to_bare`    |
+| ip_address_id → ip_addresses      |                                                  |
+| bandwidth_limit_mb, disk_limit_mb | null                                             |
+| mail_mode                         | `local` atau `remote`                            |
+| status                            | `pending`, `active`, `suspended`, `failed`       |
 
 Subdomain dan pointer adalah baris `domains` juga, karena masing-masing punya vhost, log, dan sertifikat SSL sendiri. Subdomain punya folder sendiri seperti domain; pointer alias memakai folder domain induknya, pointer redirect tidak punya folder. Menghapus domain menghapus anak-anaknya dulu, lalu domainnya.
 
 ### Tabel pendukung web
 
-| Tabel                       | Kolom penting                                                                                                 |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Tabel                       | Kolom penting                                                                                                          |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | `url_redirects`             | domain_id, path, destination, status_code `301`/`302`, wildcard (ikut semua di bawah path). Unique `(domain_id, path)` |
-| `php_settings`              | domain_id, key, value. Key dari daftar putih                                                                  |
-| `protected_directories`     | domain_id, path, realm                                                                                        |
-| `protected_directory_users` | protected_directory_id, username, password_hash                                                               |
-| `error_pages`               | domain_id, status_code, content                                                                               |
-| `hotlink_protections`       | domain_id (unique), enabled, allowed_hosts (json), extensions (json), redirect_url, allow_empty_referer       |
-| `mime_types`                | domain_id, extension, kind `mime`/`handler`, value                                                            |
-| `custom_httpd_configs`      | domain_id, server `nginx`/`apache`, content. Hanya admin                                                      |
+| `php_settings`              | domain_id, key, value. Key dari daftar putih                                                                           |
+| `protected_directories`     | domain_id, path, realm                                                                                                 |
+| `protected_directory_users` | protected_directory_id, username, password_hash                                                                        |
+| `error_pages`               | domain_id, status_code, content                                                                                        |
+| `hotlink_protections`       | domain_id (unique), enabled, allowed_hosts (json), extensions (json), redirect_url, allow_empty_referer                |
+| `mime_types`                | domain_id, extension, kind `mime`/`handler`, value                                                                     |
+| `custom_httpd_configs`      | domain_id, server `nginx`/`apache`, content. Hanya admin                                                               |
 
 ### `ssl_certificates`
 
