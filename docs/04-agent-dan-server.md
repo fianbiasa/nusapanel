@@ -149,9 +149,9 @@ Setiap akun juga punya **user pemilik** bernama persis `<username>` (tanpa akhir
 
 ### ftp
 
-| Aksi             | Fungsi                                                                                    | Fase |
-| ---------------- | ----------------------------------------------------------------------------------------- | ---- |
-| `ftp.ensure_dir` | Buat folder tujuan sebagai user. Akun FTP sendiri dibaca Pure-FTPd langsung dari view SQL | P1   |
+| Aksi             | Fungsi                                                                                                                                                                                                                                                                                                                                                                                                                                         | Fase |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| `ftp.ensure_dir` | ✅ `{username, directory}`: buat folder login FTP (relatif terhadap home; `''` = home; nama folder `[A-Za-z0-9._-]`, tanpa `.`/`..`, ≤ 200 karakter, ≤ 16 tingkat) milik akun itu (0755), tanpa mengikuti symlink dan tanpa mengubah folder yang sudah ada; mengembalikan `{uid, gid, home}`. Login FTP sendiri dibaca Pure-FTPd langsung dari view SQL `v_ftp_users`, jadi buat/ganti password/hapus login dan suspend akun tidak butuh agent | P1   |
 
 ### mail
 
@@ -275,6 +275,9 @@ Setiap akun juga punya **user pemilik** bernama persis `<username>` (tanpa akhir
 /etc/nginx/sites-enabled/nusapanel-phpmyadmin.conf  https://<hostname>/phpmyadmin/ (port 443; selain /phpmyadmin/ diarahkan ke panel)
 /etc/php/8.4/fpm/pool.d/nusapanel-phpmyadmin.conf  pool phpMyAdmin (user nusa-pma, socket /run/php/nusapanel-phpmyadmin.sock)
 /etc/nusa-pma/                          0750 root:nusa-pma: config.inc.php, blowfish.key, sso.key (= PHPMYADMIN_SSO_KEY panel)
+/etc/pure-ftpd/db/mysql.conf            0600 root: koneksi Pure-FTPd ke view v_ftp_users (user nusapanel-ftp, password diganti tiap setup.sh)
+/etc/pure-ftpd/conf/, auth/30mysql      opsi Pure-FTPd (wrapper Debian); hanya backend MySQL, PAM & akun sistem dimatikan
+/etc/ssl/private/pure-ftpd.pem          0600 root: kunci + sertifikat hostname untuk FTPS (diperbarui hook perpanjangan Let's Encrypt)
 /var/lib/nusa-pma/{tmp,sessions,log}/   milik nusa-pma: file sementara, sesi (berisi password sesi) & log PHP phpMyAdmin
 /etc/apache2/nusapanel/<user>/<domain>.conf      vhost Apache (127.0.0.1:8080), ditulis nusad
 /etc/apache2/conf-available/nusapanel.conf       mod_remoteip, HTTPS dari proxy, aturan /home
@@ -301,7 +304,7 @@ Setiap akun juga punya **user pemilik** bernama persis `<username>` (tanpa akhir
 | Port            | Layanan                                             | Terbuka untuk                                                                    |
 | --------------- | --------------------------------------------------- | -------------------------------------------------------------------------------- |
 | 22              | SSH/SFTP                                            | Publik (port bisa diganti)                                                       |
-| 21, 35000–35999 | FTP + passive                                       | Publik                                                                           |
+| 21, 35000–35999 | FTP + passive (Pure-FTPd, wajib TLS eksplisit)      | Publik                                                                           |
 | 25, 465, 587    | SMTP                                                | Publik mulai P2; sampai itu Postfix hanya mendengar di 127.0.0.1:25 (kirim-saja) |
 | 110, 995        | POP3                                                | Publik                                                                           |
 | 143, 993        | IMAP                                                | Publik                                                                           |
@@ -317,11 +320,12 @@ Setiap akun juga punya **user pemilik** bernama persis `<username>` (tanpa akhir
 
 ## 4.6 Service systemd milik panel
 
-| Unit                               | Fungsi                                                                                                            |
-| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `nusad.service`                    | Agent                                                                                                             |
-| `nusapanel-queue.service`          | Queue worker Laravel                                                                                              |
-| `nusapanel-scheduler.timer`        | Menjalankan `schedule:run` Laravel tiap menit (ukur pemakaian tiap 15 menit, akhiri sesi phpMyAdmin tiap 5 menit) |
-| `php8.4-fpm.service`               | Pool PHP-FPM panel (`nusapanel`) dan phpMyAdmin (`nusapanel-phpmyadmin`, user `nusa-pma`)                         |
-| `nusa-php<versi>@<user>.service`   | PHP-FPM per user (contoh: `nusa-php84@budi.service`)                                                              |
-| `nusa.slice` → `nusa-<user>.slice` | Batas resource per user                                                                                           |
+| Unit                               | Fungsi                                                                                                                                   |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `nusad.service`                    | Agent                                                                                                                                    |
+| `nusapanel-queue.service`          | Queue worker Laravel                                                                                                                     |
+| `nusapanel-scheduler.timer`        | Menjalankan `schedule:run` Laravel tiap menit (ukur pemakaian tiap 15 menit, akhiri sesi phpMyAdmin tiap 5 menit)                        |
+| `pure-ftpd-mysql.service`          | FTP untuk akun hosting: login dari view `v_ftp_users`, chroot ke folder login, berjalan sebagai uid akun, wajib TLS, passive 35000–35999 |
+| `php8.4-fpm.service`               | Pool PHP-FPM panel (`nusapanel`) dan phpMyAdmin (`nusapanel-phpmyadmin`, user `nusa-pma`)                                                |
+| `nusa-php<versi>@<user>.service`   | PHP-FPM per user (contoh: `nusa-php84@budi.service`)                                                                                     |
+| `nusa.slice` → `nusa-<user>.slice` | Batas resource per user                                                                                                                  |

@@ -227,6 +227,12 @@ func (System) PrepareSite(_ context.Context, site Site) error {
 	return prepareSite(site)
 }
 
+// EnsurePath creates the missing folders of path inside a home, without
+// following symlinks or changing folders that already exist.
+func (System) EnsurePath(_ context.Context, path Path) error {
+	return ensurePath(path)
+}
+
 func (System) lookupGroup(ctx context.Context, name string) (Group, error) {
 	output, err := runner.Run(ctx, getentProgram, "group", "--", name)
 	if runner.ExitCode(err) == getentKeyNotFound {

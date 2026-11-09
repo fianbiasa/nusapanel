@@ -29,6 +29,7 @@ final class FakeAgentClient implements AgentClient
             'account.set_quota' => ['applied' => true, 'simulated' => true],
             'quota.report' => $this->quotaReport(),
             'db.report' => $this->databaseReport(),
+            'ftp.ensure_dir' => $this->ftpFolder((string) ($params['username'] ?? '')),
             'php.versions' => ['versions' => ['7.4', '8.0', '8.1', '8.2', '8.3', '8.4', '8.5'], 'simulated' => true],
             default => ['simulated' => true],
         };
@@ -60,6 +61,18 @@ final class FakeAgentClient implements AgentClient
             'agent_version' => 'fake',
             'simulated' => true,
         ];
+    }
+
+    /**
+     * The ids and home of the account an FTP folder was prepared for.
+     *
+     * @return array<string, mixed>
+     */
+    private function ftpFolder(string $username): array
+    {
+        $uid = User::query()->where('username', $username)->value('uid') ?? 2000;
+
+        return ['uid' => $uid, 'gid' => $uid, 'home' => '/home/'.$username, 'simulated' => true];
     }
 
     /**

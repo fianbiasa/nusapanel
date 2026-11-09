@@ -42,6 +42,13 @@ readonly ACME_DIR="/var/www/nusapanel-acme"
 readonly PMA_USER="nusa-pma"
 readonly PMA_CONFIG_DIR="/etc/nusa-pma"
 readonly PMA_DATA_DIR="/var/lib/nusa-pma"
+# Pure-FTPd reads FTP logins from the panel's database as this MariaDB user,
+# which may only read the v_ftp_users view. The hyphen keeps it out of the
+# names customers can give their database users (<username>_<name>).
+readonly FTP_DB_USER="nusapanel-ftp"
+readonly FTP_PASSIVE_PORTS="35000 35999"
+# Pure-FTPd reads its key and certificate from this one file, and only at start.
+readonly FTP_CERTIFICATE="/etc/ssl/private/pure-ftpd.pem"
 readonly DKIM_SELECTOR="nusapanel"
 readonly DNS_REPORT="$CONFIG_DIR/dns-records.txt"
 readonly RELEASE_REPO="fianbiasa/nusapanel"
@@ -643,12 +650,14 @@ DEBCONF
 
     # Apache would start on port 80, which Nginx owns, and fail the install.
     # It stays stopped until configure_web has moved it to 127.0.0.1:8080.
+    # Pure-FTPd would start with Debian's defaults (PAM logins, no TLS); it
+    # stays stopped until configure_ftp has set it up.
     block_service_starts
-    quietly "${apt[@]}" install apache2
+    quietly "${apt[@]}" install apache2 pure-ftpd-mysql
     remove_policy_rc
 
     quietly systemctl enable --now mariadb nginx "php$PHP_VERSION-fpm"
-    info "Nginx, Apache, MariaDB, Postfix dan PHP $PHP_VERSION terpasang"
+    info "Nginx, Apache, MariaDB, Postfix, Pure-FTPd dan PHP $PHP_VERSION terpasang"
 }
 
 # The site PHP versions: those of an earlier install plus --php-versions, or
@@ -1105,11 +1114,20 @@ issue_certificate() {
 # customer domains can still get theirs.
 install_renewal_hook() {
     install -d -m 0755 /etc/letsencrypt/renewal-hooks/deploy
-    cat >/etc/letsencrypt/renewal-hooks/deploy/nusapanel-reload.sh <<'HOOK'
+    cat >/etc/letsencrypt/renewal-hooks/deploy/nusapanel-reload.sh <<HOOK
 #!/bin/sh
 # Installed by nusapanel setup.sh: reload Nginx, which serves the hostname
-# certificate and those of customer websites.
+# certificate and those of customer websites. A renewed hostname certificate
+# also goes to Pure-FTPd, which reads key and certificate from one file, and
+# only at start.
 systemctl reload nginx
+
+if [ "\$RENEWED_LINEAGE" = "/etc/letsencrypt/live/$server_hostname" ] && [ -f $FTP_CERTIFICATE ]; then
+    umask 077
+    cat "\$RENEWED_LINEAGE/privkey.pem" "\$RENEWED_LINEAGE/fullchain.pem" >$FTP_CERTIFICATE.new &&
+        mv -f $FTP_CERTIFICATE.new $FTP_CERTIFICATE &&
+        systemctl try-restart pure-ftpd-mysql
+fi
 HOOK
     chmod 0755 /etc/letsencrypt/renewal-hooks/deploy/nusapanel-reload.sh
 }
@@ -1223,6 +1241,83 @@ configure_phpmyadmin() {
     quietly nginx -t
     systemctl reload nginx
     info "phpMyAdmin siap; customer membukanya dari halaman Databases di panel (login otomatis)"
+}
+
+# FTP for hosting accounts. Pure-FTPd signs logins in from the panel's
+# database (v_ftp_users, through a MariaDB user that may only read that
+# view), shuts each login in its folder acting as the account's Linux user,
+# and refuses sessions that do not switch to TLS. Logins of suspended
+# accounts drop out of the view, so nothing here changes when they do.
+configure_ftp() {
+    step "Mengatur FTP (Pure-FTPd, wajib TLS)"
+
+    # A new password on every run; it only lives in Pure-FTPd's config. The
+    # view comes from the panel's migrations (prepare_panel).
+    local password
+    password="$(openssl rand -hex 24)"
+
+    mariadb <<SQL
+CREATE USER IF NOT EXISTS '$FTP_DB_USER'@'localhost' IDENTIFIED BY '$password';
+ALTER USER '$FTP_DB_USER'@'localhost' IDENTIFIED BY '$password';
+GRANT SELECT ON \`nusapanel\`.\`v_ftp_users\` TO '$FTP_DB_USER'@'localhost';
+SQL
+
+    local db_conf=/etc/pure-ftpd/db/mysql.conf
+    (
+        umask 077
+        render "$release_dir/config/pure-ftpd-mysql.conf" "$db_conf.new"
+        printf 'MYSQLPassword    %s\n' "$password" >>"$db_conf.new"
+    )
+    mv -f "$db_conf.new" "$db_conf"
+
+    # Debian's wrapper turns each file in conf/ into an option. Logins come
+    # only from MariaDB: PAM and system accounts are switched off.
+    local conf=/etc/pure-ftpd/conf option value
+    while read -r option value; do
+        printf '%s\n' "$value" >"$conf/$option"
+    done <<OPTIONS
+MySQLConfigFile $db_conf
+PAMAuthentication no
+UnixAuthentication no
+NoAnonymous yes
+MinUID 1000
+ChrootEveryone yes
+TLS 2
+TLSCipherSuite HIGH
+PassivePortRange $FTP_PASSIVE_PORTS
+DontResolve yes
+DisplayDotFiles yes
+Umask 133 022
+MaxClientsNumber 50
+MaxClientsPerIP 8
+MaxIdleTime 15
+LimitRecursion 10000 8
+CustomerProof yes
+OPTIONS
+
+    # Behind NAT, passive connections must be sent to the public address.
+    if [[ -n "${public_ip:-}" && "$public_ip" != "${server_ip:-}" ]]; then
+        printf '%s\n' "$public_ip" >"$conf/ForcePassiveIP"
+    else
+        rm -f "$conf/ForcePassiveIP"
+    fi
+
+    # The wrapper only uses the backends linked in auth/.
+    find /etc/pure-ftpd/auth -mindepth 1 -maxdepth 1 -type l -delete
+    ln -s ../conf/MySQLConfigFile /etc/pure-ftpd/auth/30mysql
+
+    # The hostname certificate, as the panel uses it (self-signed until Let's
+    # Encrypt works); the renewal hook keeps it current.
+    mkdir -p "$(dirname "$FTP_CERTIFICATE")"
+    (
+        umask 077
+        cat "$CONFIG_DIR/ssl/panel.key" "$CONFIG_DIR/ssl/panel.crt" >"$FTP_CERTIFICATE.new"
+    )
+    mv -f "$FTP_CERTIFICATE.new" "$FTP_CERTIFICATE"
+
+    quietly systemctl enable pure-ftpd-mysql
+    systemctl restart pure-ftpd-mysql
+    info "FTP aktif di port 21: wajib TLS, passive ${FTP_PASSIVE_PORTS/ /-}, login dibuat customer di panel"
 }
 
 # Customer websites: Nginx in front (ports 80/443, static files), Apache on
@@ -1651,6 +1746,26 @@ verify_install() {
         info "https://$server_hostname:$PANEL_PORT bisa dibuka dengan sertifikat yang valid"
     fi
 
+    # FTP must switch to TLS with the hostname certificate, and refuse a
+    # login sent before that. fd 4: fd 3 is the terminal.
+    systemctl is-active --quiet pure-ftpd-mysql || die "Pure-FTPd tidak berjalan (cek: journalctl -u pure-ftpd-mysql)"
+    if ! timeout 15 openssl s_client -connect 127.0.0.1:21 -starttls ftp -servername "$server_hostname" \
+        </dev/null 2>/dev/null | grep -q "BEGIN CERTIFICATE"; then
+        die "FTP di port 21 tidak bisa beralih ke TLS (cek: journalctl -u pure-ftpd-mysql)"
+    fi
+    local reply
+    reply="$(
+        (
+            exec 4<>/dev/tcp/127.0.0.1/21
+            while read -r -t 5 line <&4 && [[ "$line" != "220 "* ]]; do :; done
+            printf 'USER nusapanel-check\r\n' >&4
+            read -r -t 5 line <&4 && printf '%s' "$line"
+        ) 2>/dev/null || true
+    )"
+    # Pure-FTPd answers 421 and hangs up; 530 would refuse the login too.
+    [[ "$reply" == 421* || "$reply" == 530* ]] || die "FTP menerima login tanpa TLS (balasan: ${reply:-tidak ada})"
+    info "FTP aktif di port 21 dan hanya menerima login lewat TLS"
+
     # Without a sign-on session phpMyAdmin sends the browser to the panel.
     status="$(curl -sk -o /dev/null -w '%{http_code} %{redirect_url}' --resolve "$server_hostname:443:127.0.0.1" \
         "https://$server_hostname/phpmyadmin/" || true)"
@@ -1755,7 +1870,7 @@ summary() {
 
     printf '\n'
     info "Catatan:"
-    info "- Pastikan port 80, 443 dan $PANEL_PORT terbuka di firewall / security group provider VPS."
+    info "- Pastikan port 80, 443, $PANEL_PORT, 21 dan ${FTP_PASSIVE_PORTS/ /-} (FTP passive) terbuka di firewall / security group provider VPS."
     info "- Cek agent: nusactl ping"
     info "- Lupa password admin: runuser -u $PANEL_USER -- php$PHP_VERSION $INSTALL_DIR/current/panel/artisan nusapanel:reset-password $admin_user"
     info "- Log instalasi: $INSTALL_LOG"
@@ -1798,6 +1913,7 @@ main() {
     configure_php_fpm
     configure_nginx
     configure_phpmyadmin
+    configure_ftp
     configure_web
     configure_quota
     configure_logrotate

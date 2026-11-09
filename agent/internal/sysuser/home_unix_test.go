@@ -230,6 +230,76 @@ func TestPrepareSiteDoesNotFollowSymlinks(t *testing.T) {
 	}
 }
 
+func testPath(home string, dirs ...string) Path {
+	return Path{Home: home, Dirs: dirs, UID: os.Getuid(), GID: os.Getgid(), Mode: 0o755}
+}
+
+func TestEnsurePathCreatesTheMissingFolders(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "budi")
+	mustMkdir(t, home, 0o710)
+
+	if err := ensurePath(testPath(home, "domains", "example.com", "uploads")); err != nil {
+		t.Fatal(err)
+	}
+
+	assertDir(t, filepath.Join(home, "domains/example.com/uploads"), 0o755)
+}
+
+func TestEnsurePathLeavesExistingFoldersAlone(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "budi")
+	mustMkdir(t, home, 0o710)
+	mustMkdir(t, filepath.Join(home, "private"), 0o700)
+
+	if err := ensurePath(testPath(home, "private", "backups")); err != nil {
+		t.Fatal(err)
+	}
+
+	assertMode(t, filepath.Join(home, "private"), 0o700)
+	assertDir(t, filepath.Join(home, "private/backups"), 0o755)
+
+	// The home itself is a valid folder too.
+	if err := ensurePath(testPath(home)); err != nil {
+		t.Fatal(err)
+	}
+
+	assertMode(t, home, 0o710)
+}
+
+func TestEnsurePathDoesNotFollowSymlinks(t *testing.T) {
+	outside := filepath.Join(t.TempDir(), "etc")
+	mustMkdir(t, outside, 0o755)
+
+	home := filepath.Join(t.TempDir(), "budi")
+	mustMkdir(t, home, 0o710)
+
+	if err := os.Symlink(outside, filepath.Join(home, "linked")); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := ensurePath(testPath(home, "linked", "x")); !errors.Is(err, ErrInTheWay) {
+		t.Fatalf("got %v, want ErrInTheWay", err)
+	}
+
+	if entries, _ := os.ReadDir(outside); len(entries) != 0 {
+		t.Fatalf("something was created outside the home: %v", entries)
+	}
+}
+
+func TestEnsurePathRefusesUnsafeNames(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "budi")
+	mustMkdir(t, home, 0o710)
+
+	for _, dirs := range [][]string{{".."}, {"."}, {""}, {"a/b"}} {
+		if err := ensurePath(testPath(home, dirs...)); err == nil {
+			t.Errorf("%q was accepted", dirs)
+		}
+	}
+
+	if err := ensurePath(testPath("budi", "x")); err == nil {
+		t.Error("a relative home was accepted")
+	}
+}
+
 func TestPrepareSiteRefusesFilesInPlaceOfFolders(t *testing.T) {
 	home := filepath.Join(t.TempDir(), "budi")
 	mustMkdir(t, home, 0o710)

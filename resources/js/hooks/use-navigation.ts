@@ -1,6 +1,7 @@
 import { usePage } from '@inertiajs/react';
 import {
     Database,
+    FolderUp,
     Globe,
     House,
     Milestone,
@@ -17,6 +18,7 @@ import { index as auditLogsIndex } from '@/routes/admin/audit-logs';
 import { index as packagesIndex } from '@/routes/admin/packages';
 import { index as tasksIndex } from '@/routes/admin/tasks';
 import { index as domainsIndex } from '@/routes/domains';
+import { index as ftpIndex } from '@/routes/ftp';
 import { edit as profileEdit } from '@/routes/profile';
 import { index as redirectsIndex } from '@/routes/redirects';
 import type { NavItem } from '@/types';
@@ -100,6 +102,11 @@ export function useNavigation(): {
             href: databasesIndex(),
             icon: Database,
         };
+        const ftp: NavItem = {
+            title: 'FTP',
+            href: ftpIndex(),
+            icon: FolderUp,
+        };
         const redirects: NavItem = {
             title: 'Redirects',
             href: redirectsIndex(),
@@ -108,12 +115,13 @@ export function useNavigation(): {
 
         sections.push({
             label: 'Menu',
-            items: [dashboardItem, domains, databases, redirects],
+            items: [dashboardItem, domains, databases, ftp, redirects],
         });
         dockItems = [
             dashboardItem,
             domains,
             databases,
+            ftp,
             redirects,
             settingsItem,
         ];

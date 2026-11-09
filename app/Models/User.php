@@ -29,6 +29,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property int $id
  * @property string $username
  * @property int|null $uid Linux user id, set once the agent has created the account.
+ * @property int|null $gid Linux group id of the account's own group, set by the agent like the uid.
  * @property string $name
  * @property string $email
  * @property Carbon|null $email_verified_at
@@ -63,6 +64,7 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     {
         return [
             'uid' => 'integer',
+            'gid' => 'integer',
             'package_id' => 'integer',
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
@@ -132,6 +134,16 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     public function databaseUsers(): HasMany
     {
         return $this->hasMany(DatabaseUser::class);
+    }
+
+    /**
+     * The FTP logins of this hosting account.
+     *
+     * @return HasMany<FtpAccount, $this>
+     */
+    public function ftpAccounts(): HasMany
+    {
+        return $this->hasMany(FtpAccount::class);
     }
 
     /**

@@ -212,6 +212,7 @@ return [
         'disk_mb' => 'kuota disk',
         'display_errors' => 'tampilkan error',
         'domain' => 'domain',
+        'directory' => 'folder',
         'domain_id' => 'domain',
         'date_timezone' => 'zona waktu',
         'domains' => 'batas domain',

@@ -134,6 +134,68 @@ func prepareSite(site Site) error {
 	return nil
 }
 
+// ensurePath creates the missing directories of path inside its home. Unlike
+// prepareSite it leaves existing ones as they are, because they are the
+// account owner's, with the modes the owner chose. It never follows a
+// symlink either.
+func ensurePath(path Path) error {
+	if !filepath.IsAbs(path.Home) || filepath.Clean(path.Home) != path.Home {
+		return fmt.Errorf("home %q must be a clean absolute path", path.Home)
+	}
+
+	fd, err := unix.Open(path.Home, openDirFlags, 0)
+	if err != nil {
+		return fmt.Errorf("open %s: %w", path.Home, inTheWay(err))
+	}
+
+	current := path.Home
+
+	for _, name := range path.Dirs {
+		current += "/" + name
+
+		child, err := ensureDir(fd, name, path.UID, path.GID, path.Mode)
+		unix.Close(fd)
+
+		if err != nil {
+			return fmt.Errorf("prepare %s: %w", current, err)
+		}
+
+		fd = child
+	}
+
+	return unix.Close(fd)
+}
+
+// ensureDir opens directory name inside the directory open as parentFD,
+// creating it with mode, owned by uid:gid, when it is missing.
+func ensureDir(parentFD int, name string, uid, gid int, mode fs.FileMode) (int, error) {
+	if name == "" || name == "." || name == ".." || strings.Contains(name, "/") {
+		return -1, fmt.Errorf("invalid directory name %q", name)
+	}
+
+	err := unix.Mkdirat(parentFD, name, uint32(mode.Perm()))
+	if err != nil && err != unix.EEXIST {
+		return -1, fmt.Errorf("create: %w", err)
+	}
+
+	created := err == nil
+
+	fd, err := unix.Openat(parentFD, name, openDirFlags, 0)
+	if err != nil {
+		return -1, fmt.Errorf("open: %w", inTheWay(err))
+	}
+
+	if created {
+		if err := setOwnerAndMode(fd, uid, gid, mode); err != nil {
+			unix.Close(fd)
+
+			return -1, err
+		}
+	}
+
+	return fd, nil
+}
+
 // writeNewFile creates name inside the directory open as dirFD with data,
 // owner and mode. A file or symlink already there is left alone: O_EXCL
 // fails on both, so nothing outside the directory can be written through it.

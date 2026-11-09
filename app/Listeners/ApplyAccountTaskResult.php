@@ -61,10 +61,12 @@ class ApplyAccountTaskResult
         }
 
         $uid = filter_var($task->output['uid'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]);
+        $gid = filter_var($task->output['gid'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]);
 
         $account->forceFill([
             'status' => AccountStatus::Active,
             'uid' => $uid === false ? $account->uid : $uid,
+            'gid' => $gid === false ? $account->gid : $gid,
         ])->save();
 
         $this->quotas->applyToNewAccount($account, $task->actor);

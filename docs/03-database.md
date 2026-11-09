@@ -31,6 +31,7 @@ Satu tabel untuk admin, reseller, dan user (sama seperti DirectAdmin: setiap lev
 | suspend_reason               | varchar, null                                               |                                                                                                        |
 | phpmyadmin_expires_at        | timestamp, null                                             | kapan sesi phpMyAdmin yang terbuka berakhir; scheduler lalu memberi user pemilik MariaDB password acak |
 | uid                          | int, unique                                                 | UID Linux                                                                                              |
+| gid                          | int, null                                                   | GID grup milik akun (dari agent, seperti uid); login FTP berjalan sebagai uid:gid ini                  |
 | ip_address_id                | → ip_addresses                                              | IP utama                                                                                               |
 | language, timezone, theme    | varchar                                                     |                                                                                                        |
 | cron_email                   | varchar, null                                               | Tujuan email output cron                                                                               |
@@ -185,9 +186,9 @@ Password user database **tidak disimpan** dan tidak pernah dikirim ke agent. Pan
 
 ## 3.5 FTP
 
-| Tabel          | Kolom penting                                                                                                       |
-| -------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `ftp_accounts` | user_id, domain_id (null), login (unique, `nama@domain`), password_hash (SHA512-CRYPT), directory, quota_mb, status |
+| Tabel          | Kolom penting                                                                                                                                                                                                                                                                                                                                 |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ftp_accounts` | user_id, domain_id (domain atau subdomain akun itu; login ikut terhapus bersama domainnya), login (unique, `nama@domain`, ≤ 128), password_hash (SHA512-CRYPT, dicek Pure-FTPd dengan `crypt()`), directory (relatif terhadap home, `''` = seluruh home), status (pending/active/failed). Tanpa kuota per login: kuota disk akun yang berlaku |
 
 ---
 
@@ -208,12 +209,12 @@ Password user database **tidak disimpan** dan tidak pernah dikirim ke agent. Pan
 
 Setiap layanan punya user MariaDB sendiri yang hanya boleh `SELECT` dari view-nya.
 
-| View               | Dipakai oleh     | Isi                                           |
-| ------------------ | ---------------- | --------------------------------------------- |
-| `v_mail_domains`   | Postfix          | Domain aktif dengan mail lokal                |
-| `v_mail_mailboxes` | Postfix, Dovecot | Alamat, password_hash, uid, gid, home, quota  |
-| `v_mail_aliases`   | Postfix          | Forwarder + catch-all                         |
-| `v_ftp_users`      | Pure-FTPd        | Login, password_hash, uid, gid, folder, quota |
+| View               | Dipakai oleh     | Isi                                                                                                                                                                                                                                 |
+| ------------------ | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `v_mail_domains`   | Postfix          | Domain aktif dengan mail lokal                                                                                                                                                                                                      |
+| `v_mail_mailboxes` | Postfix, Dovecot | Alamat, password_hash, uid, gid, home, quota                                                                                                                                                                                        |
+| `v_mail_aliases`   | Postfix          | Forwarder + catch-all                                                                                                                                                                                                               |
+| `v_ftp_users`      | Pure-FTPd        | ✅ login, password, uid, gid, dir (`/home/<user>/<directory>`); hanya login `active` dari akun `active` ber-role user yang uid & gid-nya sudah diketahui. Dibaca user MariaDB `nusapanel-ftp` yang hanya punya `SELECT` di view ini |
 
 Akun, domain, atau mailbox yang di-suspend otomatis tersaring dari view, jadi suspend berlaku seketika tanpa reload service.
 

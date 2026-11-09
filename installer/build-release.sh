@@ -169,6 +169,7 @@ for arch in $ARCHES; do
         "$SRC/installer/files/nginx-default.conf" "$SRC/installer/files/apache-nusapanel.conf" \
         "$SRC/installer/files/php-fpm-panel.conf" "$SRC/installer/files/php-fpm-phpmyadmin.conf" \
         "$SRC/installer/files/nginx-phpmyadmin.conf" "$SRC/installer/files/phpmyadmin-config.inc.php" \
+        "$SRC/installer/files/pure-ftpd-mysql.conf" \
         "$SRC/installer/files/logrotate.conf" "$stage/config/"
     stamp_setup "$stage/setup.sh"
     printf '%s\n' "$VERSION" >"$stage/VERSION"

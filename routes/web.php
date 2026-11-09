@@ -8,6 +8,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DatabaseController;
 use App\Http\Controllers\DatabaseUserController;
 use App\Http\Controllers\DomainController;
+use App\Http\Controllers\FtpAccountController;
 use App\Http\Controllers\PhpMyAdminController;
 use App\Http\Controllers\PointerController;
 use App\Http\Controllers\SubdomainController;
@@ -36,6 +37,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('database-users', [DatabaseUserController::class, 'store'])->name('database-users.store');
         Route::put('database-users/{databaseUser}', [DatabaseUserController::class, 'update'])->name('database-users.update');
         Route::delete('database-users/{databaseUser}', [DatabaseUserController::class, 'destroy'])->name('database-users.destroy');
+        Route::get('ftp', [FtpAccountController::class, 'index'])->name('ftp.index');
+        Route::post('ftp', [FtpAccountController::class, 'store'])->name('ftp.store');
+        Route::put('ftp/{ftpAccount}', [FtpAccountController::class, 'update'])->name('ftp.update');
+        Route::delete('ftp/{ftpAccount}', [FtpAccountController::class, 'destroy'])->name('ftp.destroy');
         Route::post('subdomains', [SubdomainController::class, 'store'])->name('subdomains.store');
         Route::post('pointers', [PointerController::class, 'store'])->name('pointers.store');
         Route::get('redirects', [UrlRedirectController::class, 'index'])->name('redirects.index');

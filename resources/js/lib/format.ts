@@ -36,6 +36,9 @@ export const auditActionLabels: Record<string, string> = {
     'database_user.created': 'User database dibuat',
     'database_user.updated': 'User database diubah',
     'database_user.deleted': 'User database dihapus',
+    'ftp_account.created': 'Akun FTP dibuat',
+    'ftp_account.updated': 'Akun FTP diubah',
+    'ftp_account.deleted': 'Akun FTP dihapus',
     'redirect.created': 'Pengalihan ditambahkan',
     'redirect.deleted': 'Pengalihan dihapus',
     'package.created': 'Paket dibuat',
@@ -140,6 +143,7 @@ export const taskActionLabels: Record<string, string> = {
     'db.delete_database': 'Hapus database',
     'db.apply_user': 'Atur user database',
     'db.delete_user': 'Hapus user database',
+    'ftp.ensure_dir': 'Siapkan folder FTP',
     'ssl.delete': 'Hapus sertifikat SSL',
     'system.info': 'Baca info server',
 };

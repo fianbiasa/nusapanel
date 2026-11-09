@@ -35,6 +35,10 @@ func Register(registry *rpc.Registry) {
 	for name, method := range webMethods(sysuser.System{}, web) {
 		registry.Register(name, method)
 	}
+
+	for name, method := range ftpMethods(sysuser.System{}, sysuser.System{}) {
+		registry.Register(name, method)
+	}
 }
 
 // ping lets the panel and the installer check that the agent is up.

@@ -85,6 +85,21 @@ type Site struct {
 	Index []byte
 }
 
+// Path is a folder inside an existing home directory, such as the folder of
+// an FTP account.
+type Path struct {
+	// Home is the clean absolute path of the home directory.
+	Home string
+	// Dirs are nested: the first is inside Home, every next one inside the
+	// one before it. Empty means the home itself.
+	Dirs []string
+	// Missing directories are created with Mode, owned by UID:GID. Existing
+	// ones keep their owner and mode.
+	UID  int
+	GID  int
+	Mode fs.FileMode
+}
+
 // parsePasswd parses one passwd entry, as printed by `getent passwd`.
 func parsePasswd(line string) (User, error) {
 	fields := strings.Split(strings.TrimSuffix(line, "\n"), ":")

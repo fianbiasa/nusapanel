@@ -7,11 +7,12 @@ import {
     Plus,
     Trash2,
     UserRound,
-    Wand2,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { AffixInput } from '@/components/affix-input';
+import { GeneratedPasswordInput } from '@/components/generated-password-input';
 import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
 import { Panel, tableStyles } from '@/components/panel';
@@ -27,7 +28,6 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { formatBytes, formatDateTime } from '@/lib/format';
@@ -76,18 +76,6 @@ type Action =
     | { type: 'delete-user'; user: DatabaseUserRow };
 
 const busyStatuses: Status[] = ['pending', 'deleting'];
-
-/** A random password of 20 letters and digits, without look-alikes. */
-function generatePassword(): string {
-    const alphabet =
-        'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
-    const values = crypto.getRandomValues(new Uint32Array(20));
-
-    return Array.from(
-        values,
-        (value) => alphabet[value % alphabet.length],
-    ).join('');
-}
 
 export default function DatabasesIndex({
     databases,
@@ -560,82 +548,18 @@ function PrefixedNameInput({
     invalid: boolean;
 }) {
     return (
-        <div className="flex h-11 items-stretch overflow-hidden rounded-xl border border-input bg-card shadow-xs transition-[color,box-shadow] focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50 has-aria-invalid:border-destructive">
-            <span className="flex items-center border-r bg-muted px-3 font-mono text-sm text-muted-foreground select-none">
-                {prefix}
-            </span>
-            <input
-                id={id}
-                name={name}
-                value={value}
-                onChange={(event) => onChange(event.target.value.toLowerCase())}
-                required
-                disabled={disabled}
-                autoComplete="off"
-                autoCapitalize="none"
-                spellCheck={false}
-                maxLength={maxLength}
-                placeholder={placeholder}
-                aria-invalid={invalid || undefined}
-                className="min-w-0 flex-1 bg-transparent px-3 font-mono text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
-            />
-        </div>
-    );
-}
-
-/**
- * A password input with a generator. A generated password is shown so it
- * can be copied into the application's settings.
- */
-function PasswordWithGenerator({
-    id,
-    value,
-    onChange,
-    required,
-    placeholder,
-    disabled = false,
-    invalid,
-}: {
-    id: string;
-    value: string;
-    onChange: (value: string) => void;
-    required: boolean;
-    placeholder: string;
-    disabled?: boolean;
-    invalid: boolean;
-}) {
-    const [isVisible, setIsVisible] = useState(false);
-
-    return (
-        <div className="flex gap-2">
-            <Input
-                id={id}
-                name="password"
-                type={isVisible ? 'text' : 'password'}
-                value={value}
-                onChange={(event) => onChange(event.target.value)}
-                required={required}
-                disabled={disabled}
-                minLength={12}
-                maxLength={128}
-                autoComplete="new-password"
-                placeholder={placeholder}
-                className="font-mono"
-                aria-invalid={invalid || undefined}
-            />
-            <Button
-                type="button"
-                variant="outline"
-                className="h-11 shrink-0"
-                disabled={disabled}
-                onClick={() => {
-                    onChange(generatePassword());
-                    setIsVisible(true);
-                }}
-            >
-                <Wand2 /> Buat
-            </Button>
-        </div>
+        <AffixInput
+            id={id}
+            name={name}
+            prefix={prefix}
+            value={value}
+            onChange={(event) => onChange(event.target.value.toLowerCase())}
+            required
+            disabled={disabled}
+            maxLength={maxLength}
+            placeholder={placeholder}
+            invalid={invalid}
+        />
     );
 }
 
@@ -741,7 +665,7 @@ function CreateDatabaseForm({
                                 <Label htmlFor="database-user-password">
                                     Password
                                 </Label>
-                                <PasswordWithGenerator
+                                <GeneratedPasswordInput
                                     id="database-user-password"
                                     value={password}
                                     onChange={setPassword}
@@ -848,7 +772,7 @@ function UserForm({
                         <Label htmlFor="user-password">
                             {user ? 'Password baru' : 'Password'}
                         </Label>
-                        <PasswordWithGenerator
+                        <GeneratedPasswordInput
                             id="user-password"
                             value={password}
                             onChange={setPassword}

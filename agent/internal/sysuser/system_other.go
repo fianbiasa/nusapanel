@@ -66,3 +66,8 @@ func (System) PrepareHome(context.Context, Home) error {
 func (System) PrepareSite(context.Context, Site) error {
 	return unsupported()
 }
+
+// EnsurePath is not supported on this platform.
+func (System) EnsurePath(context.Context, Path) error {
+	return unsupported()
+}

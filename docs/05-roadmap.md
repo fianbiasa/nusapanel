@@ -65,7 +65,9 @@ Pekerjaan:
 
 - phpMyAdmin SSO ✅: tombol "Buka phpMyAdmin" di halaman Databases membuka phpMyAdmin 5.2 (dipaket bersama rilis, di `https://<hostname>/phpmyadmin/`, origin terpisah dari panel) dalam tab baru, langsung login ke semua database akun tanpa mengetik password; login memakai user pemilik MariaDB akun itu dengan password baru tiap sesi, lewat tiket terenkripsi yang kedaluwarsa dalam semenit dan hanya berlaku di browser yang memintanya; sesi berakhir setelah 60 menit (password diganti acak oleh scheduler); phpMyAdmin berjalan sebagai user `nusa-pma` yang tidak bisa membaca konfigurasi panel maupun file customer.
 
-Berikutnya: SSL hostname untuk mail/FTP.
+- FTP ✅: halaman FTP membuat login `nama@domain` (domain atau subdomain akun) yang hanya bisa membuka satu folder di home-nya (bawaan `domains/<domain>/public_html`, atau seluruh home), dengan password yang bisa diganti kapan saja dan batas jumlah dari paket; Pure-FTPd membaca login langsung dari database panel lewat view yang hanya memuat login siap dari akun aktif, sehingga login akun yang di-suspend langsung ditolak; FTP wajib TLS eksplisit (FTPS) dengan sertifikat hostname, yang ikut diperbarui saat Let's Encrypt memperpanjangnya; file yang diunggah milik akun itu dan terhitung di kuota disknya.
+
+Berikutnya: cron jobs, SFTP, file manager. SSL mail menyusul bersama email (P2).
 
 - Akun user & paket user, buat/suspend/hapus akun, quota disk & inode.
 - Domain, subdomain, pointer, redirect, www/HTTPS.
