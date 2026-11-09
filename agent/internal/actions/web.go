@@ -44,6 +44,9 @@ type applyDomainParams struct {
 	Kind      string           `json:"kind"`
 	Parent    string           `json:"parent"`
 	Redirects []redirectParams `json:"redirects"`
+	// PHPSettings are the website's php.ini settings that differ from the
+	// defaults, such as {"memory_limit": "512M"}.
+	PHPSettings map[string]string `json:"php_settings"`
 }
 
 // redirectParams are one URL redirect of web.apply_domain.
@@ -89,6 +92,7 @@ func (p applyDomainParams) site(user sysuser.User) webserver.Site {
 		Kind:              webserver.Kind(p.Kind),
 		Parent:            p.Parent,
 		Redirects:         redirects,
+		PHPSettings:       p.PHPSettings,
 	}
 }
 

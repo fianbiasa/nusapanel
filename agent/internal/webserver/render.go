@@ -2,7 +2,9 @@ package webserver
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -29,9 +31,12 @@ type siteData struct {
 	NginxAccountDir string
 	Backend         string
 	IPv6            bool
-	// Socket and PoolName identify the account's PHP-FPM pool.
+	// Socket and PoolName identify the website's PHP-FPM pool.
 	Socket   string
 	PoolName string
+	// ClientMaxBodySize is the largest request body Nginx accepts, enough
+	// for the website's POST limit.
+	ClientMaxBodySize string
 	// AcmeDir is the webroot of Let's Encrypt challenges.
 	AcmeDir string
 	// SSL adds a server on port 443 with Certificate and CertificateKey;
@@ -48,15 +53,37 @@ type siteData struct {
 	Redirects []redirectData
 }
 
-// poolData is what the pool template sees.
+// poolData is what the pool section template sees: the PHP-FPM pool of
+// one website, or the single pool of a whole account from before websites
+// had pools of their own.
 type poolData struct {
 	User       string
 	PHPVersion string
 	PHPTag     string
 	Home       string
+	// Section names the pool: the website's domain (the username for the
+	// old pool of the account).
+	Section  string
+	Socket   string
+	PoolName string
+	Settings []phpSetting
+}
+
+// masterData is what the account's main PHP-FPM configuration of one
+// version sees.
+type masterData struct {
+	User       string
+	PHPVersion string
+	PHPTag     string
 	RunDir     string
-	Socket     string
-	PoolName   string
+	// Name is the master's pid file and syslog name, php84-budi.
+	Name string
+	// SectionDir holds the pool section of every website of the account on
+	// this version.
+	SectionDir string
+	// Include loads them; empty in the configuration PHP-FPM checks, which
+	// has them inline.
+	Include string
 }
 
 // unitData is what the systemd template unit sees.
@@ -85,7 +112,7 @@ func render(name string, data any) ([]byte, error) {
 }
 
 func (m *Manager) siteData(site Site) siteData {
-	pool := m.poolData(site.User, site.PHPVersion)
+	pool := m.sitePoolData(site)
 
 	var forwardTo string
 	if site.kind() == KindForward {
@@ -98,38 +125,90 @@ func (m *Manager) siteData(site Site) siteData {
 	}
 
 	return siteData{
-		User:            site.User,
-		Domain:          site.Domain,
-		DocumentRoot:    m.siteDocumentRoot(site),
-		ForwardTo:       forwardTo,
-		Redirects:       redirectsData(site.Redirects),
-		LogDir:          m.cfg.LogDir,
-		NginxAccountDir: m.nginxAccountDir(site.User),
-		Backend:         m.cfg.Backend,
-		IPv6:            m.hasIPv6(),
-		Socket:          pool.Socket,
-		PoolName:        pool.PoolName,
-		AcmeDir:         m.cfg.AcmeDir,
-		SSL:             site.SSL,
-		ForceHTTPS:      site.ForceHTTPS,
-		Certificate:     certificate,
-		CertificateKey:  certificateKey,
+		User:              site.User,
+		Domain:            site.Domain,
+		DocumentRoot:      m.siteDocumentRoot(site),
+		ForwardTo:         forwardTo,
+		Redirects:         redirectsData(site.Redirects),
+		LogDir:            m.cfg.LogDir,
+		NginxAccountDir:   m.nginxAccountDir(site.User),
+		Backend:           m.cfg.Backend,
+		IPv6:              m.hasIPv6(),
+		Socket:            pool.Socket,
+		PoolName:          pool.PoolName,
+		ClientMaxBodySize: clientMaxBodySize(site.PHPSettings),
+		AcmeDir:           m.cfg.AcmeDir,
+		SSL:               site.SSL,
+		ForceHTTPS:        site.ForceHTTPS,
+		Certificate:       certificate,
+		CertificateKey:    certificateKey,
 	}
 }
 
-func (m *Manager) poolData(user, version string) poolData {
-	tag := phpTag(version)
-	name := "php" + tag + "-" + user
+// sitePoolData returns the pool of site: named after its domain, with a
+// socket named after a hash of it, so even the longest domain fits in a
+// socket path.
+func (m *Manager) sitePoolData(site Site) poolData {
+	name := m.masterName(site.User, site.PHPVersion) + "-" + siteKey(site.Domain)
+
+	return poolData{
+		User:       site.User,
+		PHPVersion: site.PHPVersion,
+		PHPTag:     phpTag(site.PHPVersion),
+		Home:       m.home(site.User),
+		Section:    site.Domain,
+		Socket:     m.cfg.RunDir + "/" + name + ".sock",
+		PoolName:   name,
+		Settings:   phpSettingsData(site.PHPSettings),
+	}
+}
+
+// legacyPoolData returns the single pool every website of user on version
+// used before websites had pools of their own. It is kept, with the
+// default settings, while an Apache vhost of user still sends PHP to it.
+func (m *Manager) legacyPoolData(user, version string) poolData {
+	name := m.masterName(user, version)
 
 	return poolData{
 		User:       user,
 		PHPVersion: version,
-		PHPTag:     tag,
+		PHPTag:     phpTag(version),
 		Home:       m.home(user),
-		RunDir:     m.cfg.RunDir,
+		Section:    user,
 		Socket:     m.cfg.RunDir + "/" + name + ".sock",
 		PoolName:   name,
+		Settings:   phpSettingsData(nil),
 	}
+}
+
+func (m *Manager) masterData(user, version string, include bool) masterData {
+	data := masterData{
+		User:       user,
+		PHPVersion: version,
+		PHPTag:     phpTag(version),
+		RunDir:     m.cfg.RunDir,
+		Name:       m.masterName(user, version),
+		SectionDir: m.poolSectionDir(user, version),
+	}
+
+	if include {
+		data.Include = data.SectionDir + "/*.conf"
+	}
+
+	return data
+}
+
+// masterName names the PHP-FPM master of user for version, php84-budi.
+func (m *Manager) masterName(user, version string) string {
+	return "php" + phpTag(version) + "-" + user
+}
+
+// siteKey is a short, fixed-length name for domain: the start of its
+// SHA-256 in hex.
+func siteKey(domain string) string {
+	sum := sha256.Sum256([]byte(domain))
+
+	return hex.EncodeToString(sum[:])[:12]
 }
 
 func (m *Manager) unitData(version string) unitData {
@@ -184,6 +263,16 @@ func (m *Manager) poolVersionDir(version string) string {
 
 func (m *Manager) poolFile(user, version string) string {
 	return m.poolVersionDir(version) + "/" + user + ".conf"
+}
+
+// poolSectionDir holds the pool sections of the websites of user on
+// version, one <domain>.conf each.
+func (m *Manager) poolSectionDir(user, version string) string {
+	return m.poolVersionDir(version) + "/" + user + ".d"
+}
+
+func (m *Manager) poolSectionFile(user, version, domain string) string {
+	return m.poolSectionDir(user, version) + "/" + domain + ".conf"
 }
 
 func (m *Manager) unitTemplate(version string) string {

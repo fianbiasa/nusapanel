@@ -7,6 +7,7 @@ use App\Enums\DomainType;
 use App\Enums\PointerMode;
 use App\Enums\SslSource;
 use App\Enums\SslStatus;
+use App\Support\PhpSettings;
 use Database\Factories\DomainFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Casts\Attribute;
@@ -38,6 +39,7 @@ use Illuminate\Support\Carbon;
  * @property PointerMode|null $pointer_mode Only set for pointers.
  * @property-read string $display_name
  * @property string $php_version
+ * @property array<string, string>|null $php_settings The php.ini settings that differ from the defaults ({@see PhpSettings}).
  * @property bool $is_primary
  * @property DomainStatus $status
  * @property SslStatus|null $ssl_status
@@ -74,6 +76,7 @@ class Domain extends Model
     {
         return [
             'is_primary' => 'boolean',
+            'php_settings' => 'array',
             'type' => DomainType::class,
             'pointer_mode' => PointerMode::class,
             'status' => DomainStatus::class,

@@ -232,6 +232,9 @@ func TestWebMethodsRejectInvalidParams(t *testing.T) {
 			{"username": "budi", "domain": "example.com", "php_version": "8.4", "ssl": "yes"},
 			{"username": "budi", "domain": "example.com", "php_version": "8.4", "ssl": 1},
 			{"username": "budi", "domain": "example.com", "php_version": "8.4", "kind": "proxy"},
+			{"username": "budi", "domain": "example.com", "php_version": "8.4", "php_settings": map[string]string{"open_basedir": "/"}},
+			{"username": "budi", "domain": "example.com", "php_version": "8.4", "php_settings": map[string]string{"memory_limit": "1G"}},
+			{"username": "budi", "domain": "example.com", "php_version": "8.4", "php_settings": map[string]int{"max_input_vars": 5000}},
 			{"username": "budi", "domain": "example.com", "php_version": "8.4", "kind": "alias"},
 			{"username": "budi", "domain": "example.com", "php_version": "8.4", "kind": "alias", "parent": "example.com"},
 			{"username": "budi", "domain": "example.com", "php_version": "8.4", "kind": "forward", "parent": "../etc"},
@@ -627,5 +630,26 @@ func TestWebMethodsOnUnsupportedPlatformsGetAReadableError(t *testing.T) {
 		if agentErr.Message != "accounts can only be managed on Linux" {
 			t.Fatalf("%s: unexpected message %q", method, agentErr.Message)
 		}
+	}
+}
+
+func TestApplyDomainGivesTheWebsiteItsPHPSettings(t *testing.T) {
+	env := newWebEnv(t)
+
+	params := map[string]any{
+		"username":     "budi",
+		"domain":       "example.com",
+		"php_version":  "8.4",
+		"php_settings": map[string]string{"memory_limit": "512M", "date.timezone": "Asia/Jakarta"},
+	}
+
+	if _, err := env.call("web.apply_domain", params); err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+
+	pool, err := os.ReadFile(env.cfg.PoolDir + "/8.4/budi.d/example.com.conf")
+	if err != nil || !strings.Contains(string(pool), "php_value[memory_limit] = 512M\n") ||
+		!strings.Contains(string(pool), "php_value[date.timezone] = Asia/Jakarta\n") {
+		t.Fatalf("the settings are missing from the pool (%v):\n%s", err, pool)
 	}
 }

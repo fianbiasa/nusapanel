@@ -25,6 +25,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('domains/{domain}/certificate', [DomainController::class, 'installCertificate'])->name('domains.certificate.store');
         Route::put('domains/{domain}/force-https', [DomainController::class, 'updateForceHttps'])->name('domains.force-https.update');
         Route::put('domains/{domain}/php', [DomainController::class, 'updatePhpVersion'])->name('domains.php.update');
+        Route::put('domains/{domain}/php-settings', [DomainController::class, 'updatePhpSettings'])->name('domains.php-settings.update');
         Route::post('subdomains', [SubdomainController::class, 'store'])->name('subdomains.store');
         Route::post('pointers', [PointerController::class, 'store'])->name('pointers.store');
         Route::get('redirects', [UrlRedirectController::class, 'index'])->name('redirects.index');

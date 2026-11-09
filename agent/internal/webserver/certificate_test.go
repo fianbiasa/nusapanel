@@ -635,7 +635,9 @@ func TestRemoveDomainDeletesItsCertificate(t *testing.T) {
 		t.Fatalf("remove failed: %v", err)
 	}
 
-	env.assertCalls(append(slices.Clone(reloadBoth), deleteCall("example.com"))...)
+	// The removed website's PHP-FPM pool goes too.
+	env.assertCalls(append(slices.Clone(reloadBoth), deleteCall("example.com"),
+		"systemctl is-active --quiet nusa-php84@budi.service", "systemctl reload-or-restart nusa-php84@budi.service")...)
 
 	if !env.manager.HasCertificate("budi.id") || env.manager.HasCertificate("example.com") {
 		t.Fatal("the wrong certificates were deleted")

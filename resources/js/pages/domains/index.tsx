@@ -10,6 +10,7 @@ import {
     LockOpen,
     MoreHorizontal,
     RotateCw,
+    SlidersHorizontal,
     Trash2,
     X,
 } from 'lucide-react';
@@ -19,6 +20,8 @@ import { toast } from 'sonner';
 import { AddWebsitePanel } from '@/components/add-website-panel';
 import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
+import type { PhpSettingOptions } from '@/components/php-settings-form';
+import { PhpSettingsForm } from '@/components/php-settings-form';
 import { Panel, tableStyles } from '@/components/panel';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
@@ -72,6 +75,8 @@ type DomainRow = {
     parent_display_name: string | null;
     children_count: number;
     php_version: string;
+    php_settings: Record<string, string>;
+    php_settings_changed: boolean;
     is_primary: boolean;
     status: DomainStatus;
     ssl_status: SslStatus | null;
@@ -85,7 +90,12 @@ type DomainRow = {
 };
 
 type DomainAction = {
-    type: 'request-ssl' | 'custom-certificate' | 'remove-ssl' | 'delete';
+    type:
+        | 'request-ssl'
+        | 'custom-certificate'
+        | 'php-settings'
+        | 'remove-ssl'
+        | 'delete';
     domain: DomainRow;
 };
 
@@ -93,6 +103,7 @@ type Props = {
     domains: DomainRow[];
     php_versions: string[];
     default_php_version: string;
+    php_setting_options: PhpSettingOptions;
     limits: AccountLimits;
     public_ip: string | null;
 };
@@ -129,6 +140,7 @@ export default function DomainsIndex({
     domains,
     php_versions,
     default_php_version,
+    php_setting_options,
     limits,
     public_ip,
 }: Props) {
@@ -267,6 +279,12 @@ export default function DomainsIndex({
                                                     default_php_version
                                                 }
                                                 onChange={changePhpVersion}
+                                                onSettings={() =>
+                                                    openDialog(
+                                                        'php-settings',
+                                                        domain,
+                                                    )
+                                                }
                                             />
                                         </td>
                                         <td
@@ -311,6 +329,15 @@ export default function DomainsIndex({
                         <CustomCertificateForm
                             key={`custom-certificate-${action.domain.id}`}
                             domain={action.domain}
+                            onSuccess={() => setDialogOpen(false)}
+                        />
+                    )}
+                    {action?.type === 'php-settings' && (
+                        <PhpSettingsForm
+                            key={`php-settings-${action.domain.id}`}
+                            domain={action.domain}
+                            settings={action.domain.php_settings}
+                            options={php_setting_options}
                             onSuccess={() => setDialogOpen(false)}
                         />
                     )}
@@ -404,11 +431,13 @@ function PhpVersionCell({
     versions,
     defaultVersion,
     onChange,
+    onSettings,
 }: {
     domain: DomainRow;
     versions: string[];
     defaultVersion: string;
     onChange: (domain: DomainRow, version: string) => void;
+    onSettings: () => void;
 }) {
     if (domain.pointer_mode === 'redirect') {
         return <span className="font-medium text-muted-foreground">—</span>;
@@ -430,9 +459,12 @@ function PhpVersionCell({
                     variant="outline"
                     size="sm"
                     className="gap-1 rounded-lg font-semibold"
-                    aria-label={`Versi PHP ${domain.display_name}: ${domain.php_version}. Ganti versi`}
+                    aria-label={`PHP ${domain.display_name}: versi ${domain.php_version}${domain.php_settings_changed ? ', pengaturan disesuaikan' : ''}`}
                 >
                     {domain.php_version}
+                    {domain.php_settings_changed && (
+                        <SlidersHorizontal className="size-3.5 text-primary" />
+                    )}
                     <ChevronDown className="size-3.5 text-muted-foreground" />
                 </Button>
             </DropdownMenuTrigger>
@@ -455,6 +487,10 @@ function PhpVersionCell({
                         </DropdownMenuRadioItem>
                     ))}
                 </DropdownMenuRadioGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={onSettings}>
+                    <SlidersHorizontal /> Pengaturan PHP…
+                </DropdownMenuItem>
             </DropdownMenuContent>
         </DropdownMenu>
     );

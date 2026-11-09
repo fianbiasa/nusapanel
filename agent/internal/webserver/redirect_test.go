@@ -42,7 +42,8 @@ func TestApplyAliasServesTheFolderOfItsParent(t *testing.T) {
 	assertContains(t, "apache vhost", env.read(env.apacheVhost("budi", "example.net")),
 		"    ServerName example.net\n    ServerAlias www.example.net\n",
 		"    DocumentRoot /home/budi/domains/example.com/public_html\n",
-		"proxy:unix:/run/nusa-php/php84-budi.sock|fcgi://php84-budi",
+		// The alias has a pool of its own, in the account's PHP 8.4.
+		"proxy:unix:/run/nusa-php/php84-budi-3daab7cff979.sock|fcgi://php84-budi-3daab7cff979",
 	)
 }
 

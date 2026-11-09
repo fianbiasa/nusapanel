@@ -17,6 +17,7 @@ use App\Models\User;
 use App\Rules\ValidDomain;
 use App\Support\AccountLimits;
 use App\Support\CustomCertificate;
+use App\Support\PhpSettings;
 use Carbon\CarbonImmutable;
 use Carbon\Exceptions\InvalidFormatException;
 use Illuminate\Database\Eloquent\Builder;
@@ -476,6 +477,69 @@ class DomainService
     }
 
     /**
+     * Change the php.ini settings of a domain or subdomain's PHP-FPM pool.
+     * Its alias pointers run with the same settings, so they are applied
+     * again too.
+     *
+     * @param  array<string, string>  $settings  The settings that differ from the defaults, in php.ini form ({@see PhpSettings::fromFields()}).
+     *
+     * @throws ValidationException
+     */
+    public function updatePhpSettings(Domain $domain, array $settings, User $actor): void
+    {
+        if ($domain->type === DomainType::Pointer) {
+            throw ValidationException::withMessages([
+                'memory_limit' => __('A pointer runs with the PHP settings of its domain.'),
+            ]);
+        }
+
+        if (! in_array($domain->status, [DomainStatus::Active, DomainStatus::Failed], true)) {
+            throw ValidationException::withMessages([
+                'memory_limit' => __('This domain is still being set up or is already being deleted.'),
+            ]);
+        }
+
+        if ($domain->ssl_status?->isBusy()) {
+            throw ValidationException::withMessages([
+                'memory_limit' => __('Wait until the SSL certificate has been installed or removed.'),
+            ]);
+        }
+
+        $previous = $domain->php_settings ?? [];
+
+        if ($previous == $settings) {
+            return;
+        }
+
+        $account = $domain->account;
+
+        DB::transaction(function () use ($domain, $settings, $previous, $account, $actor): void {
+            $domain->forceFill([
+                'php_settings' => $settings === [] ? null : $settings,
+                'status' => DomainStatus::Pending,
+            ])->save();
+
+            $this->dispatchApply($domain, $account, $actor);
+
+            $domain->children()
+                ->where('type', DomainType::Pointer)
+                ->where('pointer_mode', PointerMode::Alias)
+                ->where('status', '!=', DomainStatus::Deleting)
+                ->orderBy('id')
+                ->each(function (Domain $pointer) use ($account, $actor): void {
+                    $pointer->forceFill(['status' => DomainStatus::Pending])->save();
+                    $this->dispatchApply($pointer, $account, $actor);
+                });
+
+            $this->audit->record('domain.php_settings_changed', $domain, [
+                'domain' => $domain->name,
+                'php_settings' => ['from' => $previous, 'to' => $settings],
+                'username' => $account->username,
+            ], $actor);
+        });
+    }
+
+    /**
      * Record the certificate the agent issued and switch the website to
      * HTTPS. Nothing is queued for an account that is being deleted.
      *
@@ -685,6 +749,18 @@ class DomainService
         if ($domain->type === DomainType::Pointer) {
             $params['kind'] = ($domain->pointer_mode ?? PointerMode::Alias)->agentKind();
             $params['parent'] = $domain->parent->name ?? throw new LogicException("Pointer {$domain->name} has no parent.");
+        }
+
+        // An alias shows (and runs) the website of its domain, with its
+        // settings; a redirecting pointer runs no PHP.
+        $phpSettings = match (true) {
+            $domain->pointer_mode === PointerMode::Redirect => null,
+            $domain->type === DomainType::Pointer => $domain->parent->php_settings ?? null,
+            default => $domain->php_settings,
+        };
+
+        if ($phpSettings !== null && $phpSettings !== []) {
+            $params['php_settings'] = $phpSettings;
         }
 
         if ($domain->canHaveRedirects()) {

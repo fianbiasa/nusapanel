@@ -144,6 +144,10 @@ func (e *testEnv) apacheVhost(user, domain string) string {
 	return filepath.Join(e.cfg.ApacheDir, user, domain+".conf")
 }
 
+func (e *testEnv) poolSection(user, version, domain string) string {
+	return filepath.Join(e.cfg.PoolDir, version, user+".d", domain+".conf")
+}
+
 func (e *testEnv) poolFile(user, version string) string {
 	return filepath.Join(e.cfg.PoolDir, version, user+".conf")
 }
@@ -314,12 +318,17 @@ func TestApplyDomainSetsUpEverything(t *testing.T) {
 
 	assertContains(t, "index.html", string(site.Index), "<title>example.com</title>", "public_html")
 
+	// PHP-FPM checked what it loads: the main configuration with the
+	// website's section in place of the include.
 	pool := env.read(env.poolFile("budi", "8.4"))
-	if len(env.runner.pools) != 1 || env.runner.pools[0] != pool {
-		t.Fatal("php-fpm -t did not check the installed pool configuration")
+	section := env.read(env.poolSection("budi", "8.4", "example.com"))
+	include := "\n\ninclude = " + env.cfg.PoolDir + "/8.4/budi.d/*.conf\n"
+
+	if len(env.runner.pools) != 1 || env.runner.pools[0] != strings.Replace(pool, include, "\n", 1)+section {
+		t.Fatalf("php-fpm -t did not check the installed pool configuration:\n%v", env.runner.pools)
 	}
 
-	for _, path := range []string{env.unitFile("84"), env.poolFile("budi", "8.4"), env.nginxVhost("budi", "example.com"), env.apacheVhost("budi", "example.com")} {
+	for _, path := range []string{env.unitFile("84"), env.poolFile("budi", "8.4"), env.poolSection("budi", "8.4", "example.com"), env.nginxVhost("budi", "example.com"), env.apacheVhost("budi", "example.com")} {
 		info, err := os.Stat(path)
 		if err != nil || info.Mode().Perm() != 0o644 {
 			t.Fatalf("%s: %v %v, want mode 0644", path, info, err)
@@ -399,7 +408,7 @@ func TestRenderedApacheVhost(t *testing.T) {
 		"    DocumentRoot /home/budi/domains/example.com/public_html\n",
 		"ErrorLog "+env.cfg.LogDir+"/example.com.apache-error.log\n",
 		"DirectoryIndex index.php index.html index.htm\n",
-		"<FilesMatch \"\\.(php|phtml)$\">\n        SetHandler \"proxy:unix:/run/nusa-php/php84-budi.sock|fcgi://php84-budi\"\n    </FilesMatch>",
+		"<FilesMatch \"\\.(php|phtml)$\">\n        SetHandler \"proxy:unix:/run/nusa-php/php84-budi-a379a6f6eeaf.sock|fcgi://php84-budi-a379a6f6eeaf\"\n    </FilesMatch>",
 		"</VirtualHost>\n",
 	)
 	assertNotContains(t, "apache vhost", apache, "CustomLog", "<no value>")
@@ -411,10 +420,18 @@ func TestRenderedPoolAndUnit(t *testing.T) {
 
 	pool := env.read(env.poolFile("budi", "8.4"))
 
-	assertContains(t, "pool", pool,
-		"[global]\npid = /run/nusa-php/php84-budi.pid\nerror_log = syslog\nsyslog.ident = nusa-php84-budi\ndaemonize = no\n",
-		"\n[budi]\nuser = budi\ngroup = budi\n",
-		"listen = /run/nusa-php/php84-budi.sock\nlisten.owner = budi\nlisten.group = www-data\nlisten.mode = 0660\n",
+	if pool != "; PHP 8.4 of account budi, run by nusa-php84@budi.service, with\n"+
+		"; a pool per website in "+env.cfg.PoolDir+"/8.4/budi.d/. Written by nusad; changes are overwritten.\n"+
+		"[global]\npid = /run/nusa-php/php84-budi.pid\nerror_log = syslog\nsyslog.ident = nusa-php84-budi\ndaemonize = no\n\n"+
+		"include = "+env.cfg.PoolDir+"/8.4/budi.d/*.conf\n" {
+		t.Fatalf("unexpected main pool configuration:\n%s", pool)
+	}
+
+	section := env.read(env.poolSection("budi", "8.4", "example.com"))
+
+	assertContains(t, "pool", section,
+		"\n[example.com]\nuser = budi\ngroup = budi\n",
+		"listen = /run/nusa-php/php84-budi-a379a6f6eeaf.sock\nlisten.owner = budi\nlisten.group = www-data\nlisten.mode = 0660\n",
 		"pm = ondemand\npm.max_children = 10\npm.process_idle_timeout = 30s\npm.max_requests = 500\nrequest_terminate_timeout = 300s\n",
 		"chdir = /home/budi\n",
 		"env[TMPDIR] = /home/budi/tmp\n",
@@ -426,12 +443,15 @@ func TestRenderedPoolAndUnit(t *testing.T) {
 		"php_admin_value[sys_temp_dir] = /home/budi/tmp\n",
 		"php_admin_value[disable_functions] = exec,passthru,shell_exec,system,proc_open,popen,pcntl_exec\n",
 		"php_admin_flag[allow_url_include] = off\n",
-		"php_value[memory_limit] = 256M\n",
-		"php_value[upload_max_filesize] = 64M\n",
-		"php_value[post_max_size] = 64M\n",
-		"php_value[max_execution_time] = 120\n",
+		"php_flag[display_errors] = off\n"+
+			"php_value[max_execution_time] = 120\n"+
+			"php_value[max_input_time] = 120\n"+
+			"php_value[max_input_vars] = 3000\n"+
+			"php_value[memory_limit] = 256M\n"+
+			"php_value[post_max_size] = 64M\n"+
+			"php_value[upload_max_filesize] = 64M\n",
 	)
-	assertNotContains(t, "pool", pool, "<no value>")
+	assertNotContains(t, "pool", section, "<no value>", "date.timezone", "[global]")
 
 	unit := env.read(env.unitFile("84"))
 	poolDir := env.cfg.PoolDir + "/8.4"
@@ -657,7 +677,9 @@ func TestRemoveDomainKeepsOtherDomainsAndReloads(t *testing.T) {
 		t.Fatalf("remove failed: %v", err)
 	}
 
-	env.assertCalls(reloadBoth...)
+	env.assertCalls(append(slices.Clone(reloadBoth), "systemctl is-active --quiet nusa-php84@budi.service", "systemctl reload-or-restart nusa-php84@budi.service")...)
+	env.assertMissing(env.poolSection("budi", "8.4", "example.com"))
+	env.read(env.poolSection("budi", "8.4", "budi.id"))
 	env.assertMissing(env.nginxVhost("budi", "example.com"), env.apacheVhost("budi", "example.com"))
 	env.read(env.nginxVhost("budi", "budi.id"))
 	env.read(env.apacheVhost("budi", "budi.id"))

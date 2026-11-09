@@ -6,10 +6,13 @@ use App\Enums\DomainType;
 use App\Enums\SslStatus;
 use App\Http\Requests\StoreCustomCertificateRequest;
 use App\Http\Requests\StoreDomainRequest;
+use App\Http\Requests\UpdatePhpSettingsRequest;
 use App\Models\Domain;
 use App\Services\DomainService;
 use App\Services\PhpVersionService;
 use App\Support\AccountLimits;
+use App\Support\PhpSettings;
+use DateTimeZone;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -56,6 +59,8 @@ class DomainController extends Controller
                 'parent_display_name' => $domain->parent_id === null ? null : $websites->firstWhere('id', $domain->parent_id)?->display_name,
                 'children_count' => $childrenByParent->get($domain->id)?->count() ?? 0,
                 'php_version' => $domain->php_version,
+                'php_settings' => PhpSettings::effective($domain->php_settings),
+                'php_settings_changed' => $domain->php_settings !== null,
                 'is_primary' => $domain->is_primary,
                 'status' => $domain->status->value,
                 'ssl_status' => $domain->ssl_status?->value,
@@ -73,6 +78,12 @@ class DomainController extends Controller
             'domains' => $domains,
             'php_versions' => $this->phpVersions->available(),
             'default_php_version' => $this->phpVersions->default(),
+            'php_setting_options' => [
+                'defaults' => PhpSettings::DEFAULTS,
+                'memory_limits' => PhpSettings::MEMORY_LIMITS,
+                'sizes' => PhpSettings::SIZES,
+                'timezones' => DateTimeZone::listIdentifiers(),
+            ],
             'limits' => AccountLimits::for($account)->toArray(),
             'public_ip' => config('hosting.public_ip') ?: null,
         ]);
@@ -216,6 +227,21 @@ class DomainController extends Controller
                 'domain' => $domain->display_name,
                 'version' => $validated['php_version'],
             ]),
+        ]);
+
+        return back();
+    }
+
+    /**
+     * Change the php.ini settings of a website's PHP-FPM pool.
+     */
+    public function updatePhpSettings(UpdatePhpSettingsRequest $request, Domain $domain): RedirectResponse
+    {
+        $this->domains->updatePhpSettings($domain, $request->settings(), $request->user());
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => __('The PHP settings of :domain are being applied.', ['domain' => $domain->display_name]),
         ]);
 
         return back();

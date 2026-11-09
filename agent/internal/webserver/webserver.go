@@ -201,6 +201,10 @@ type Site struct {
 	Parent string
 	// Redirects are the domain's URL redirects. A forward has none.
 	Redirects []Redirect
+	// PHPSettings are the php.ini settings of the website's PHP-FPM pool
+	// that differ from the defaults, such as "memory_limit": "512M". An
+	// alias carries those of the website it shows; a forward has none.
+	PHPSettings map[string]string
 }
 
 // kind returns the Kind of the site, KindDomain when it is not set.
@@ -236,6 +240,10 @@ func (s Site) Validate() error {
 	site.Kind = s.kind()
 
 	if err := validateKind(site); err != nil {
+		return err
+	}
+
+	if err := validatePHPSettings(s.PHPSettings); err != nil {
 		return err
 	}
 
@@ -336,7 +344,7 @@ func (m *Manager) ApplyDomain(ctx context.Context, site Site) (string, error) {
 	}
 
 	if site.Kind != KindForward {
-		if err := m.applyPool(ctx, site.User, site.PHPVersion); err != nil {
+		if err := m.applyPool(ctx, site); err != nil {
 			return "", err
 		}
 	}
@@ -452,7 +460,18 @@ func (m *Manager) RemoveDomain(ctx context.Context, user, domain string) error {
 		return err
 	}
 
-	return m.deleteUnusedCertificates(ctx, []string{domain})
+	if err := m.deleteUnusedCertificates(ctx, []string{domain}); err != nil {
+		return err
+	}
+
+	// The website's PHP-FPM pool goes with it; the domain is gone already,
+	// so a failure is only logged and the next change of the account
+	// tries again.
+	if err := m.removeUnusedPools(ctx, user); err != nil {
+		m.logger().Warn("could not remove unused PHP-FPM pools", "user", user, "error", err)
+	}
+
+	return nil
 }
 
 // removeDomainVhosts deletes the vhosts of domain, then tests and reloads
@@ -492,7 +511,7 @@ func (m *Manager) RemovePool(ctx context.Context, user, version string) error {
 		return err
 	}
 
-	return removeFile(m.poolFile(user, version))
+	return m.deletePool(user, version)
 }
 
 // SuspendAccount makes every website of user answer with a "temporarily
@@ -575,13 +594,13 @@ func (m *Manager) RemoveAccount(ctx context.Context, user string) error {
 		}
 	}
 
-	pools, err := m.poolFiles(user)
+	poolVersions, err := m.poolVersions()
 	if err != nil {
 		return err
 	}
 
-	for _, pool := range pools {
-		if err := removeFile(pool); err != nil {
+	for _, version := range poolVersions {
+		if err := m.deletePool(user, version); err != nil {
 			return err
 		}
 	}

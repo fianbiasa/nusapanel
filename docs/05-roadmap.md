@@ -59,7 +59,9 @@ Pekerjaan:
 
 - sertifikat kustom ✅: customer menempel sertifikat (beserta CA bundle) dan private key-nya dari menu domain; panel dan agent mengecek pasangan key, nama domain (wildcard boleh), masa berlaku, dan jenis key; sertifikat yang tidak dipercaya browser (Cloudflare Origin Certificate) boleh, dan ditandai; mengganti sertifikat (juga dari/ke Let's Encrypt) tidak mematikan HTTPS, dan sertifikat yang tidak dipakai lagi dihapus; private key hanya lewat payload task terenkripsi dan dihapus dari task begitu selesai.
 
-Berikutnya: pengaturan PHP (php.ini) per website, SSL hostname untuk mail/FTP.
+- pengaturan PHP per website ✅: setiap website punya pool PHP-FPM sendiri (di dalam master per akun per versi), sehingga `memory_limit`, batas upload/POST, batas waktu, `max_input_vars`, `display_errors`, dan zona waktu bisa diatur per domain/subdomain tanpa bocor ke website lain; pointer alias ikut domainnya; Nginx mengikuti batas POST; akun lama berpindah ke pool per website tanpa jeda saat upgrade.
+
+Berikutnya: SSL hostname untuk mail/FTP, MariaDB (database, user, phpMyAdmin).
 
 - Akun user & paket user, buat/suspend/hapus akun, quota disk & inode.
 - Domain, subdomain, pointer, redirect, www/HTTPS.
