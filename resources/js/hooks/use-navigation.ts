@@ -1,5 +1,6 @@
 import { usePage } from '@inertiajs/react';
 import {
+    Database,
     Globe,
     House,
     Milestone,
@@ -10,6 +11,7 @@ import {
     Users,
 } from 'lucide-react';
 import { dashboard } from '@/routes';
+import { index as databasesIndex } from '@/routes/databases';
 import { index as accountsIndex } from '@/routes/admin/accounts';
 import { index as auditLogsIndex } from '@/routes/admin/audit-logs';
 import { index as packagesIndex } from '@/routes/admin/packages';
@@ -93,6 +95,11 @@ export function useNavigation(): {
             icon: Globe,
         };
 
+        const databases: NavItem = {
+            title: 'Databases',
+            href: databasesIndex(),
+            icon: Database,
+        };
         const redirects: NavItem = {
             title: 'Redirects',
             href: redirectsIndex(),
@@ -101,9 +108,15 @@ export function useNavigation(): {
 
         sections.push({
             label: 'Menu',
-            items: [dashboardItem, domains, redirects],
+            items: [dashboardItem, domains, databases, redirects],
         });
-        dockItems = [dashboardItem, domains, redirects, settingsItem];
+        dockItems = [
+            dashboardItem,
+            domains,
+            databases,
+            redirects,
+            settingsItem,
+        ];
     } else {
         sections.push({ label: 'Menu', items: [dashboardItem] });
         dockItems = [dashboardItem, settingsItem];

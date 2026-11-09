@@ -121,7 +121,8 @@ class DomainPackageLimitsTest extends TestCase
                 ->has('limits.quotas', 10)
                 ->where('limits.quotas.domains', ['limit' => 3, 'used' => 1])
                 ->where('limits.quotas.disk_mb', ['limit' => 1024, 'used' => null])
-                ->where('limits.quotas.databases', ['limit' => null, 'used' => null]));
+                // Databases are counted now that they exist.
+                ->where('limits.quotas.databases', ['limit' => null, 'used' => 0]));
     }
 
     public function test_the_domains_page_shows_no_limits_for_accounts_without_a_package()

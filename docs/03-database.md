@@ -169,14 +169,14 @@ Record disimpan di panel lalu disinkronkan ke PowerDNS oleh agent (sesuai prinsi
 
 ## 3.4 Database milik customer
 
-Password user database **tidak disimpan**; hanya dikirim sekali ke agent.
+Password user database **tidak disimpan** dan tidak pernah dikirim ke agent. Panel hanya menyimpan hash `mysql_native_password`-nya (`*` + SHA1(SHA1(password))), yang dikirim ke agent setiap kali hak akses user diubah, supaya customer tidak perlu mengetik password lagi. Hash itu disembunyikan dari serialisasi model.
 
-| Tabel                   | Kolom penting                                                                           |
-| ----------------------- | --------------------------------------------------------------------------------------- |
-| `databases`             | user_id, name (unique, awalan `<user>_`), charset, collation, size_mb, size_measured_at |
-| `database_users`        | user_id, username (unique, awalan `<user>_`)                                            |
-| `database_user_grants`  | database_id, database_user_id, privileges (json: `ALL` atau daftar). Unique pasangan    |
-| `database_remote_hosts` | user_id, host (IP, CIDR, hostname, atau `%`)                                            |
+| Tabel                    | Kolom penting                                                                                                                     |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| `databases`              | user_id, name (unique, `<user>_<nama>`, ≤ 64), status (pending/active/failed/deleting), size_bytes, measured_at                   |
+| `database_users`         | user_id, name (unique, `<user>_<nama>`, ≤ 32), password_hash (41 karakter), status                                                |
+| `database_database_user` | database_id, database_user_id (primary key gabungan, cascade on delete): user mana boleh memakai database mana (`ALL PRIVILEGES`) |
+| `database_remote_hosts`  | user_id, host (IP, CIDR, hostname, atau `%`)                                                                                      |
 
 ---
 
@@ -274,7 +274,7 @@ users (user)
  │    ├─< ssl_certificates
  │    ├── mail_domains ─< mailboxes
  │    └── dns_zones ─< dns_records
- ├─< databases ─< database_user_grants >─ database_users
+ ├─< databases ─< database_database_user >─ database_users
  ├─< ftp_accounts
  ├─< cron_jobs
  ├─< backups

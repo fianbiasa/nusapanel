@@ -28,6 +28,9 @@ var reservedUsernames = map[string]bool{
 	"sshd": true, "staff": true, "sudo": true, "sync": true, "sys": true, "syslog": true,
 	"systemd": true, "tcpdump": true, "tss": true, "ubuntu": true, "users": true, "uucp": true,
 	"uuidd": true, "vmail": true,
+	// An account's databases are named <username>_<name>; these would claim
+	// MariaDB's own information_schema and performance_schema.
+	"information": true, "performance": true,
 	// Privileged groups: an account must never share a name with one, or a
 	// group created later (e.g. by installing Docker) could be handed to it.
 	"audio": true, "cdrom": true, "crontab": true, "dialout": true, "disk": true, "docker": true,

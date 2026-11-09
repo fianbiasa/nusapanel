@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"nusapanel/agent/internal/database"
 	"nusapanel/agent/internal/quota"
 	"nusapanel/agent/internal/rpc"
 	"nusapanel/agent/internal/sysinfo"
@@ -21,8 +22,13 @@ func Register(registry *rpc.Registry) {
 
 	web := webserver.New(webserver.DefaultConfig())
 	quotas := quota.New(quota.DefaultConfig())
+	databases := database.New(database.DefaultConfig())
 
-	for name, method := range accountMethods(sysuser.System{}, web, quotas) {
+	for name, method := range accountMethods(sysuser.System{}, web, quotas, databases) {
+		registry.Register(name, method)
+	}
+
+	for name, method := range databaseMethods(sysuser.System{}, databases) {
 		registry.Register(name, method)
 	}
 

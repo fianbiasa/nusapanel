@@ -66,6 +66,15 @@ type accountWeb interface {
 	RemoveAccount(ctx context.Context, user string) error
 }
 
+// accountDatabases is what the account actions need from MariaDB.
+// *database.Manager implements it.
+type accountDatabases interface {
+	// RemoveAccount drops every database and user of the account.
+	RemoveAccount(ctx context.Context, user string) error
+	// LockAccount locks or unlocks every database user of the account.
+	LockAccount(ctx context.Context, user string, lock bool) error
+}
+
 // accountQuota is what the account actions need from disk quotas.
 // *quota.Manager implements it.
 type accountQuota interface {
@@ -94,16 +103,17 @@ type accountInfo struct {
 // accountActions implements the account.* and quota.* methods on top of a
 // system.
 type accountActions struct {
-	system accountSystem
-	web    accountWeb
-	quotas accountQuota
+	system    accountSystem
+	web       accountWeb
+	quotas    accountQuota
+	databases accountDatabases
 }
 
 // accountMethods returns the account.* and quota.* methods by name. Calls
 // for the same username run one at a time; quota.report only reads and
 // locks nothing.
-func accountMethods(system accountSystem, web accountWeb, quotas accountQuota) map[string]rpc.Method {
-	accounts := accountActions{system: system, web: web, quotas: quotas}
+func accountMethods(system accountSystem, web accountWeb, quotas accountQuota, databases accountDatabases) map[string]rpc.Method {
+	accounts := accountActions{system: system, web: web, quotas: quotas, databases: databases}
 
 	return map[string]rpc.Method{
 		"account.create":    {Handler: accounts.create, LockKey: accountLockKey},
@@ -224,6 +234,10 @@ func (a accountActions) suspend(ctx context.Context, raw json.RawMessage) (any, 
 		return nil, webError(err, "account "+user.Name)
 	}
 
+	if err := a.databases.LockAccount(ctx, user.Name, true); err != nil {
+		return nil, databaseError(err, "lock the database users of "+user.Name)
+	}
+
 	return struct{}{}, nil
 }
 
@@ -241,6 +255,10 @@ func (a accountActions) unsuspend(ctx context.Context, raw json.RawMessage) (any
 
 	if err := a.web.UnsuspendAccount(ctx, user.Name); err != nil {
 		return nil, webError(err, "account "+user.Name)
+	}
+
+	if err := a.databases.LockAccount(ctx, user.Name, false); err != nil {
+		return nil, databaseError(err, "unlock the database users of "+user.Name)
 	}
 
 	return struct{}{}, nil
@@ -266,6 +284,13 @@ func (a accountActions) remove(ctx context.Context, raw json.RawMessage) (any, e
 	// processes for the account right after they are killed.
 	if err := a.web.RemoveAccount(ctx, params.Username); err != nil {
 		return nil, webError(err, "account "+params.Username)
+	}
+
+	// Databases go before the user, so the account is deleted only once
+	// nothing of it is left that a new account with the same name would
+	// inherit.
+	if err := a.databases.RemoveAccount(ctx, params.Username); err != nil {
+		return nil, databaseError(err, "delete the databases of "+params.Username)
 	}
 
 	if !found {

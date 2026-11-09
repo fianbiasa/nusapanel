@@ -23,6 +23,9 @@ class ValidUsername implements ValidationRule
         'pdns', 'polkitd', 'pollinate', 'postfix', 'proxy', 'pureftpd', 'redis', 'root',
         'rspamd', 'sshd', 'staff', 'sudo', 'sync', 'sys', 'syslog', 'systemd', 'tcpdump',
         'tss', 'ubuntu', 'users', 'uucp', 'uuidd', 'vmail',
+        // An account's databases are named <username>_<name>; these would
+        // claim MariaDB's own information_schema and performance_schema.
+        'information', 'performance',
         // Privileged groups an account must never share a name with.
         'audio', 'cdrom', 'crontab', 'dialout', 'disk', 'docker', 'floppy', 'input', 'kmem', 'kvm',
         'libvirt', 'netdev', 'plugdev', 'render', 'shadow', 'tape', 'tty', 'utmp', 'video', 'wheel', 'www',

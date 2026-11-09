@@ -30,6 +30,11 @@ export const auditActionLabels: Record<string, string> = {
     'subdomain.deleted': 'Subdomain dihapus',
     'pointer.created': 'Pointer ditambahkan',
     'pointer.deleted': 'Pointer dihapus',
+    'database.created': 'Database dibuat',
+    'database.deleted': 'Database dihapus',
+    'database_user.created': 'User database dibuat',
+    'database_user.updated': 'User database diubah',
+    'database_user.deleted': 'User database dihapus',
     'redirect.created': 'Pengalihan ditambahkan',
     'redirect.deleted': 'Pengalihan dihapus',
     'package.created': 'Paket dibuat',
@@ -79,6 +84,20 @@ export function formatMegabytes(megabytes: number): string {
     return `${value.toLocaleString('id-ID', { maximumFractionDigits: 1 })} ${units[unit]}`;
 }
 
+/** "0 B", "512 KB", "12,3 MB", "1,2 GB" */
+export function formatBytes(bytes: number): string {
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let value = bytes;
+    let unit = 0;
+
+    while (value >= 1024 && unit < units.length - 1) {
+        value /= 1024;
+        unit++;
+    }
+
+    return `${value.toLocaleString('id-ID', { maximumFractionDigits: unit < 2 ? 0 : 1 })} ${units[unit]}`;
+}
+
 /** Disk usage against its limit: "120 MB / 1 GB", "120 MB" or "—". */
 export function formatDiskUsage(
     usedMb: number | null,
@@ -116,6 +135,10 @@ export const taskActionLabels: Record<string, string> = {
     'php.remove_pool': 'Hapus pool PHP',
     'ssl.issue': 'Pasang sertifikat SSL',
     'ssl.install': 'Pasang sertifikat sendiri',
+    'db.create_database': 'Buat database',
+    'db.delete_database': 'Hapus database',
+    'db.apply_user': 'Atur user database',
+    'db.delete_user': 'Hapus user database',
     'ssl.delete': 'Hapus sertifikat SSL',
     'system.info': 'Baca info server',
 };

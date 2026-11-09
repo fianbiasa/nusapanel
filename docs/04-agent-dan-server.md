@@ -81,16 +81,16 @@ Konvensi nama: `namespace.aksi`. "Sebagai user" = agent turun ke UID user sebelu
 
 ### account
 
-| Aksi                            | Fungsi                                                                                                                                                                                                      | Fase  |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
-| `account.create`                | Buat user & grup Linux (penanda GECOS `nusapanel`), home `0710 <user>:nusa-access`, `domains`/`tmp`/`backups`/`.trash`; quota & slice systemd menyusul                                                      | P1 ✅ |
-| `account.set_quota`             | ✅ `{username, disk_mb, inodes}` (0 = tanpa batas): kuota user filesystem lewat `setquota` (soft = hard). `{applied: false}` kalau kuota server belum aktif. `account.delete` membersihkan kuota UID-nya    | P1    |
-| `quota.report`                  | ✅ Pemakaian & batas disk/inode semua akun nusapanel (`repquota`), dikumpulkan panel tiap 15 menit                                                                                                          | P1    |
-| `account.apply_limits`          | Batas CPU, RAM, proses, IO (cgroups)                                                                                                                                                                        | P3    |
-| `account.suspend` / `unsuspend` | ✅ kunci password + akun kedaluwarsa (blok SSH-key/SFTP), semua website menampilkan halaman 503, PHP-FPM dihentikan (tetap mati setelah reboot); menyusul: cron. Mail & FTP otomatis ditolak lewat view SQL | P1    |
-| `account.delete`                | ✅ matikan & hapus pool PHP-FPM, hapus vhost & log domain, hentikan proses, hapus home & user Linux (akun sistem ditolak); menyusul: database, mail, dst.                                                   | P1    |
-| `account.set_password`          | Password Linux (untuk SFTP/SSH)                                                                                                                                                                             | P1    |
-| `account.rename`                | Ganti username                                                                                                                                                                                              | P6    |
+| Aksi                            | Fungsi                                                                                                                                                                                                                                                                         | Fase  |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----- |
+| `account.create`                | Buat user & grup Linux (penanda GECOS `nusapanel`), home `0710 <user>:nusa-access`, `domains`/`tmp`/`backups`/`.trash`; quota & slice systemd menyusul                                                                                                                         | P1 ✅ |
+| `account.set_quota`             | ✅ `{username, disk_mb, inodes}` (0 = tanpa batas): kuota user filesystem lewat `setquota` (soft = hard). `{applied: false}` kalau kuota server belum aktif. `account.delete` membersihkan kuota UID-nya                                                                       | P1    |
+| `quota.report`                  | ✅ Pemakaian & batas disk/inode semua akun nusapanel (`repquota`), dikumpulkan panel tiap 15 menit                                                                                                                                                                             | P1    |
+| `account.apply_limits`          | Batas CPU, RAM, proses, IO (cgroups)                                                                                                                                                                                                                                           | P3    |
+| `account.suspend` / `unsuspend` | ✅ kunci password + akun kedaluwarsa (blok SSH-key/SFTP), semua website menampilkan halaman 503, PHP-FPM dihentikan (tetap mati setelah reboot), user MariaDB dikunci (`ACCOUNT LOCK`); menyusul: cron. Mail & FTP otomatis ditolak lewat view SQL                             | P1    |
+| `account.delete`                | ✅ matikan & hapus pool PHP-FPM, hapus vhost & log domain, drop semua database & user MariaDB akun itu (kalau gagal, akun tidak dihapus supaya akun baru bernama sama tidak mewarisinya), hentikan proses, hapus home & user Linux (akun sistem ditolak); menyusul: mail, dst. | P1    |
+| `account.set_password`          | Password Linux (untuk SFTP/SSH)                                                                                                                                                                                                                                                | P1    |
+| `account.rename`                | Ganti username                                                                                                                                                                                                                                                                 | P6    |
 
 ### web
 
@@ -130,16 +130,19 @@ Konvensi nama: `namespace.aksi`. "Sebagai user" = agent turun ke UID user sebelu
 
 ### db (MariaDB)
 
-| Aksi                                             | Fungsi                                                            | Fase |
-| ------------------------------------------------ | ----------------------------------------------------------------- | ---- |
-| `db.create` / `drop`                             |                                                                   | P1   |
-| `db.user_create` / `user_drop` / `user_password` |                                                                   | P1   |
-| `db.grant` / `revoke`                            |                                                                   | P1   |
-| `db.sizes`                                       | Ukuran semua database                                             | P1   |
-| `db.sso_token`                                   | User MariaDB sementara (kedaluwarsa 1 jam) untuk login phpMyAdmin | P1   |
-| `db.remote_hosts_apply`                          | Buat `user@host` sesuai daftar host                               | P3   |
-| `db.dump` / `import`                             | Streaming, sebagai user                                           | P3   |
-| `db.check` / `repair` / `optimize`               |                                                                   | P3   |
+Nama database dan user selalu `<username>_<nama>` (`[a-z0-9_]`, database ≤ 64, user ≤ 32 karakter); agent menolak nama tanpa awalan akun itu, jadi satu akun tidak bisa menyentuh database akun lain. User hanya dibuat untuk `localhost`. Panel hanya mengirim hash `mysql_native_password` (`*` + SHA1(SHA1(password)) heksadesimal besar), tidak pernah password-nya. SQL dikirim ke `mariadb` (root lewat unix_socket) melalui stdin.
+
+| Aksi                               | Fungsi                                                                                                                                                                                                       | Fase |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---- |
+| `db.create_database`               | ✅ `{username, database}`: `CREATE DATABASE IF NOT EXISTS`, utf8mb4_unicode_ci                                                                                                                               | P1   |
+| `db.delete_database`               | ✅ `{username, database}`: cabut hak semua user atas database itu, lalu `DROP DATABASE IF EXISTS`                                                                                                            | P1   |
+| `db.apply_user`                    | ✅ `{username, user, password_hash, databases}`: buat/perbarui user dengan hash itu, cabut hak ke database yang tidak ada di daftar, beri `ALL PRIVILEGES` ke yang ada (`_` di-escape supaya bukan wildcard) | P1   |
+| `db.delete_user`                   | ✅ `{username, user}`: `DROP USER IF EXISTS`; database-nya tetap ada                                                                                                                                         | P1   |
+| `db.report`                        | ✅ Ukuran semua database akun nusapanel (`information_schema`), dikumpulkan panel tiap 15 menit                                                                                                              | P1   |
+| `db.sso_token`                     | User MariaDB sementara (kedaluwarsa 1 jam) untuk login phpMyAdmin (milestone berikutnya)                                                                                                                     | P1   |
+| `db.remote_hosts_apply`            | Buat `user@host` sesuai daftar host                                                                                                                                                                          | P3   |
+| `db.dump` / `import`               | Streaming, sebagai user                                                                                                                                                                                      | P3   |
+| `db.check` / `repair` / `optimize` |                                                                                                                                                                                                              | P3   |
 
 ### ftp
 
@@ -279,6 +282,7 @@ Konvensi nama: `namespace.aksi`. "Sebagai user" = agent turun ke UID user sebelu
 /aquota.user                            data kuota user (journaled, vfsv1); fstab filesystem /home mendapat usrjquota=aquota.user,jqfmt=vfsv1
 /etc/fstab.nusapanel-<waktu>            cadangan fstab sebelum setup.sh mengaktifkan kuota
 /etc/opendkim/keys/<hostname>/          kunci DKIM email panel (0600 opendkim)
+/var/lib/mysql/<user>_<nama>/           database MariaDB customer (data dir bawaan, MariaDB hanya di 127.0.0.1:3306)
 /var/lib/nusapanel/                     home user nusapanel; state agent, backup admin
 /var/lib/nusapanel/storage/             storage Laravel (log, cache view), dipakai semua rilis
 /run/nusapanel/agent.sock

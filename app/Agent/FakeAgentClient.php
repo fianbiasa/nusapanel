@@ -3,7 +3,9 @@
 namespace App\Agent;
 
 use App\Enums\AccountStatus;
+use App\Enums\DatabaseStatus;
 use App\Enums\Role;
+use App\Models\Database;
 use App\Models\User;
 
 /**
@@ -26,6 +28,7 @@ final class FakeAgentClient implements AgentClient
             'ssl.issue' => $this->issuedCertificate((string) ($params['domain'] ?? '')),
             'account.set_quota' => ['applied' => true, 'simulated' => true],
             'quota.report' => $this->quotaReport(),
+            'db.report' => $this->databaseReport(),
             'php.versions' => ['versions' => ['7.4', '8.0', '8.1', '8.2', '8.3', '8.4', '8.5'], 'simulated' => true],
             default => ['simulated' => true],
         };
@@ -57,6 +60,24 @@ final class FakeAgentClient implements AgentClient
             'agent_version' => 'fake',
             'simulated' => true,
         ];
+    }
+
+    /**
+     * The size of every database the panel knows, derived from its name so
+     * the numbers do not jump around between reports.
+     *
+     * @return array<string, mixed>
+     */
+    private function databaseReport(): array
+    {
+        $databases = Database::query()
+            ->where('status', '!=', DatabaseStatus::Pending)
+            ->orderBy('name')
+            ->pluck('name')
+            ->map(fn (string $name): array => ['name' => $name, 'size_bytes' => 16_384 + crc32($name) % 50_000_000])
+            ->all();
+
+        return ['databases' => $databases, 'simulated' => true];
     }
 
     /**

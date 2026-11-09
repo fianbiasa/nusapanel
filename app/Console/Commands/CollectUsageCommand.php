@@ -3,13 +3,15 @@
 namespace App\Console\Commands;
 
 use App\Agent\AgentException;
+use App\Services\DatabaseService;
 use App\Services\QuotaService;
 use Illuminate\Console\Command;
 
 /**
  * Stores how much disk space and how many files every hosting account
- * uses, as the server's disk quotas report it. The scheduler runs it every
- * fifteen minutes; the dashboard and the account list show the result.
+ * uses, as the server's disk quotas report it, and the size of every
+ * database. The scheduler runs it every fifteen minutes; the dashboard,
+ * the account list and the Databases page show the result.
  */
 class CollectUsageCommand extends Command
 {
@@ -23,8 +25,19 @@ class CollectUsageCommand extends Command
      */
     protected $description = 'Read the disk usage of every hosting account from the server agent';
 
-    public function handle(QuotaService $quotas): int
+    public function handle(QuotaService $quotas, DatabaseService $databases): int
     {
+        // Database sizes are measured apart from the disk quotas, so one
+        // failing does not stop the other.
+        try {
+            $sizes = $databases->collectSizes();
+            $this->components->info($sizes === 1 ? 'Size of 1 database stored.' : "Size of {$sizes} databases stored.");
+        } catch (AgentException $exception) {
+            report($exception);
+
+            $this->components->error('The server agent could not report database sizes: '.$exception->getMessage());
+        }
+
         try {
             $measured = $quotas->collectUsage();
         } catch (AgentException $exception) {

@@ -17,6 +17,7 @@ import (
 	"strings"
 	"testing"
 
+	"nusapanel/agent/internal/database"
 	"nusapanel/agent/internal/quota"
 	"nusapanel/agent/internal/rpc"
 	"nusapanel/agent/internal/runner"
@@ -73,7 +74,7 @@ func TestAccountMethodsLockTheAccount(t *testing.T) {
 	params := map[string]string{"account.set_quota": `{"username":"budi","disk_mb":1024,"inodes":0}`}
 
 	system := newFakeSystem()
-	for name, method := range accountMethods(system, system, system.quotaManager()) {
+	for name, method := range accountMethods(system, system, system.quotaManager(), system.databases()) {
 		if name == "quota.report" {
 			if method.LockKey != nil {
 				t.Fatal("quota.report only reads, but locks")
@@ -216,7 +217,7 @@ func TestSuspendLocksTheAccount(t *testing.T) {
 		t.Fatalf("unexpected result %s", result)
 	}
 
-	assertCalls(t, system, "lookup budi", "lock budi", "shell budi /usr/sbin/nologin", "web suspend budi")
+	assertCalls(t, system, "lookup budi", "lock budi", "shell budi /usr/sbin/nologin", "web suspend budi", "db lock budi")
 }
 
 func TestUnsuspendUnlocksTheAccount(t *testing.T) {
@@ -232,7 +233,7 @@ func TestUnsuspendUnlocksTheAccount(t *testing.T) {
 		t.Fatalf("unexpected result %s", result)
 	}
 
-	assertCalls(t, system, "lookup budi", "unlock budi", "web unsuspend budi")
+	assertCalls(t, system, "lookup budi", "unlock budi", "web unsuspend budi", "db unlock budi")
 }
 
 func TestSuspendAndUnsuspendNeedAnExistingAccount(t *testing.T) {
@@ -261,7 +262,7 @@ func TestDeleteRemovesWebsitesKillsProcessesThenRemovesTheAccount(t *testing.T) 
 		t.Fatalf("unexpected result %s", result)
 	}
 
-	assertCalls(t, system, "lookup budi", "web remove budi", "kill 1001",
+	assertCalls(t, system, "lookup budi", "web remove budi", "db remove budi", "kill 1001",
 		"quotaon -p -u /", "setquota -u -- budi 0 0 0 0 /", "userdel budi")
 
 	if _, exists := system.users["budi"]; exists {
@@ -281,8 +282,9 @@ func TestDeleteOfAMissingAccountSucceeds(t *testing.T) {
 		t.Fatalf("unexpected result %s", result)
 	}
 
-	// Web configuration left behind by the account is still removed.
-	assertCalls(t, system, "lookup budi", "web remove budi")
+	// Web configuration and databases left behind by the account are still
+	// removed.
+	assertCalls(t, system, "lookup budi", "web remove budi", "db remove budi")
 }
 
 func TestWebFailuresOfAccountMethodsAreReadable(t *testing.T) {
@@ -379,11 +381,15 @@ func callAccount(t *testing.T, system accountSystem, method string, params any) 
 	}
 
 	var quotas accountQuota = unreachableQuota{t}
+
+	var databases accountDatabases = unreachableDatabases{t}
+
 	if fake, ok := system.(*fakeSystem); ok {
 		quotas = fake.quotaManager()
+		databases = fake.databases()
 	}
 
-	registered, ok := accountMethods(system, web, quotas)[method]
+	registered, ok := accountMethods(system, web, quotas, databases)[method]
 	if !ok {
 		t.Fatalf("unknown method %s", method)
 	}
@@ -443,6 +449,8 @@ type fakeSystem struct {
 	failWith error
 	// webFailWith, when set, is returned by the web methods.
 	webFailWith error
+	// dbFailWith, when set, is returned by the database methods.
+	dbFailWith error
 
 	// quotaState is what quotaon -p reports for /, the filesystem of
 	// /home: "on", "off", "none" (mounted without quota options) or
@@ -642,6 +650,54 @@ func (f *fakeSystem) RemoveAccount(_ context.Context, user string) error {
 	return f.recordWeb("web remove %s", user)
 }
 
+// fakeDatabases records the account methods' calls to MariaDB with the
+// other calls of its system.
+type fakeDatabases struct {
+	f *fakeSystem
+}
+
+func (f *fakeSystem) databases() fakeDatabases {
+	return fakeDatabases{f: f}
+}
+
+func (d fakeDatabases) record(format string, args ...any) error {
+	if err := d.f.record(format, args...); err != nil {
+		return err
+	}
+
+	return d.f.dbFailWith
+}
+
+func (d fakeDatabases) RemoveAccount(_ context.Context, user string) error {
+	return d.record("db remove %s", user)
+}
+
+func (d fakeDatabases) LockAccount(_ context.Context, user string, lock bool) error {
+	if lock {
+		return d.record("db lock %s", user)
+	}
+
+	return d.record("db unlock %s", user)
+}
+
+// unreachableDatabases fails the test when an account method gets as far
+// as MariaDB, for systems that must fail before that.
+type unreachableDatabases struct {
+	t *testing.T
+}
+
+func (u unreachableDatabases) RemoveAccount(_ context.Context, user string) error {
+	u.t.Errorf("MariaDB was reached for %s", user)
+
+	return errors.New("unreachable")
+}
+
+func (u unreachableDatabases) LockAccount(_ context.Context, user string, _ bool) error {
+	u.t.Errorf("MariaDB was reached for %s", user)
+
+	return errors.New("unreachable")
+}
+
 // unreachableWeb fails the test when an account method gets as far as the
 // web server, for systems that must fail before that.
 type unreachableWeb struct {
@@ -682,4 +738,25 @@ func (u unreachableQuota) Report(context.Context) (quota.Report, error) {
 	u.t.Error("the quotas were reached")
 
 	return quota.Report{}, errors.New("unreachable")
+}
+
+func TestDeleteKeepsTheAccountWhenItsDatabasesCannotBeDropped(t *testing.T) {
+	system := newFakeSystem()
+	system.addAccount("budi", 1001)
+	system.dbFailWith = fmt.Errorf("drop: %w", database.ErrServer)
+
+	_, err := callAccount(t, system, "account.delete", map[string]string{"username": "budi"})
+
+	agentErr := assertCode(t, err, rpc.CodeActionFailed)
+	if agentErr.Message != "MariaDB could not delete the databases of budi; the agent log has the details" {
+		t.Fatalf("unexpected message %q", agentErr.Message)
+	}
+
+	// The user stays, so a new account with the same name cannot inherit
+	// the databases; deleting again retries.
+	if _, exists := system.users["budi"]; !exists {
+		t.Fatal("the user was deleted")
+	}
+
+	assertCalls(t, system, "lookup budi", "web remove budi", "db remove budi")
 }

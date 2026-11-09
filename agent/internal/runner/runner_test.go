@@ -129,3 +129,20 @@ func assertRunError(t *testing.T, err error) *runner.Error {
 
 	return runErr
 }
+
+func TestRunInputFeedsStdinAndKeepsStderrForErrors(t *testing.T) {
+	output, err := runner.RunInput(context.Background(), []byte("secret input\n"), "/bin/cat")
+	if err != nil || string(output) != "secret input\n" {
+		t.Fatalf("cat: %q, %v", output, err)
+	}
+
+	output, err = runner.RunInput(context.Background(), []byte("ignored"), "/bin/sh", "-c", "echo out; echo problem >&2; exit 3")
+	if string(output) != "out\n" {
+		t.Fatalf("stdout = %q; stderr must not mix in", output)
+	}
+
+	runErr, ok := errors.AsType[*runner.Error](err)
+	if !ok || runErr.ExitCode != 3 || runErr.Output != "problem" {
+		t.Fatalf("got %#v", err)
+	}
+}

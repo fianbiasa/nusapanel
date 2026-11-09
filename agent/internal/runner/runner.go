@@ -66,27 +66,55 @@ func (e *Error) Unwrap() error {
 // stdin, and is killed when ctx ends. Any failure is returned as *Error,
 // together with whatever output the program produced.
 func Run(ctx context.Context, program string, args ...string) ([]byte, error) {
-	if !filepath.IsAbs(program) {
-		return nil, &Error{Program: program, ExitCode: -1, Err: errors.New("program must be an absolute path")}
+	var output bytes.Buffer
+
+	err := run(ctx, nil, &output, &output, program, args)
+
+	return output.Bytes(), err
+}
+
+// RunInput is like Run, but feeds input to the program's stdin and returns
+// only its stdout; stderr only ends up in the *Error of a failure. Input
+// never shows in the process list, unlike arguments.
+func RunInput(ctx context.Context, input []byte, program string, args ...string) ([]byte, error) {
+	var stdout, stderr bytes.Buffer
+
+	err := run(ctx, input, &stdout, &stderr, program, args)
+	if failure, ok := errors.AsType[*Error](err); ok {
+		failure.Output = shorten(stderr.String())
 	}
 
-	var output bytes.Buffer
+	return stdout.Bytes(), err
+}
+
+// run runs program with args and input on stdin, writing its output to
+// stdout and stderr. Failures are *Error with the combined output of
+// stdout and stderr when they are the same buffer.
+func run(ctx context.Context, input []byte, stdout, stderr *bytes.Buffer, program string, args []string) error {
+	if !filepath.IsAbs(program) {
+		return &Error{Program: program, ExitCode: -1, Err: errors.New("program must be an absolute path")}
+	}
 
 	cmd := exec.CommandContext(ctx, program, args...)
 	cmd.Dir = "/"
 	cmd.Env = environment
-	cmd.Stdout = &output
-	cmd.Stderr = &output
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+
+	if input != nil {
+		cmd.Stdin = bytes.NewReader(input)
+	}
+
 	// A killed program's children may keep the output pipe open; stop
 	// waiting for them shortly after the program itself is gone.
 	cmd.WaitDelay = 5 * time.Second
 
 	runErr := cmd.Run()
 	if runErr == nil {
-		return output.Bytes(), nil
+		return nil
 	}
 
-	failure := &Error{Program: program, ExitCode: -1, Output: shorten(output.String()), Err: runErr}
+	failure := &Error{Program: program, ExitCode: -1, Output: shorten(stderr.String()), Err: runErr}
 
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		failure.Err = fmt.Errorf("%w: %w", ctxErr, runErr)
@@ -94,7 +122,7 @@ func Run(ctx context.Context, program string, args ...string) ([]byte, error) {
 		failure.ExitCode = exitErr.ExitCode()
 	}
 
-	return output.Bytes(), failure
+	return failure
 }
 
 // ExitCode returns the exit status carried by err, or -1 when err is not an

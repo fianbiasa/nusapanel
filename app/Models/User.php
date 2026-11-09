@@ -113,6 +113,26 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     }
 
     /**
+     * The MariaDB databases of this hosting account.
+     *
+     * @return HasMany<Database, $this>
+     */
+    public function databases(): HasMany
+    {
+        return $this->hasMany(Database::class);
+    }
+
+    /**
+     * The MariaDB users of this hosting account.
+     *
+     * @return HasMany<DatabaseUser, $this>
+     */
+    public function databaseUsers(): HasMany
+    {
+        return $this->hasMany(DatabaseUser::class);
+    }
+
+    /**
      * The hosting account's disk usage as last measured, if it ever was.
      *
      * @return HasOne<AccountUsage, $this>

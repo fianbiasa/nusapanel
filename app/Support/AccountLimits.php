@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Enums\DatabaseStatus;
 use App\Enums\DomainStatus;
 use App\Enums\DomainType;
 use App\Models\Package;
@@ -15,7 +16,7 @@ use Illuminate\Contracts\Support\Arrayable;
  *
  * Accounts without a package (admins, resellers and accounts created before
  * packages existed) have no limits and may use SSL. The panel counts the
- * account's domains, subdomains and pointers itself; disk space and inodes
+ * account's domains, subdomains, pointers and databases itself; disk space and inodes
  * are measured by the
  * server ({@see QuotaService}), which also enforces their limits, so the
  * panel never blocks anything on them. The other limits are stored and
@@ -58,6 +59,9 @@ final class AccountLimits implements Arrayable
             'domains' => $this->websiteCount(DomainType::Domain),
             'subdomains' => $this->websiteCount(DomainType::Subdomain),
             'pointers' => $this->websiteCount(DomainType::Pointer),
+            'databases' => $this->account->databases()
+                ->where('status', '!=', DatabaseStatus::Deleting)
+                ->count(),
             'disk_mb' => $this->account->diskUsage?->diskMegabytes(),
             'inodes' => $this->account->diskUsage?->inodes,
             default => null,

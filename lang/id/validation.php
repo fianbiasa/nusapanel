@@ -203,6 +203,7 @@ return [
         'certificate' => 'sertifikat',
         'code' => 'kode autentikasi',
         'credential' => 'kredensial passkey',
+        'create_user' => 'buat user',
         'cron_jobs' => 'batas cron job',
         'current_password' => 'kata sandi saat ini',
         'databases' => 'batas database',
@@ -242,6 +243,7 @@ return [
         'token' => 'token',
         'upload_max_filesize' => 'batas upload',
         'username' => 'username',
+        'user_name' => 'nama user',
         'wildcard' => 'pilihan halaman di bawahnya',
     ],
 

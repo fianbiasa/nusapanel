@@ -61,7 +61,9 @@ Pekerjaan:
 
 - pengaturan PHP per website ✅: setiap website punya pool PHP-FPM sendiri (di dalam master per akun per versi), sehingga `memory_limit`, batas upload/POST, batas waktu, `max_input_vars`, `display_errors`, dan zona waktu bisa diatur per domain/subdomain tanpa bocor ke website lain; pointer alias ikut domainnya; Nginx mengikuti batas POST; akun lama berpindah ke pool per website tanpa jeda saat upgrade.
 
-Berikutnya: SSL hostname untuk mail/FTP, MariaDB (database, user, phpMyAdmin).
+- MariaDB ✅: halaman Databases membuat database (sekaligus user-nya kalau mau, dengan pembuat password) dan user database; satu user bisa diberi akses ke beberapa database dan sebaliknya; nama selalu diawali `<username>_`; batas database dari paket; ukuran diukur tiap 15 menit; user ikut dikunci saat akun di-suspend; semua database & user ikut dihapus bersama akunnya; password tidak pernah dikirim ke agent maupun disimpan, hanya hash-nya.
+
+Berikutnya: phpMyAdmin SSO, lalu SSL hostname untuk mail/FTP.
 
 - Akun user & paket user, buat/suspend/hapus akun, quota disk & inode.
 - Domain, subdomain, pointer, redirect, www/HTTPS.

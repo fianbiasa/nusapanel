@@ -6,6 +6,7 @@ use App\Agent\AgentClient;
 use App\Agent\AgentException;
 use App\Enums\AccountStatus;
 use App\Models\AccountUsage;
+use App\Models\Database;
 use App\Models\Package;
 use App\Models\User;
 use App\Services\QuotaService;
@@ -58,6 +59,29 @@ class CollectUsageCommandTest extends TestCase
         $this->assertTrue(QuotaService::isEnabled());
     }
 
+    public function test_it_stores_the_size_of_every_database()
+    {
+        $account = User::factory()->create(['username' => 'budi']);
+        $shop = Database::factory()->for($account, 'account')->create(['name' => 'budi_shop']);
+        $empty = Database::factory()->for($account, 'account')->create(['name' => 'budi_empty']);
+        $unmeasured = Database::factory()->for($account, 'account')->pending()->create(['name' => 'budi_new']);
+
+        $this->agentReports(['enabled' => true, 'filesystem' => '/', 'accounts' => []], [
+            ['name' => 'budi_shop', 'size_bytes' => 1048576],
+            ['name' => 'budi_empty', 'size_bytes' => 0],
+            ['name' => 'sari_other', 'size_bytes' => 4096],
+        ]);
+
+        $this->artisan('nusapanel:collect-usage')
+            ->expectsOutputToContain('Size of 2 databases stored.')
+            ->assertSuccessful();
+
+        $this->assertSame(1048576, $shop->fresh()->size_bytes);
+        $this->assertSame(0, $empty->fresh()->size_bytes);
+        $this->assertNotNull($shop->fresh()->measured_at);
+        $this->assertNull($unmeasured->fresh()->size_bytes);
+    }
+
     public function test_it_remembers_that_the_server_does_not_enforce_quotas()
     {
         Cache::forever(QuotaService::ENABLED_CACHE_KEY, true);
@@ -84,6 +108,10 @@ class CollectUsageCommandTest extends TestCase
             $mock->shouldReceive('call')
                 ->once()
                 ->with('quota.report', [], config('agent.timeout'))
+                ->andThrow(new AgentException('Connection refused'));
+            $mock->shouldReceive('call')
+                ->once()
+                ->with('db.report', [], config('agent.timeout'))
                 ->andThrow(new AgentException('Connection refused'));
         });
 
@@ -128,14 +156,19 @@ class CollectUsageCommandTest extends TestCase
 
     /**
      * @param  array<string, mixed>  $report
+     * @param  list<array{name: string, size_bytes: int}>  $databases
      */
-    private function agentReports(array $report): void
+    private function agentReports(array $report, array $databases = []): void
     {
-        $this->mock(AgentClient::class, function (MockInterface $mock) use ($report) {
+        $this->mock(AgentClient::class, function (MockInterface $mock) use ($report, $databases) {
             $mock->shouldReceive('call')
                 ->once()
                 ->with('quota.report', [], config('agent.timeout'))
                 ->andReturn($report);
+            $mock->shouldReceive('call')
+                ->once()
+                ->with('db.report', [], config('agent.timeout'))
+                ->andReturn(['databases' => $databases]);
         });
     }
 

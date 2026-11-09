@@ -272,7 +272,7 @@ func TestDeleteClearsTheQuotaOnlyWhenQuotasAreOn(t *testing.T) {
 			t.Fatalf("%s: delete failed: %v", state, err)
 		}
 
-		assertCalls(t, system, "lookup budi", "web remove budi", "kill 1001", "quotaon -p -u /", "userdel budi")
+		assertCalls(t, system, "lookup budi", "web remove budi", "db remove budi", "kill 1001", "quotaon -p -u /", "userdel budi")
 	}
 }
 
