@@ -16,8 +16,15 @@
 set -Eeuo pipefail
 umask 022
 
+# The panel's own PHP. Websites use it by default, and may pick any of the
+# site versions below.
 readonly PHP_VERSION="8.4"
 readonly PHP_BIN="/usr/bin/php$PHP_VERSION"
+# PHP versions installed for websites (ondrej/php) unless --php-versions or
+# an earlier install says otherwise, and the packages each one gets. A
+# package a version does not have (8.5 has opcache built in) is skipped.
+readonly DEFAULT_SITE_PHP_VERSIONS="7.4 8.0 8.1 8.2 8.3 8.4 8.5"
+readonly SITE_PHP_PACKAGES="fpm cli common mysql mbstring xml curl intl zip bcmath opcache readline gd imagick soap"
 readonly PANEL_USER="nusapanel"
 readonly PANEL_PORT="2222"
 readonly INSTALL_DIR="/usr/local/nusapanel"
@@ -33,6 +40,9 @@ readonly DNS_REPORT="$CONFIG_DIR/dns-records.txt"
 readonly RELEASE_REPO="fianbiasa/nusapanel"
 readonly POLICY_RC="/usr/sbin/policy-rc.d"
 readonly POLICY_RC_MARKER="# nusapanel setup.sh: temporary"
+# The site PHP versions installed so far, one per line, so an upgrade keeps
+# installing (and configuring) the same ones.
+readonly PHP_VERSIONS_FILE="$CONFIG_DIR/php-versions"
 # Journaled user quota options (vfsv1, in aquota.user) that configure_quota
 # adds to the /etc/fstab line of the filesystem holding /home.
 readonly QUOTA_OPTIONS="usrjquota=aquota.user,jqfmt=vfsv1"
@@ -53,6 +63,7 @@ public_ip=""
 public_ip_given=0
 skip_dns_check=0
 requested_version=""
+requested_php_versions=""
 
 # Filled in while installing.
 arch=""
@@ -71,6 +82,8 @@ dns_report_lines=()
 quota_mount=""
 # Set while our temporary policy-rc.d is in place.
 policy_rc_created=0
+# The PHP versions websites can use, resolved by resolve_php_versions.
+site_php_versions=()
 
 if [[ -t 1 ]]; then
     bold=$'\033[1m' green=$'\033[32m' yellow=$'\033[33m' red=$'\033[31m' reset=$'\033[0m'
@@ -111,6 +124,9 @@ Lainnya:
   --hostname NAME       hostname server (default: hasil `hostname -f`)
   --public-ip IP        IP publik server, kalau server di belakang NAT (default: terdeteksi)
   --skip-dns-check      lewati syarat A record & PTR (hanya untuk uji; SSL jadi self-signed)
+  --php-versions LIST   versi PHP untuk website, misalnya "8.2 8.3 8.4" (default saat instal
+                        pertama: 7.4 8.0 8.1 8.2 8.3 8.4 8.5); 8.4 selalu ikut, dan versi yang
+                        sudah terpasang tidak dihapus
   --yes                 jangan minta konfirmasi
   --force               lewati pengecekan "server harus bersih" (tidak disarankan)
   -h, --help            tampilkan bantuan ini
@@ -136,6 +152,7 @@ parse_args() {
             --public-ip) need_value "$1" "${2:-}"; public_ip="$2"; public_ip_given=1; shift 2 ;;
             --skip-dns-check) skip_dns_check=1; shift ;;
             --version) need_value "$1" "${2:-}"; requested_version="${2#v}"; shift 2 ;;
+            --php-versions) need_value "$1" "${2:-}"; requested_php_versions="$2"; shift 2 ;;
             -h | --help) usage; exit 0 ;;
             *) usage >&2; die "opsi tidak dikenal: $1" ;;
         esac
@@ -523,7 +540,7 @@ confirm() {
     info "Paket    : ${package_file:-$release_url}"
     info "Admin    : $admin_user ${admin_email:+<$admin_email>}"
     info "Panel    : https://$server_hostname:$PANEL_PORT"
-    info "Dipasang : Nginx + Apache, MariaDB, PHP $PHP_VERSION (repo ondrej/php), Postfix + DKIM (kirim-saja), agent nusad"
+    info "Dipasang : Nginx + Apache, MariaDB, PHP ${site_php_versions[*]} (repo ondrej/php), Postfix + DKIM (kirim-saja), agent nusad"
     if ((skip_dns_check == 0)); then
         info "SSL      : Let's Encrypt untuk $server_hostname, diperpanjang otomatis"
         info "           (dengan melanjutkan, kamu menyetujui Let's Encrypt Subscriber Agreement)"
@@ -614,6 +631,82 @@ DEBCONF
 
     quietly systemctl enable --now mariadb nginx "php$PHP_VERSION-fpm"
     info "Nginx, Apache, MariaDB, Postfix dan PHP $PHP_VERSION terpasang"
+}
+
+# The site PHP versions: those of an earlier install plus --php-versions, or
+# the defaults on a first install without the option. The panel's own
+# version is always one of them. Versions are never removed here.
+resolve_php_versions() {
+    local list="" v
+    local -A seen=()
+
+    if [[ -s "$PHP_VERSIONS_FILE" ]]; then
+        list="$(tr '\n' ' ' <"$PHP_VERSIONS_FILE")"
+    elif [[ -z "$requested_php_versions" ]]; then
+        list="$DEFAULT_SITE_PHP_VERSIONS"
+    fi
+
+    list="$list ${requested_php_versions//,/ } $PHP_VERSION"
+    site_php_versions=()
+
+    for v in $list; do
+        [[ "$v" =~ ^[5-9]\.[0-9]$ ]] || die "versi PHP tidak valid: $v (contoh: 8.3)"
+        if [[ -z "${seen[$v]:-}" ]]; then
+            seen[$v]=1
+            site_php_versions+=("$v")
+        fi
+    done
+
+    mapfile -t site_php_versions < <(printf '%s\n' "${site_php_versions[@]}" | sort -V)
+}
+
+# Every site PHP version with the extensions WordPress and most PHP apps
+# need. Websites run in the agent's pools per account (nusa-php<ver>@<user>),
+# so the distribution's own PHP-FPM service of each version stays off; only
+# that of the panel's version runs, with the panel's pool.
+install_site_php() {
+    step "Memasang PHP untuk website (${site_php_versions[*]})"
+
+    export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a
+    local apt=(apt-get -y -q -o DPkg::Lock::Timeout=300)
+    local missing=() v package name
+
+    for v in "${site_php_versions[@]}"; do
+        for name in $SITE_PHP_PACKAGES; do
+            package="php$v-$name"
+
+            if dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q 'ok installed'; then
+                continue
+            fi
+
+            if apt-cache show "$package" >/dev/null 2>&1; then
+                missing+=("$package")
+            elif [[ "$name" == fpm ]]; then
+                die "PHP $v tidak tersedia di repo ondrej/php"
+            fi
+        done
+    done
+
+    if ((${#missing[@]} > 0)); then
+        info "Memasang ${#missing[@]} paket PHP"
+        block_service_starts
+        quietly "${apt[@]}" install "${missing[@]}"
+        remove_policy_rc
+
+        # Running pools load newly installed extensions; stopped ones (of
+        # suspended accounts) stay stopped.
+        systemctl try-reload-or-restart 'nusa-php*@*.service' >>"$INSTALL_LOG" 2>&1 ||
+            warn "pool PHP website tidak bisa dimuat ulang; ekstensi baru aktif setelah pool di-restart"
+    fi
+
+    for v in "${site_php_versions[@]}"; do
+        if [[ "$v" != "$PHP_VERSION" ]] && systemctl is-enabled --quiet "php$v-fpm" 2>/dev/null; then
+            quietly systemctl disable --now "php$v-fpm"
+        fi
+    done
+
+    printf '%s\n' "${site_php_versions[@]}" >"$PHP_VERSIONS_FILE"
+    info "PHP ${site_php_versions[*]} siap untuk website (bawaan: $PHP_VERSION)"
 }
 
 fetch_release() {
@@ -1085,8 +1178,12 @@ CONF
     # and ServerSignature (nusapanel.conf carries its settings instead).
     # other-vhosts-access-log: Nginx already logs every request.
     # php-fpm: PHP only runs in the per-account pools, never in a shared one.
-    local conf
-    for conf in security other-vhosts-access-log "php$PHP_VERSION-fpm"; do
+    local conf v php_confs=()
+    for v in "${site_php_versions[@]}"; do
+        php_confs+=("php$v-fpm")
+    done
+
+    for conf in security other-vhosts-access-log "${php_confs[@]}"; do
         if [[ -e "/etc/apache2/conf-enabled/$conf.conf" ]]; then
             quietly a2disconf -q "$conf"
         fi
@@ -1430,6 +1527,12 @@ verify_install() {
         die "halaman login panel mengembalikan HTTP $status (cek: $LOG_DIR/panel-error.log dan $DATA_DIR/storage/logs/)"
     info "Halaman login panel bisa dibuka"
 
+    local v
+    for v in "${site_php_versions[@]}"; do
+        "/usr/sbin/php-fpm$v" -v >>"$INSTALL_LOG" 2>&1 || die "PHP-FPM $v tidak bisa dijalankan (cek: /usr/sbin/php-fpm$v -v)"
+    done
+    info "PHP untuk website: ${site_php_versions[*]}"
+
     systemctl is-active --quiet apache2 || die "Apache tidak berjalan (cek: journalctl -u apache2)"
     local apache_listen
     apache_listen="$(ss -ltnpH | awk '/"apache2"/ {print $4}' | sort -u | paste -sd ' ' -)"
@@ -1596,10 +1699,12 @@ main() {
     printf '\n%snusapanel installer%s (%s)\n' "$bold" "$reset" "$(date -Is)"
 
     preflight
+    resolve_php_versions
     check_dns
     confirm
     create_layout
     install_packages
+    install_site_php
     fetch_release
     setup_database
     write_env

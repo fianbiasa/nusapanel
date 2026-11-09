@@ -414,6 +414,66 @@ class DomainService
     }
 
     /**
+     * Run a domain or subdomain on another installed PHP version. Its
+     * pointers follow: an alias runs in the same pool as the website it
+     * shows. The agent removes the account's pool of the old version once
+     * no website uses it anymore.
+     *
+     * @param  string  $version  An installed version ({@see PhpVersionService::available()}).
+     *
+     * @throws ValidationException
+     */
+    public function changePhpVersion(Domain $domain, string $version, User $actor): void
+    {
+        if ($domain->type === DomainType::Pointer) {
+            throw ValidationException::withMessages([
+                'php_version' => __('A pointer runs on the PHP version of its domain.'),
+            ]);
+        }
+
+        if (! in_array($domain->status, [DomainStatus::Active, DomainStatus::Failed], true)) {
+            throw ValidationException::withMessages([
+                'php_version' => __('This domain is still being set up or is already being deleted.'),
+            ]);
+        }
+
+        if ($domain->ssl_status?->isBusy()) {
+            throw ValidationException::withMessages([
+                'php_version' => __('Wait until the SSL certificate has been installed or removed.'),
+            ]);
+        }
+
+        if ($domain->php_version === $version) {
+            return;
+        }
+
+        $account = $domain->account;
+        $previous = $domain->php_version;
+
+        // Pending until the agent has applied it, so the page shows the
+        // switch and refreshes itself; a failed apply marks it failed.
+        DB::transaction(function () use ($domain, $version, $account, $actor, $previous): void {
+            $domain->forceFill(['php_version' => $version, 'status' => DomainStatus::Pending])->save();
+            $this->dispatchApply($domain, $account, $actor);
+
+            $domain->children()
+                ->where('type', DomainType::Pointer)
+                ->where('status', '!=', DomainStatus::Deleting)
+                ->orderBy('id')
+                ->each(function (Domain $pointer) use ($version, $account, $actor): void {
+                    $pointer->forceFill(['php_version' => $version, 'status' => DomainStatus::Pending])->save();
+                    $this->dispatchApply($pointer, $account, $actor);
+                });
+
+            $this->audit->record('domain.php_changed', $domain, [
+                'domain' => $domain->name,
+                'php_version' => ['from' => $previous, 'to' => $version],
+                'username' => $account->username,
+            ], $actor);
+        });
+    }
+
+    /**
      * Record the certificate the agent issued and switch the website to
      * HTTPS. Nothing is queued for an account that is being deleted.
      *

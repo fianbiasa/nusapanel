@@ -20,7 +20,7 @@ import (
 	"nusapanel/agent/internal/webserver"
 )
 
-var webMethodNames = []string{"web.apply_domain", "web.remove_domain", "php.remove_pool", "ssl.issue", "ssl.delete"}
+var webMethodNames = []string{"web.apply_domain", "web.remove_domain", "php.remove_pool", "php.versions", "ssl.issue", "ssl.delete"}
 
 // webEnv runs the web methods against a fake account system and a real
 // webserver.Manager whose files live in a temporary directory and whose
@@ -132,8 +132,10 @@ func (e *webEnv) call(method string, params any) (json.RawMessage, error) {
 		e.t.Fatalf("unknown method %s", method)
 	}
 
-	if _, err := registered.LockKey(raw); err != nil {
-		return nil, err
+	if registered.LockKey != nil {
+		if _, err := registered.LockKey(raw); err != nil {
+			return nil, err
+		}
 	}
 
 	result, err := registered.Handler(context.Background(), raw)
@@ -192,6 +194,11 @@ func TestWebMethodsLockTheAccount(t *testing.T) {
 	env := newWebEnv(t)
 
 	for name, method := range webMethods(env.system, env.web) {
+		if name == "php.versions" {
+			// Only reads, so it locks nothing (checked in its own test).
+			continue
+		}
+
 		key, err := method.LockKey(json.RawMessage(params[name]))
 		if err != nil || key != "account:budi" {
 			t.Fatalf("%s lock key = %q, %v; want account:budi", name, key, err)
@@ -341,6 +348,30 @@ func TestApplyDomainSetsUpPointersAndRedirects(t *testing.T) {
 
 	if _, err := os.Stat(env.cfg.ApacheDir + "/budi/example.net.conf"); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("a forward kept its Apache vhost (%v)", err)
+	}
+}
+
+func TestPHPVersionsListsTheInstalledVersions(t *testing.T) {
+	env := newWebEnv(t)
+	env.write(filepath.Join(env.cfg.PHPFPMDir, "php-fpm7.4"))
+	env.write(filepath.Join(env.cfg.PHPFPMDir, "php-fpm8.5"))
+
+	result, err := env.call("php.versions", map[string]any{})
+	if err != nil {
+		t.Fatalf("php.versions failed: %v", err)
+	}
+
+	if string(result) != `{"versions":["7.4","8.4","8.5"]}` {
+		t.Fatalf("unexpected result %s", result)
+	}
+
+	// It takes no params and changes nothing.
+	_, err = env.call("php.versions", map[string]any{"username": "budi"})
+	assertCode(t, err, rpc.CodeInvalidParams)
+	env.assertUntouched()
+
+	if webMethods(env.system, env.web)["php.versions"].LockKey != nil {
+		t.Fatal("php.versions must not lock an account")
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -14,6 +15,72 @@ import (
 // unitTemplatePattern matches the template unit file of a PHP version,
 // nusa-php84@.service for PHP 8.4.
 var unitTemplatePattern = regexp.MustCompile(`^nusa-php([0-9])([0-9])@\.service$`)
+
+// phpFPMBinaryPattern matches the PHP-FPM binary of a PHP version in
+// PHPFPMDir, php-fpm8.4 for PHP 8.4.
+var phpFPMBinaryPattern = regexp.MustCompile(`^php-fpm([0-9]\.[0-9])$`)
+
+// PHPVersions returns the installed PHP versions websites can use, oldest
+// first: those with a PHP-FPM binary in PHPFPMDir.
+func (m *Manager) PHPVersions() ([]string, error) {
+	entries, err := os.ReadDir(m.cfg.PHPFPMDir)
+	if errors.Is(err, os.ErrNotExist) {
+		return []string{}, nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("list %s: %w", m.cfg.PHPFPMDir, err)
+	}
+
+	versions := []string{}
+
+	for _, entry := range entries {
+		match := phpFPMBinaryPattern.FindStringSubmatch(entry.Name())
+		if match != nil && m.PHPInstalled(match[1]) {
+			versions = append(versions, match[1])
+		}
+	}
+
+	slices.Sort(versions)
+
+	return versions, nil
+}
+
+// removeUnusedPools stops, disables and deletes every PHP-FPM pool of user
+// that no Apache vhost of user uses anymore, such as the pool of the
+// version a website just moved away from. The caller holds the account
+// lock, so no other change of the account can need such a pool meanwhile.
+func (m *Manager) removeUnusedPools(ctx context.Context, user string) error {
+	pools, err := m.poolFiles(user)
+	if err != nil {
+		return err
+	}
+
+	for _, pool := range pools {
+		version := filepath.Base(filepath.Dir(pool))
+
+		domains, err := m.domainsUsingPool(user, version)
+		if err != nil {
+			return err
+		}
+
+		if len(domains) > 0 {
+			continue
+		}
+
+		if err := m.stopPool(ctx, user, version); err != nil {
+			return err
+		}
+
+		if err := removeFile(pool); err != nil {
+			return err
+		}
+
+		m.logger().Info("removed a PHP-FPM pool no website uses anymore", "user", user, "php_version", version)
+	}
+
+	return nil
+}
 
 // applyPool installs the PHP-FPM pool of user for version and makes sure it
 // runs: started when it is not running, reloaded when its configuration

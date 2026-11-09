@@ -15,6 +15,7 @@ import (
 // *webserver.Manager implements it.
 type webServer interface {
 	PHPInstalled(version string) bool
+	PHPVersions() ([]string, error)
 	IsHostname(domain string) bool
 	UsedByOtherAccount(domain, user string) (bool, error)
 	ApplyDomain(ctx context.Context, site webserver.Site) (documentRoot string, err error)
@@ -143,6 +144,7 @@ func webMethods(system accountSystem, web webServer) map[string]rpc.Method {
 		"web.apply_domain":  {Handler: actions.applyDomain, LockKey: webLockKey[applyDomainParams]},
 		"web.remove_domain": {Handler: actions.removeDomain, LockKey: webLockKey[domainParams]},
 		"php.remove_pool":   {Handler: actions.removePool, LockKey: webLockKey[removePoolParams]},
+		"php.versions":      {Handler: actions.phpVersions},
 		"ssl.issue":         {Handler: actions.issueCertificate, LockKey: webLockKey[domainParams]},
 		"ssl.delete":        {Handler: actions.deleteCertificate, LockKey: webLockKey[domainParams]},
 	}
@@ -254,6 +256,26 @@ func (w webActions) removePool(ctx context.Context, raw json.RawMessage) (any, e
 	}
 
 	return struct{}{}, nil
+}
+
+// phpVersionsInfo is the result of php.versions.
+type phpVersionsInfo struct {
+	Versions []string `json:"versions"`
+}
+
+// phpVersions implements php.versions: the installed PHP versions websites
+// can use, oldest first. It changes nothing, so it locks nothing.
+func (w webActions) phpVersions(_ context.Context, raw json.RawMessage) (any, error) {
+	if err := rpc.DecodeParams(raw, &struct{}{}); err != nil {
+		return nil, err
+	}
+
+	versions, err := w.web.PHPVersions()
+	if err != nil {
+		return nil, err
+	}
+
+	return phpVersionsInfo{Versions: versions}, nil
 }
 
 // checkDomain refuses the server's own hostname and returns the nusapanel

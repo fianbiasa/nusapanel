@@ -69,8 +69,10 @@ func TestApplyForwardRedirectsEveryRequestToItsParent(t *testing.T) {
 		t.Fatalf("a forward has document root %q", root)
 	}
 
-	// No folders and no PHP: only the web servers change.
-	env.assertCalls(reloadBoth...)
+	// No folders and no PHP: only the web servers change, and the pool the
+	// alias used goes, since nothing else uses it.
+	env.assertCalls(append(reloadBoth, "systemctl disable --now nusa-php84@budi.service")...)
+	env.assertMissing(env.poolFile("budi", "8.4"))
 
 	if len(env.sites) != 0 {
 		t.Fatalf("folders were prepared: %+v", env.sites)

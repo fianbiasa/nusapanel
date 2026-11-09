@@ -222,6 +222,7 @@ return [
         'password' => 'kata sandi',
         'password_confirmation' => 'konfirmasi kata sandi',
         'path' => 'path',
+        'php_version' => 'versi PHP',
         'reason' => 'alasan',
         'recovery_code' => 'kode pemulihan',
         'search' => 'pencarian',

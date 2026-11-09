@@ -23,6 +23,7 @@ export const auditActionLabels: Record<string, string> = {
     'domain.ssl_cancelled': 'Permintaan SSL dibatalkan',
     'domain.https_forced': 'Paksa HTTPS diaktifkan',
     'domain.https_unforced': 'Paksa HTTPS dimatikan',
+    'domain.php_changed': 'Versi PHP diganti',
     'subdomain.created': 'Subdomain ditambahkan',
     'subdomain.deleted': 'Subdomain dihapus',
     'pointer.created': 'Pointer ditambahkan',

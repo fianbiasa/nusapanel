@@ -7,16 +7,21 @@ use App\Enums\SslStatus;
 use App\Http\Requests\StoreDomainRequest;
 use App\Models\Domain;
 use App\Services\DomainService;
+use App\Services\PhpVersionService;
 use App\Support\AccountLimits;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class DomainController extends Controller
 {
-    public function __construct(private DomainService $domains) {}
+    public function __construct(
+        private DomainService $domains,
+        private PhpVersionService $phpVersions,
+    ) {}
 
     /**
      * List the signed-in account's websites: its domains, primary domain
@@ -62,6 +67,8 @@ class DomainController extends Controller
 
         return Inertia::render('domains/index', [
             'domains' => $domains,
+            'php_versions' => $this->phpVersions->available(),
+            'default_php_version' => $this->phpVersions->default(),
             'limits' => AccountLimits::for($account)->toArray(),
             'public_ip' => config('hosting.public_ip') ?: null,
         ]);
@@ -160,6 +167,30 @@ class DomainController extends Controller
             'message' => $forceHttps
                 ? __(':domain now always opens over HTTPS.', ['domain' => $domain->display_name])
                 : __(':domain can be opened over HTTP again.', ['domain' => $domain->display_name]),
+        ]);
+
+        return back();
+    }
+
+    /**
+     * Run the website on another installed PHP version.
+     */
+    public function updatePhpVersion(Request $request, Domain $domain): RedirectResponse
+    {
+        Gate::authorize('update', $domain);
+
+        $validated = $request->validate([
+            'php_version' => ['required', 'string', Rule::in($this->phpVersions->available())],
+        ]);
+
+        $this->domains->changePhpVersion($domain, $validated['php_version'], $request->user());
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => __(':domain is switching to PHP :version.', [
+                'domain' => $domain->display_name,
+                'version' => $validated['php_version'],
+            ]),
         ]);
 
         return back();

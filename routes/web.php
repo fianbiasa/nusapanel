@@ -23,6 +23,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('domains/{domain}/ssl', [DomainController::class, 'requestSsl'])->name('domains.ssl.store');
         Route::delete('domains/{domain}/ssl', [DomainController::class, 'removeSsl'])->name('domains.ssl.destroy');
         Route::put('domains/{domain}/force-https', [DomainController::class, 'updateForceHttps'])->name('domains.force-https.update');
+        Route::put('domains/{domain}/php', [DomainController::class, 'updatePhpVersion'])->name('domains.php.update');
         Route::post('subdomains', [SubdomainController::class, 'store'])->name('subdomains.store');
         Route::post('pointers', [PointerController::class, 'store'])->name('pointers.store');
         Route::get('redirects', [UrlRedirectController::class, 'index'])->name('redirects.index');

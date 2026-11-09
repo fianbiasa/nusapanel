@@ -26,6 +26,7 @@ final class FakeAgentClient implements AgentClient
             'ssl.issue' => $this->issuedCertificate((string) ($params['domain'] ?? '')),
             'account.set_quota' => ['applied' => true, 'simulated' => true],
             'quota.report' => $this->quotaReport(),
+            'php.versions' => ['versions' => ['7.4', '8.0', '8.1', '8.2', '8.3', '8.4', '8.5'], 'simulated' => true],
             default => ['simulated' => true],
         };
     }

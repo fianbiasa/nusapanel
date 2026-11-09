@@ -1,5 +1,6 @@
 import { Form, Head, router, usePoll } from '@inertiajs/react';
 import {
+    ChevronDown,
     CornerDownRight,
     ExternalLink,
     Globe,
@@ -35,6 +36,8 @@ import {
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuLabel,
+    DropdownMenuRadioGroup,
+    DropdownMenuRadioItem,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -47,6 +50,7 @@ import {
 import { formatDate, formatDateTime } from '@/lib/format';
 import { destroy } from '@/routes/domains';
 import { update as updateForceHttps } from '@/routes/domains/force-https';
+import { update as updatePhpVersion } from '@/routes/domains/php';
 import { destroy as destroySsl, store as storeSsl } from '@/routes/domains/ssl';
 import type { AccountLimits } from '@/types';
 
@@ -82,6 +86,8 @@ type DomainAction = {
 
 type Props = {
     domains: DomainRow[];
+    php_versions: string[];
+    default_php_version: string;
     limits: AccountLimits;
     public_ip: string | null;
 };
@@ -114,7 +120,13 @@ function toastFirstError(errors: Record<string, string>) {
     }
 }
 
-export default function DomainsIndex({ domains, limits, public_ip }: Props) {
+export default function DomainsIndex({
+    domains,
+    php_versions,
+    default_php_version,
+    limits,
+    public_ip,
+}: Props) {
     const [action, setAction] = useState<DomainAction | null>(null);
     const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -150,6 +162,18 @@ export default function DomainsIndex({ domains, limits, public_ip }: Props) {
         router.put(
             updateForceHttps.url(domain.id),
             { force_https: !domain.force_https },
+            { preserveScroll: true, onError: toastFirstError },
+        );
+    };
+
+    const changePhpVersion = (domain: DomainRow, version: string) => {
+        if (version === domain.php_version) {
+            return;
+        }
+
+        router.put(
+            updatePhpVersion.url(domain.id),
+            { php_version: version },
             { preserveScroll: true, onError: toastFirstError },
         );
     };
@@ -231,12 +255,14 @@ export default function DomainsIndex({ domains, limits, public_ip }: Props) {
                                             />
                                         </td>
                                         <td className={tableStyles.td}>
-                                            <span className="font-medium">
-                                                {domain.pointer_mode ===
-                                                'redirect'
-                                                    ? '—'
-                                                    : domain.php_version}
-                                            </span>
+                                            <PhpVersionCell
+                                                domain={domain}
+                                                versions={php_versions}
+                                                defaultVersion={
+                                                    default_php_version
+                                                }
+                                                onChange={changePhpVersion}
+                                            />
                                         </td>
                                         <td
                                             className={`${tableStyles.td} whitespace-nowrap text-muted-foreground`}
@@ -353,6 +379,72 @@ function DomainName({ domain }: { domain: DomainRow }) {
                 )}
             </div>
         </div>
+    );
+}
+
+/**
+ * The PHP version of one website, which a domain or subdomain can switch to
+ * any installed version. A pointer runs on its domain's version; one that
+ * redirects runs no PHP at all.
+ */
+function PhpVersionCell({
+    domain,
+    versions,
+    defaultVersion,
+    onChange,
+}: {
+    domain: DomainRow;
+    versions: string[];
+    defaultVersion: string;
+    onChange: (domain: DomainRow, version: string) => void;
+}) {
+    if (domain.pointer_mode === 'redirect') {
+        return <span className="font-medium text-muted-foreground">—</span>;
+    }
+
+    const canChange =
+        domain.type !== 'pointer' &&
+        (domain.status === 'active' || domain.status === 'failed') &&
+        !isSslBusy(domain);
+
+    if (!canChange) {
+        return <span className="font-medium">{domain.php_version}</span>;
+    }
+
+    return (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1 rounded-lg font-semibold"
+                    aria-label={`Versi PHP ${domain.display_name}: ${domain.php_version}. Ganti versi`}
+                >
+                    {domain.php_version}
+                    <ChevronDown className="size-3.5 text-muted-foreground" />
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="min-w-44 rounded-xl">
+                <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground">
+                    Versi PHP
+                </DropdownMenuLabel>
+                <DropdownMenuRadioGroup
+                    value={domain.php_version}
+                    onValueChange={(version) => onChange(domain, version)}
+                >
+                    {versions.map((version) => (
+                        <DropdownMenuRadioItem key={version} value={version}>
+                            PHP {version}
+                            {version === defaultVersion && (
+                                <span className="ml-auto text-xs text-muted-foreground">
+                                    bawaan
+                                </span>
+                            )}
+                        </DropdownMenuRadioItem>
+                    ))}
+                </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+        </DropdownMenu>
     );
 }
 

@@ -321,6 +321,14 @@ func (m *Manager) ApplyDomain(ctx context.Context, site Site) (string, error) {
 		return "", err
 	}
 
+	// A website that moved to another PHP version (or became a forward)
+	// may have left the account a pool nothing uses. The website itself is
+	// set up already, so a failure here is only logged; the next apply
+	// tries again.
+	if err := m.removeUnusedPools(ctx, site.User); err != nil {
+		m.logger().Warn("could not remove unused PHP-FPM pools", "user", site.User, "error", err)
+	}
+
 	return m.siteDocumentRoot(site), nil
 }
 
