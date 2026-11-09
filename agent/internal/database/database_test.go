@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"errors"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -148,6 +149,12 @@ func TestApplyUserRefusesWhatIsNotTheAccounts(t *testing.T) {
 		func() error { return manager.DeleteDatabase(ctx, "budi", "sari_shop") },
 		func() error { return manager.DeleteUser(ctx, "budi", "root") },
 		func() error { return manager.RemoveAccount(ctx, "root") },
+		func() error { return manager.ApplyOwner(ctx, "root", hash, nil) },
+		func() error { return manager.ApplyOwner(ctx, "nusapanel", hash, nil) },
+		func() error { return manager.ApplyOwner(ctx, "budi", hash, []string{"sari_shop"}) },
+		func() error { return manager.ApplyOwner(ctx, "budi", "plain password", nil) },
+		func() error { return manager.CloseOwner(ctx, "root") },
+		func() error { return manager.LockAccount(ctx, "mysql", true) },
 	}
 
 	for i, call := range cases {
@@ -158,6 +165,48 @@ func TestApplyUserRefusesWhatIsNotTheAccounts(t *testing.T) {
 
 	if len(client.sql) != 0 {
 		t.Fatalf("SQL ran: %q", client.sql)
+	}
+}
+
+func TestApplyOwnerGivesTheAccountNameAccessToItsDatabases(t *testing.T) {
+	manager, client := newTestManager()
+	client.answers["SELECT Db FROM mysql.db"] = "budi\\_old\n"
+
+	if err := manager.ApplyOwner(context.Background(), "budi", hash, []string{"budi_shop", "budi_wp"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if client.sql[0] != "SELECT Db FROM mysql.db WHERE Host = 'localhost' AND User = 'budi';" {
+		t.Fatalf("grants looked up with %q", client.sql[0])
+	}
+
+	want := "CREATE USER IF NOT EXISTS 'budi'@'localhost' IDENTIFIED BY PASSWORD '" + hash + "';\n" +
+		"ALTER USER 'budi'@'localhost' IDENTIFIED BY PASSWORD '" + hash + "';\n" +
+		"REVOKE ALL PRIVILEGES ON `budi\\_old`.* FROM 'budi'@'localhost';\n" +
+		"GRANT ALL PRIVILEGES ON `budi\\_shop`.* TO 'budi'@'localhost';\n" +
+		"GRANT ALL PRIVILEGES ON `budi\\_wp`.* TO 'budi'@'localhost';"
+
+	if len(client.sql) != 2 || client.sql[1] != want {
+		t.Fatalf("sql =\n%s", strings.Join(client.sql, "\n---\n"))
+	}
+}
+
+func TestCloseOwnerGivesItAnUnknownPassword(t *testing.T) {
+	manager, client := newTestManager()
+
+	for range 2 {
+		if err := manager.CloseOwner(context.Background(), "budi"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	pattern := regexp.MustCompile(`^ALTER USER IF EXISTS 'budi'@'localhost' IDENTIFIED BY PASSWORD '\*[0-9A-F]{40}';$`)
+	if len(client.sql) != 2 || !pattern.MatchString(client.sql[0]) || !pattern.MatchString(client.sql[1]) {
+		t.Fatalf("sql = %q", client.sql)
+	}
+
+	if client.sql[0] == client.sql[1] {
+		t.Fatal("both calls set the same password")
 	}
 }
 
@@ -174,7 +223,8 @@ func TestRemoveAccountDropsItsDatabasesAndUsers(t *testing.T) {
 		t.Fatalf("the account's objects were not looked up by their prefix: %q", client.sql[:2])
 	}
 
-	want := "DROP USER IF EXISTS 'budi_wp'@'localhost';\n" +
+	want := "DROP USER IF EXISTS 'budi'@'localhost';\n" +
+		"DROP USER IF EXISTS 'budi_wp'@'localhost';\n" +
 		"DELETE FROM mysql.db WHERE Db = 'budi\\\\_shop';\n" +
 		"DROP DATABASE IF EXISTS `budi_shop`;\n" +
 		"DELETE FROM mysql.db WHERE Db = 'budi\\\\_blog';\n" +
@@ -186,14 +236,14 @@ func TestRemoveAccountDropsItsDatabasesAndUsers(t *testing.T) {
 	}
 }
 
-func TestRemoveAccountWithoutDatabasesDoesNothing(t *testing.T) {
+func TestRemoveAccountWithoutDatabasesStillDropsTheOwnerUser(t *testing.T) {
 	manager, client := newTestManager()
 
 	if err := manager.RemoveAccount(context.Background(), "budi"); err != nil {
 		t.Fatal(err)
 	}
 
-	if len(client.sql) != 2 {
+	if len(client.sql) != 3 || client.sql[2] != "DROP USER IF EXISTS 'budi'@'localhost';\nFLUSH PRIVILEGES;" {
 		t.Fatalf("sql = %q", client.sql)
 	}
 }
@@ -210,8 +260,10 @@ func TestLockAccountLocksAndUnlocksItsUsers(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if client.sql[2] != "ALTER USER 'budi_wp'@'localhost' ACCOUNT LOCK;\nALTER USER 'budi_shop'@'localhost' ACCOUNT LOCK;" ||
-		client.sql[5] != "ALTER USER 'budi_wp'@'localhost' ACCOUNT UNLOCK;\nALTER USER 'budi_shop'@'localhost' ACCOUNT UNLOCK;" {
+	if client.sql[2] != "ALTER USER IF EXISTS 'budi'@'localhost' ACCOUNT LOCK;\n"+
+		"ALTER USER 'budi_wp'@'localhost' ACCOUNT LOCK;\nALTER USER 'budi_shop'@'localhost' ACCOUNT LOCK;" ||
+		client.sql[5] != "ALTER USER IF EXISTS 'budi'@'localhost' ACCOUNT UNLOCK;\n"+
+			"ALTER USER 'budi_wp'@'localhost' ACCOUNT UNLOCK;\nALTER USER 'budi_shop'@'localhost' ACCOUNT UNLOCK;" {
 		t.Fatalf("sql =\n%s", strings.Join(client.sql, "\n---\n"))
 	}
 }

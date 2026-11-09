@@ -81,16 +81,16 @@ Konvensi nama: `namespace.aksi`. "Sebagai user" = agent turun ke UID user sebelu
 
 ### account
 
-| Aksi                            | Fungsi                                                                                                                                                                                                                                                                         | Fase  |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----- |
-| `account.create`                | Buat user & grup Linux (penanda GECOS `nusapanel`), home `0710 <user>:nusa-access`, `domains`/`tmp`/`backups`/`.trash`; quota & slice systemd menyusul                                                                                                                         | P1 ✅ |
-| `account.set_quota`             | ✅ `{username, disk_mb, inodes}` (0 = tanpa batas): kuota user filesystem lewat `setquota` (soft = hard). `{applied: false}` kalau kuota server belum aktif. `account.delete` membersihkan kuota UID-nya                                                                       | P1    |
-| `quota.report`                  | ✅ Pemakaian & batas disk/inode semua akun nusapanel (`repquota`), dikumpulkan panel tiap 15 menit                                                                                                                                                                             | P1    |
-| `account.apply_limits`          | Batas CPU, RAM, proses, IO (cgroups)                                                                                                                                                                                                                                           | P3    |
-| `account.suspend` / `unsuspend` | ✅ kunci password + akun kedaluwarsa (blok SSH-key/SFTP), semua website menampilkan halaman 503, PHP-FPM dihentikan (tetap mati setelah reboot), user MariaDB dikunci (`ACCOUNT LOCK`); menyusul: cron. Mail & FTP otomatis ditolak lewat view SQL                             | P1    |
-| `account.delete`                | ✅ matikan & hapus pool PHP-FPM, hapus vhost & log domain, drop semua database & user MariaDB akun itu (kalau gagal, akun tidak dihapus supaya akun baru bernama sama tidak mewarisinya), hentikan proses, hapus home & user Linux (akun sistem ditolak); menyusul: mail, dst. | P1    |
-| `account.set_password`          | Password Linux (untuk SFTP/SSH)                                                                                                                                                                                                                                                | P1    |
-| `account.rename`                | Ganti username                                                                                                                                                                                                                                                                 | P6    |
+| Aksi                            | Fungsi                                                                                                                                                                                                                                                                                                | Fase  |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| `account.create`                | Buat user & grup Linux (penanda GECOS `nusapanel`), home `0710 <user>:nusa-access`, `domains`/`tmp`/`backups`/`.trash`; quota & slice systemd menyusul                                                                                                                                                | P1 ✅ |
+| `account.set_quota`             | ✅ `{username, disk_mb, inodes}` (0 = tanpa batas): kuota user filesystem lewat `setquota` (soft = hard). `{applied: false}` kalau kuota server belum aktif. `account.delete` membersihkan kuota UID-nya                                                                                              | P1    |
+| `quota.report`                  | ✅ Pemakaian & batas disk/inode semua akun nusapanel (`repquota`), dikumpulkan panel tiap 15 menit                                                                                                                                                                                                    | P1    |
+| `account.apply_limits`          | Batas CPU, RAM, proses, IO (cgroups)                                                                                                                                                                                                                                                                  | P3    |
+| `account.suspend` / `unsuspend` | ✅ kunci password + akun kedaluwarsa (blok SSH-key/SFTP), semua website menampilkan halaman 503, PHP-FPM dihentikan (tetap mati setelah reboot), semua user MariaDB akun itu, termasuk user pemilik, dikunci (`ACCOUNT LOCK`); menyusul: cron. Mail & FTP otomatis ditolak lewat view SQL             | P1    |
+| `account.delete`                | ✅ matikan & hapus pool PHP-FPM, hapus vhost & log domain, drop semua database & user MariaDB akun itu, termasuk user pemilik (kalau gagal, akun tidak dihapus supaya akun baru bernama sama tidak mewarisinya), hentikan proses, hapus home & user Linux (akun sistem ditolak); menyusul: mail, dst. | P1    |
+| `account.set_password`          | Password Linux (untuk SFTP/SSH)                                                                                                                                                                                                                                                                       | P1    |
+| `account.rename`                | Ganti username                                                                                                                                                                                                                                                                                        | P6    |
 
 ### web
 
@@ -132,6 +132,8 @@ Konvensi nama: `namespace.aksi`. "Sebagai user" = agent turun ke UID user sebelu
 
 Nama database dan user selalu `<username>_<nama>` (`[a-z0-9_]`, database ≤ 64, user ≤ 32 karakter); agent menolak nama tanpa awalan akun itu, jadi satu akun tidak bisa menyentuh database akun lain. User hanya dibuat untuk `localhost`. Panel hanya mengirim hash `mysql_native_password` (`*` + SHA1(SHA1(password)) heksadesimal besar), tidak pernah password-nya. SQL dikirim ke `mariadb` (root lewat unix_socket) melalui stdin.
 
+Setiap akun juga punya **user pemilik** bernama persis `<username>` (tanpa akhiran), dengan akses ke semua database akun itu; phpMyAdmin login sebagai user ini. Password-nya dibuat baru setiap kali phpMyAdmin dibuka dan diganti password acak yang tidak diketahui siapa pun begitu sesinya habis. User ini tidak dihapus selama akunnya ada, karena view, trigger dan routine yang dibuat lewat phpMyAdmin memakainya sebagai DEFINER; user sementara akan membuat objek itu rusak (error 1449) begitu dihapus.
+
 | Aksi                               | Fungsi                                                                                                                                                                                                       | Fase |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---- |
 | `db.create_database`               | ✅ `{username, database}`: `CREATE DATABASE IF NOT EXISTS`, utf8mb4_unicode_ci                                                                                                                               | P1   |
@@ -139,7 +141,8 @@ Nama database dan user selalu `<username>_<nama>` (`[a-z0-9_]`, database ≤ 64,
 | `db.apply_user`                    | ✅ `{username, user, password_hash, databases}`: buat/perbarui user dengan hash itu, cabut hak ke database yang tidak ada di daftar, beri `ALL PRIVILEGES` ke yang ada (`_` di-escape supaya bukan wildcard) | P1   |
 | `db.delete_user`                   | ✅ `{username, user}`: `DROP USER IF EXISTS`; database-nya tetap ada                                                                                                                                         | P1   |
 | `db.report`                        | ✅ Ukuran semua database akun nusapanel (`information_schema`), dikumpulkan panel tiap 15 menit                                                                                                              | P1   |
-| `db.sso_token`                     | User MariaDB sementara (kedaluwarsa 1 jam) untuk login phpMyAdmin (milestone berikutnya)                                                                                                                     | P1   |
+| `db.open_sso`                      | ✅ `{username, password_hash, databases}`: buat/perbarui user pemilik dengan hash itu dan akses ke tepat database yang diberikan (sinkron, dipanggil saat customer membuka phpMyAdmin)                       | P1   |
+| `db.close_sso`                     | ✅ `{username}`: user pemilik mendapat password acak yang tidak diketahui siapa pun, sehingga sesi phpMyAdmin berakhir; berhasil juga kalau user atau akunnya sudah tidak ada                                | P1   |
 | `db.remote_hosts_apply`            | Buat `user@host` sesuai daftar host                                                                                                                                                                          | P3   |
 | `db.dump` / `import`               | Streaming, sebagai user                                                                                                                                                                                      | P3   |
 | `db.check` / `repair` / `optimize` |                                                                                                                                                                                                              | P3   |
@@ -244,6 +247,7 @@ Nama database dan user selalu `<username>_<nama>` (`[a-z0-9_]`, database ≤ 64,
 /usr/local/nusapanel/                   milik root, tidak bisa ditulis panel
 ├── releases/<versi>/                   satu folder per rilis (isi paket)
 │   ├── panel/                          aplikasi Laravel (vendor & aset sudah jadi)
+│   ├── phpmyadmin/                     phpMyAdmin (versi & SHA-256 dipatok di build-release.sh) + nusapanel-sso.php
 │   │   ├── .env -> /etc/nusapanel/panel.env
 │   │   └── storage -> /var/lib/nusapanel/storage
 │   ├── bin/nusad, bin/nusactl
@@ -268,6 +272,10 @@ Nama database dan user selalu `<username>_<nama>` (`[a-z0-9_]`, database ≤ 64,
 /etc/nginx/nusapanel/<user>/suspended.inc        hanya ada selama akun di-suspend (halaman 503)
 /etc/nginx/conf.d/nusapanel-sites.conf           include semua vhost di atas
 /etc/nginx/sites-enabled/nusapanel-default.conf  default server: port 80 → 404, port 443 → handshake ditolak (host tak dikenal & IP)
+/etc/nginx/sites-enabled/nusapanel-phpmyadmin.conf  https://<hostname>/phpmyadmin/ (port 443; selain /phpmyadmin/ diarahkan ke panel)
+/etc/php/8.4/fpm/pool.d/nusapanel-phpmyadmin.conf  pool phpMyAdmin (user nusa-pma, socket /run/php/nusapanel-phpmyadmin.sock)
+/etc/nusa-pma/                          0750 root:nusa-pma: config.inc.php, blowfish.key, sso.key (= PHPMYADMIN_SSO_KEY panel)
+/var/lib/nusa-pma/{tmp,sessions,log}/   milik nusa-pma: file sementara, sesi (berisi password sesi) & log PHP phpMyAdmin
 /etc/apache2/nusapanel/<user>/<domain>.conf      vhost Apache (127.0.0.1:8080), ditulis nusad
 /etc/apache2/conf-available/nusapanel.conf       mod_remoteip, HTTPS dari proxy, aturan /home
 /etc/systemd/system/nusa-php<versi>@.service     unit template pool PHP-FPM, ditulis nusad
@@ -290,29 +298,30 @@ Nama database dan user selalu `<username>_<nama>` (`[a-z0-9_]`, database ≤ 64,
 
 ## 4.5 Port
 
-| Port            | Layanan            | Terbuka untuk                                                                    |
-| --------------- | ------------------ | -------------------------------------------------------------------------------- |
-| 22              | SSH/SFTP           | Publik (port bisa diganti)                                                       |
-| 21, 35000–35999 | FTP + passive      | Publik                                                                           |
-| 25, 465, 587    | SMTP               | Publik mulai P2; sampai itu Postfix hanya mendengar di 127.0.0.1:25 (kirim-saja) |
-| 110, 995        | POP3               | Publik                                                                           |
-| 143, 993        | IMAP               | Publik                                                                           |
-| 4190            | ManageSieve        | Publik (opsional)                                                                |
-| 53 tcp/udp      | DNS                | Publik                                                                           |
-| 80, 443         | Web                | Publik                                                                           |
-| 2222            | Panel              | Publik (bisa dibatasi per IP)                                                    |
-| 8080            | Apache backend     | 127.0.0.1                                                                        |
-| 3306            | MariaDB            | Lokal (remote kalau diaktifkan)                                                  |
-| 6379            | Redis (Rspamd, P2) | Lokal, wajib berpassword/socket terkunci                                         |
-| 8081            | API PowerDNS       | 127.0.0.1                                                                        |
-| 11332–11334     | Rspamd             | 127.0.0.1                                                                        |
+| Port            | Layanan                                             | Terbuka untuk                                                                    |
+| --------------- | --------------------------------------------------- | -------------------------------------------------------------------------------- |
+| 22              | SSH/SFTP                                            | Publik (port bisa diganti)                                                       |
+| 21, 35000–35999 | FTP + passive                                       | Publik                                                                           |
+| 25, 465, 587    | SMTP                                                | Publik mulai P2; sampai itu Postfix hanya mendengar di 127.0.0.1:25 (kirim-saja) |
+| 110, 995        | POP3                                                | Publik                                                                           |
+| 143, 993        | IMAP                                                | Publik                                                                           |
+| 4190            | ManageSieve                                         | Publik (opsional)                                                                |
+| 53 tcp/udp      | DNS                                                 | Publik                                                                           |
+| 80, 443         | Web + phpMyAdmin (`https://<hostname>/phpmyadmin/`) | Publik                                                                           |
+| 2222            | Panel                                               | Publik (bisa dibatasi per IP)                                                    |
+| 8080            | Apache backend                                      | 127.0.0.1                                                                        |
+| 3306            | MariaDB                                             | Lokal (remote kalau diaktifkan)                                                  |
+| 6379            | Redis (Rspamd, P2)                                  | Lokal, wajib berpassword/socket terkunci                                         |
+| 8081            | API PowerDNS                                        | 127.0.0.1                                                                        |
+| 11332–11334     | Rspamd                                              | 127.0.0.1                                                                        |
 
 ## 4.6 Service systemd milik panel
 
-| Unit                               | Fungsi                                               |
-| ---------------------------------- | ---------------------------------------------------- |
-| `nusad.service`                    | Agent                                                |
-| `nusapanel-queue.service`          | Queue worker Laravel                                 |
-| `nusapanel-scheduler.timer`        | Menjalankan `schedule:run` Laravel tiap menit        |
-| `nusa-php<versi>@<user>.service`   | PHP-FPM per user (contoh: `nusa-php84@budi.service`) |
-| `nusa.slice` → `nusa-<user>.slice` | Batas resource per user                              |
+| Unit                               | Fungsi                                                                                                            |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `nusad.service`                    | Agent                                                                                                             |
+| `nusapanel-queue.service`          | Queue worker Laravel                                                                                              |
+| `nusapanel-scheduler.timer`        | Menjalankan `schedule:run` Laravel tiap menit (ukur pemakaian tiap 15 menit, akhiri sesi phpMyAdmin tiap 5 menit) |
+| `php8.4-fpm.service`               | Pool PHP-FPM panel (`nusapanel`) dan phpMyAdmin (`nusapanel-phpmyadmin`, user `nusa-pma`)                         |
+| `nusa-php<versi>@<user>.service`   | PHP-FPM per user (contoh: `nusa-php84@budi.service`)                                                              |
+| `nusa.slice` → `nusa-<user>.slice` | Batas resource per user                                                                                           |

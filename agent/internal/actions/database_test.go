@@ -43,6 +43,18 @@ func (f *fakeDatabaseServer) DeleteUser(_ context.Context, user, name string) er
 	return f.fail
 }
 
+func (f *fakeDatabaseServer) ApplyOwner(_ context.Context, user, hash string, databases []string) error {
+	f.calls = append(f.calls, "owner "+user+" "+hash+" ["+strings.Join(databases, ",")+"]")
+
+	return f.fail
+}
+
+func (f *fakeDatabaseServer) CloseOwner(_ context.Context, user string) error {
+	f.calls = append(f.calls, "close owner "+user)
+
+	return f.fail
+}
+
 func (f *fakeDatabaseServer) Report(context.Context) ([]database.Size, error) {
 	f.calls = append(f.calls, "report")
 
@@ -89,7 +101,7 @@ func TestDatabaseMethodsAreRegistered(t *testing.T) {
 	registry := rpc.NewRegistry()
 	Register(registry)
 
-	for _, name := range []string{"db.create_database", "db.delete_database", "db.apply_user", "db.delete_user", "db.report"} {
+	for _, name := range []string{"db.create_database", "db.delete_database", "db.apply_user", "db.delete_user", "db.open_sso", "db.close_sso", "db.report"} {
 		if !slices.Contains(registry.Names(), name) {
 			t.Errorf("method %s is not registered", name)
 		}
@@ -112,6 +124,8 @@ func TestDatabaseMethodsReachMariaDB(t *testing.T) {
 		{"db.create_database", map[string]any{"username": "budi", "database": "budi_shop"}},
 		{"db.apply_user", map[string]any{"username": "budi", "user": "budi_wp", "password_hash": testHash, "databases": []string{"budi_shop"}}},
 		{"db.delete_user", map[string]any{"username": "budi", "user": "budi_wp"}},
+		{"db.open_sso", map[string]any{"username": "budi", "password_hash": testHash, "databases": []string{"budi_shop", "budi_blog"}}},
+		{"db.close_sso", map[string]any{"username": "budi"}},
 		{"db.delete_database", map[string]any{"username": "budi", "database": "budi_shop"}},
 	}
 
@@ -125,6 +139,8 @@ func TestDatabaseMethodsReachMariaDB(t *testing.T) {
 		"create budi budi_shop",
 		"user budi budi_wp " + testHash + " [budi_shop]",
 		"drop user budi budi_wp",
+		"owner budi " + testHash + " [budi_shop,budi_blog]",
+		"close owner budi",
 		"drop budi budi_shop",
 	}
 
@@ -150,7 +166,15 @@ func TestDatabaseMethodsRefuseWhatIsNotTheAccounts(t *testing.T) {
 		},
 		"db.delete_user":     {{"username": "budi", "user": "sari_wp"}},
 		"db.delete_database": {{"username": "budi", "database": "nusapanel"}},
-		"db.report":          {{"username": "budi"}},
+		"db.open_sso": {
+			{"username": "budi", "password_hash": "secret", "databases": []string{"budi_shop"}},
+			{"username": "budi", "password_hash": testHash, "databases": []string{"sari_shop"}},
+			{"username": "budi", "password_hash": testHash, "databases": []string{"mysql"}},
+			{"username": "root", "password_hash": testHash},
+			{"username": "budi", "password": "secret", "password_hash": testHash},
+		},
+		"db.close_sso": {{"username": "nusapanel"}, {"username": "Budi"}},
+		"db.report":    {{"username": "budi"}},
 	}
 
 	for method, cases := range invalid {
@@ -184,6 +208,24 @@ func TestCreatingNeedsTheAccountButDeletingDoesNot(t *testing.T) {
 	}
 
 	if !slices.Equal(server.calls, []string{"drop budi budi_shop"}) {
+		t.Fatalf("calls = %q", server.calls)
+	}
+}
+
+func TestOpeningPhpMyAdminNeedsTheAccountButClosingDoesNot(t *testing.T) {
+	system := newFakeSystem()
+	server := &fakeDatabaseServer{}
+
+	_, err := callDatabase(t, system, server, "db.open_sso", map[string]any{"username": "budi", "password_hash": testHash, "databases": []string{}})
+	if agentErr := assertCode(t, err, rpc.CodeActionFailed); agentErr.Message != "account budi does not exist" {
+		t.Fatalf("message = %q", agentErr.Message)
+	}
+
+	if _, err := callDatabase(t, system, server, "db.close_sso", map[string]any{"username": "budi"}); err != nil {
+		t.Fatalf("close failed: %v", err)
+	}
+
+	if !slices.Equal(server.calls, []string{"close owner budi"}) {
 		t.Fatalf("calls = %q", server.calls)
 	}
 }

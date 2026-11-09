@@ -9,3 +9,4 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('nusapanel:collect-usage')->everyFifteenMinutes()->withoutOverlapping();
+Schedule::command('nusapanel:close-phpmyadmin-sessions')->everyFiveMinutes()->withoutOverlapping();

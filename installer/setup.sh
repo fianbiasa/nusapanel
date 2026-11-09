@@ -35,6 +35,13 @@ readonly ENV_FILE="$CONFIG_DIR/panel.env"
 readonly AGENT_SOCKET="/run/nusapanel/agent.sock"
 readonly INSTALL_LOG="/var/log/nusapanel-install.log"
 readonly ACME_DIR="/var/www/nusapanel-acme"
+# phpMyAdmin runs as its own user, which can read neither the panel's
+# configuration nor customer files. These paths are also in
+# installer/files/php-fpm-phpmyadmin.conf, phpmyadmin-config.inc.php and
+# phpmyadmin-sso.php.
+readonly PMA_USER="nusa-pma"
+readonly PMA_CONFIG_DIR="/etc/nusa-pma"
+readonly PMA_DATA_DIR="/var/lib/nusa-pma"
 readonly DKIM_SELECTOR="nusapanel"
 readonly DNS_REPORT="$CONFIG_DIR/dns-records.txt"
 readonly RELEASE_REPO="fianbiasa/nusapanel"
@@ -592,6 +599,17 @@ create_layout() {
         ensure_dir "$DATA_DIR/$dir"
     done
 
+    if ! id -u "$PMA_USER" >/dev/null 2>&1; then
+        useradd --system --user-group --home-dir "$PMA_DATA_DIR" --no-create-home \
+            --shell /usr/sbin/nologin "$PMA_USER"
+        info "User sistem $PMA_USER (phpMyAdmin) dibuat"
+    fi
+
+    # Root owns the directories holding phpMyAdmin's, so it cannot swap them
+    # for symlinks; it may only write its temporary files, sessions and log.
+    install -d -m 0750 -o root -g "$PMA_USER" "$PMA_CONFIG_DIR" "$PMA_DATA_DIR"
+    install -d -m 0700 -o "$PMA_USER" -g "$PMA_USER" "$PMA_DATA_DIR/tmp" "$PMA_DATA_DIR/sessions" "$PMA_DATA_DIR/log"
+
     touch "$CONFIG_DIR/.setup-started"
 }
 
@@ -744,7 +762,8 @@ fetch_release() {
     local entries=("$extract_dir"/*)
     local top="${entries[0]}"
 
-    if [[ ${#entries[@]} -ne 1 || ! -f "$top/VERSION" || ! -x "$top/bin/nusad" || ! -f "$top/panel/artisan" ]]; then
+    if [[ ${#entries[@]} -ne 1 || ! -f "$top/VERSION" || ! -x "$top/bin/nusad" || ! -f "$top/panel/artisan" ||
+        ! -f "$top/phpmyadmin/index.php" ]]; then
         die "isi paket tidak dikenali; pastikan ini file rilis nusapanel"
     fi
 
@@ -826,6 +845,19 @@ add_public_ip_env() {
     add_env_value NUSAPANEL_PUBLIC_IP "$public_ip"
 }
 
+# Where phpMyAdmin is, and the key the panel seals its sign-on tickets with
+# (configure_phpmyadmin gives phpMyAdmin the same key). The key is generated
+# here, in a variable, so it never shows up on a command line.
+add_phpmyadmin_env() {
+    add_env_value PHPMYADMIN_URL "https://$server_hostname/phpmyadmin/"
+
+    if [[ -z "$(env_value PHPMYADMIN_SSO_KEY)" ]]; then
+        local key
+        key="$(openssl rand -base64 32)"
+        add_env_value PHPMYADMIN_SSO_KEY "$key"
+    fi
+}
+
 write_env() {
     if [[ -f "$ENV_FILE" ]]; then
         info "Memakai konfigurasi yang sudah ada: $ENV_FILE"
@@ -834,6 +866,8 @@ write_env() {
         add_env_value APP_FALLBACK_LOCALE en
         # Installs from before SSL for customer domains have no public IP yet.
         add_public_ip_env
+        # Installs from before phpMyAdmin.
+        add_phpmyadmin_env
         return
     fi
 
@@ -888,6 +922,7 @@ ENV
     chown "root:$PANEL_USER" "$ENV_FILE"
     chmod 0640 "$ENV_FILE"
     add_public_ip_env
+    add_phpmyadmin_env
     info "Konfigurasi ditulis ke $ENV_FILE"
 }
 
@@ -1121,6 +1156,7 @@ configure_php_fpm() {
 
     local pool_dir="/etc/php/$PHP_VERSION/fpm/pool.d"
     render "$release_dir/config/php-fpm-panel.conf" "$pool_dir/nusapanel.conf"
+    render "$release_dir/config/php-fpm-phpmyadmin.conf" "$pool_dir/nusapanel-phpmyadmin.conf"
 
     if [[ -f "$pool_dir/www.conf" ]]; then
         mv "$pool_dir/www.conf" "$pool_dir/www.conf.disabled"
@@ -1129,7 +1165,7 @@ configure_php_fpm() {
 
     quietly "php-fpm$PHP_VERSION" -t
     systemctl restart "php$PHP_VERSION-fpm"
-    info "Pool \"nusapanel\" aktif (fungsi exec dimatikan)"
+    info "Pool \"nusapanel\" dan \"nusapanel-phpmyadmin\" aktif (fungsi exec dimatikan)"
 }
 
 configure_nginx() {
@@ -1150,6 +1186,43 @@ configure_nginx() {
     quietly nginx -t
     systemctl reload nginx
     info "Panel dilayani di port $PANEL_PORT"
+}
+
+# phpMyAdmin at https://<hostname>/phpmyadmin/ (port 443, so not the panel's
+# origin), in the release's phpmyadmin/ folder. Its configuration and keys
+# live in $PMA_CONFIG_DIR, readable by nusa-pma only.
+configure_phpmyadmin() {
+    step "Mengatur phpMyAdmin (https://$server_hostname/phpmyadmin/)"
+
+    local sso_key
+    sso_key="$(env_value PHPMYADMIN_SSO_KEY)"
+    [[ -n "$sso_key" ]] || die "PHPMYADMIN_SSO_KEY tidak ada di $ENV_FILE"
+
+    # Written by the shell itself (printf is a builtin), so the keys never
+    # show up on a command line.
+    (
+        umask 027
+        if [[ ! -s "$PMA_CONFIG_DIR/blowfish.key" ]]; then
+            openssl rand -base64 32 >"$PMA_CONFIG_DIR/blowfish.key"
+        fi
+        printf '%s\n' "$sso_key" >"$PMA_CONFIG_DIR/sso.key"
+    )
+    render "$release_dir/config/phpmyadmin-config.inc.php" "$PMA_CONFIG_DIR/config.inc.php"
+    chown "root:$PMA_USER" "$PMA_CONFIG_DIR/blowfish.key" "$PMA_CONFIG_DIR/sso.key" "$PMA_CONFIG_DIR/config.inc.php"
+    chmod 0640 "$PMA_CONFIG_DIR/blowfish.key" "$PMA_CONFIG_DIR/sso.key" "$PMA_CONFIG_DIR/config.inc.php"
+
+    local site=/etc/nginx/sites-available/nusapanel-phpmyadmin.conf
+    render "$release_dir/config/nginx-phpmyadmin.conf" "$site"
+
+    if ! grep -q . /proc/net/if_inet6 2>/dev/null; then
+        sed -i '/listen \[::\]/d' "$site"
+    fi
+
+    ln -sfn "$site" /etc/nginx/sites-enabled/nusapanel-phpmyadmin.conf
+
+    quietly nginx -t
+    systemctl reload nginx
+    info "phpMyAdmin siap; customer membukanya dari halaman Databases di panel (login otomatis)"
 }
 
 # Customer websites: Nginx in front (ports 80/443, static files), Apache on
@@ -1578,6 +1651,13 @@ verify_install() {
         info "https://$server_hostname:$PANEL_PORT bisa dibuka dengan sertifikat yang valid"
     fi
 
+    # Without a sign-on session phpMyAdmin sends the browser to the panel.
+    status="$(curl -sk -o /dev/null -w '%{http_code} %{redirect_url}' --resolve "$server_hostname:443:127.0.0.1" \
+        "https://$server_hostname/phpmyadmin/" || true)"
+    [[ "$status" == "302 https://$server_hostname:$PANEL_PORT/databases" ]] ||
+        die "phpMyAdmin tidak berjalan seperti seharusnya (HTTP $status; cek: $LOG_DIR/phpmyadmin-error.log dan $PMA_DATA_DIR/log/)"
+    info "phpMyAdmin aktif di https://$server_hostname/phpmyadmin/"
+
     printf '%s\n' "$version" >"$CONFIG_DIR/installed"
 
     if [[ -n "$stale_release" ]]; then
@@ -1633,6 +1713,7 @@ build_dns_report() {
 summary() {
     printf '\n%s✔ nusapanel %s terpasang%s\n\n' "$green" "$version" "$reset"
     info "Panel    : https://$server_hostname:$PANEL_PORT"
+    info "phpMyAdmin: dibuka customer dari halaman Databases (https://$server_hostname/phpmyadmin/)"
     info "Username : $admin_user"
 
     # Shown on the terminal only (file descriptor 3), never written to the log.
@@ -1716,6 +1797,7 @@ main() {
     configure_ssl
     configure_php_fpm
     configure_nginx
+    configure_phpmyadmin
     configure_web
     configure_quota
     configure_logrotate

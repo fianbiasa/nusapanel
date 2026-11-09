@@ -6,6 +6,7 @@ use App\Http\Requests\StoreDatabaseRequest;
 use App\Models\Database;
 use App\Models\DatabaseUser;
 use App\Services\DatabaseService;
+use App\Services\PhpMyAdminService;
 use App\Support\AccountLimits;
 use App\Support\DatabaseNames;
 use Illuminate\Http\RedirectResponse;
@@ -62,6 +63,10 @@ class DatabaseController extends Controller
             ],
             'limits' => AccountLimits::for($account)->toArray(),
             'connection' => ['host' => 'localhost', 'port' => 3306],
+            'phpmyadmin' => [
+                'available' => PhpMyAdminService::isAvailable(),
+                'session_minutes' => PhpMyAdminService::sessionMinutes(),
+            ],
         ]);
     }
 

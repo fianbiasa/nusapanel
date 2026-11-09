@@ -7,11 +7,19 @@
 // underscore, so no account's prefix is the start of another's. Names only
 // hold a-z, 0-9 and underscores and password hashes only hex digits, so
 // nothing a caller sends can change the SQL; every method validates again.
+//
+// Each account also has an owner user named exactly <username>, with access
+// to all of its databases, which phpMyAdmin signs in as. Its password is set
+// when phpMyAdmin opens and replaced by an unknown one when the session
+// ends. It is never dropped while the account exists, because views,
+// triggers and routines made in phpMyAdmin keep it as their definer.
 package database
 
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"regexp"
@@ -158,6 +166,45 @@ func (m *Manager) ApplyUser(ctx context.Context, user, name, hash string, databa
 		return err
 	}
 
+	return m.applyUser(ctx, user, name, hash, databases)
+}
+
+// ApplyOwner creates the owner user of account user (named user), or
+// updates it like ApplyUser: the password of hash and all privileges on
+// exactly databases.
+func (m *Manager) ApplyOwner(ctx context.Context, user, hash string, databases []string) error {
+	if err := validate.Username(user); err != nil {
+		return err
+	}
+
+	return m.applyUser(ctx, user, user, hash, databases)
+}
+
+// CloseOwner gives the owner user of account user a random password nobody
+// knows, so whoever had the last one can no longer sign in. An owner that
+// does not exist succeeds.
+func (m *Manager) CloseOwner(ctx context.Context, user string) error {
+	if err := validate.Username(user); err != nil {
+		return err
+	}
+
+	secret := make([]byte, 20)
+	if _, err := rand.Read(secret); err != nil {
+		return err
+	}
+
+	// Any "*" and 40 hex digits is a valid hash; random ones match no
+	// password anyone knows.
+	hash := "*" + strings.ToUpper(hex.EncodeToString(secret))
+
+	_, err := m.exec(ctx, "ALTER USER IF EXISTS "+account(user)+" IDENTIFIED BY PASSWORD "+literal(hash)+";")
+
+	return err
+}
+
+// applyUser does ApplyUser and ApplyOwner for user name of account user,
+// which the caller validated.
+func (m *Manager) applyUser(ctx context.Context, user, name, hash string, databases []string) error {
 	if err := ValidatePasswordHash(hash); err != nil {
 		return err
 	}
@@ -210,19 +257,18 @@ func (m *Manager) DeleteUser(ctx context.Context, user, name string) error {
 	return err
 }
 
-// RemoveAccount drops every database and user of user, so an account
-// created later with the same username starts without them.
+// RemoveAccount drops every database and user of user, its owner user
+// included, so an account created later with the same username starts
+// without them.
 func (m *Manager) RemoveAccount(ctx context.Context, user string) error {
 	databases, users, err := m.accountObjects(ctx, user)
 	if err != nil {
 		return err
 	}
 
-	if len(databases) == 0 && len(users) == 0 {
-		return nil
-	}
-
 	var sql strings.Builder
+
+	sql.WriteString("DROP USER IF EXISTS " + account(user) + ";\n")
 
 	for _, name := range users {
 		sql.WriteString("DROP USER IF EXISTS " + account(name) + ";\n")
@@ -240,11 +286,12 @@ func (m *Manager) RemoveAccount(ctx context.Context, user string) error {
 	return err
 }
 
-// LockAccount locks every user of user, so nothing logs in to the
-// account's databases while it is suspended, or unlocks them again.
+// LockAccount locks every user of user, its owner user included, so
+// nothing logs in to the account's databases while it is suspended, or
+// unlocks them again.
 func (m *Manager) LockAccount(ctx context.Context, user string, lock bool) error {
 	_, users, err := m.accountObjects(ctx, user)
-	if err != nil || len(users) == 0 {
+	if err != nil {
 		return err
 	}
 
@@ -254,6 +301,9 @@ func (m *Manager) LockAccount(ctx context.Context, user string, lock bool) error
 	}
 
 	var sql strings.Builder
+
+	// The owner user only exists once phpMyAdmin has been opened.
+	sql.WriteString("ALTER USER IF EXISTS " + account(user) + " " + state + ";\n")
 
 	for _, name := range users {
 		sql.WriteString("ALTER USER " + account(name) + " " + state + ";\n")

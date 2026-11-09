@@ -1,6 +1,7 @@
-import { Form, Head, usePoll } from '@inertiajs/react';
+import { Form, Head, useHttp, usePoll } from '@inertiajs/react';
 import {
     Database,
+    ExternalLink,
     KeyRound,
     Pencil,
     Plus,
@@ -10,6 +11,7 @@ import {
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
 import { Panel, tableStyles } from '@/components/panel';
@@ -34,7 +36,7 @@ import {
     store as storeUser,
     update as updateUser,
 } from '@/routes/database-users';
-import { destroy, store } from '@/routes/databases';
+import { destroy, phpmyadmin, store } from '@/routes/databases';
 import type { AccountLimits } from '@/types';
 
 type Status = 'pending' | 'active' | 'failed' | 'deleting';
@@ -64,6 +66,7 @@ type Props = {
     max_lengths: { database: number; user: number };
     limits: AccountLimits;
     connection: { host: string; port: number };
+    phpmyadmin: { available: boolean; session_minutes: number };
 };
 
 type Action =
@@ -93,6 +96,7 @@ export default function DatabasesIndex({
     max_lengths,
     limits,
     connection,
+    phpmyadmin: phpMyAdmin,
 }: Props) {
     const [action, setAction] = useState<Action | null>(null);
     const [dialogOpen, setDialogOpen] = useState(false);
@@ -140,6 +144,16 @@ export default function DatabasesIndex({
             <PageHeader
                 title="Databases"
                 description={`Database MariaDB untuk website kamu. Nama database dan user selalu diawali ${prefix}.`}
+                actions={
+                    phpMyAdmin.available && (
+                        <PhpMyAdminButton
+                            hasDatabases={databases.some(
+                                (database) => database.status === 'active',
+                            )}
+                            sessionMinutes={phpMyAdmin.session_minutes}
+                        />
+                    )
+                }
             />
 
             <Panel
@@ -416,6 +430,93 @@ export default function DatabasesIndex({
                 </DialogContent>
             </Dialog>
         </>
+    );
+}
+
+type PhpMyAdminTicket = { url: string; ticket: string };
+
+/**
+ * Opens phpMyAdmin in a new tab, signed in to all of the account's
+ * databases. Browsers only allow opening a tab during the click, so the tab
+ * opens first; once the panel returns a ticket, the tab posts it to
+ * phpMyAdmin itself, after its link back to the panel is cut.
+ */
+function PhpMyAdminButton({
+    hasDatabases,
+    sessionMinutes,
+}: {
+    hasDatabases: boolean;
+    sessionMinutes: number;
+}) {
+    const http = useHttp<Record<string, never>, PhpMyAdminTicket>({});
+
+    const open = async () => {
+        const tab = window.open('', '_blank');
+
+        if (tab) {
+            tab.document.title = 'phpMyAdmin';
+            tab.document.body.textContent = 'Membuka phpMyAdmin…';
+        }
+
+        let response: PhpMyAdminTicket | undefined;
+
+        try {
+            response = await http.post(phpmyadmin.url(), {
+                onError: (errors) => {
+                    const message = Object.values(errors)[0];
+
+                    if (message) {
+                        toast.error(message);
+                    }
+                },
+            });
+        } catch {
+            toast.error(
+                'phpMyAdmin tidak bisa dibuka. Coba lagi sebentar lagi.',
+            );
+        }
+
+        if (!response) {
+            tab?.close();
+
+            return;
+        }
+
+        // Without a tab (pop-ups blocked), phpMyAdmin opens here instead.
+        const target = tab ?? window;
+        const form = target.document.createElement('form');
+        const ticket = target.document.createElement('input');
+
+        form.method = 'post';
+        form.action = response.url;
+        ticket.type = 'hidden';
+        ticket.name = 'ticket';
+        ticket.value = response.ticket;
+        form.append(ticket);
+        target.document.body.append(form);
+
+        if (tab) {
+            tab.opener = null;
+        }
+
+        form.submit();
+    };
+
+    return (
+        <Button
+            variant="outline"
+            size="lg"
+            disabled={!hasDatabases || http.processing}
+            onClick={open}
+            title={
+                hasDatabases
+                    ? `Masuk otomatis ke semua database kamu; berlaku ${sessionMinutes} menit`
+                    : 'Buat database dulu'
+            }
+        >
+            {http.processing ? <Spinner /> : <ExternalLink />}
+            Buka phpMyAdmin
+        </Button>
     );
 }
 

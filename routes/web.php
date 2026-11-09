@@ -8,6 +8,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DatabaseController;
 use App\Http\Controllers\DatabaseUserController;
 use App\Http\Controllers\DomainController;
+use App\Http\Controllers\PhpMyAdminController;
 use App\Http\Controllers\PointerController;
 use App\Http\Controllers\SubdomainController;
 use App\Http\Controllers\UrlRedirectController;
@@ -31,6 +32,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('databases', [DatabaseController::class, 'index'])->name('databases.index');
         Route::post('databases', [DatabaseController::class, 'store'])->name('databases.store');
         Route::delete('databases/{database}', [DatabaseController::class, 'destroy'])->name('databases.destroy');
+        Route::post('databases/phpmyadmin', PhpMyAdminController::class)->middleware('throttle:10,1')->name('databases.phpmyadmin');
         Route::post('database-users', [DatabaseUserController::class, 'store'])->name('database-users.store');
         Route::put('database-users/{databaseUser}', [DatabaseUserController::class, 'update'])->name('database-users.update');
         Route::delete('database-users/{databaseUser}', [DatabaseUserController::class, 'destroy'])->name('database-users.destroy');

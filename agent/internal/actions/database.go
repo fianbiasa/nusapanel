@@ -8,6 +8,7 @@ import (
 
 	"nusapanel/agent/internal/database"
 	"nusapanel/agent/internal/rpc"
+	"nusapanel/agent/internal/validate"
 )
 
 // databaseServer is what the db.* actions need. *database.Manager
@@ -17,6 +18,8 @@ type databaseServer interface {
 	DeleteDatabase(ctx context.Context, user, name string) error
 	ApplyUser(ctx context.Context, user, name, hash string, databases []string) error
 	DeleteUser(ctx context.Context, user, name string) error
+	ApplyOwner(ctx context.Context, user, hash string, databases []string) error
+	CloseOwner(ctx context.Context, user string) error
 	Report(ctx context.Context) ([]database.Size, error)
 }
 
@@ -70,6 +73,36 @@ func (p databaseUserParams) validate() error {
 	return database.ValidateName(p.Username, p.User, database.MaxUserName)
 }
 
+// openSSOParams are the params of db.open_sso: the password hash the
+// account's owner user gets for one phpMyAdmin session, and the databases
+// it may use.
+type openSSOParams struct {
+	Username     string   `json:"username"`
+	PasswordHash string   `json:"password_hash"`
+	Databases    []string `json:"databases"`
+}
+
+func (p openSSOParams) account() string { return p.Username }
+
+func (p openSSOParams) validate() error {
+	errs := []error{validate.Username(p.Username), database.ValidatePasswordHash(p.PasswordHash)}
+
+	for _, name := range p.Databases {
+		errs = append(errs, database.ValidateName(p.Username, name, database.MaxDatabaseName))
+	}
+
+	return firstError(errs...)
+}
+
+// closeSSOParams are the params of db.close_sso.
+type closeSSOParams struct {
+	Username string `json:"username"`
+}
+
+func (p closeSSOParams) account() string { return p.Username }
+
+func (p closeSSOParams) validate() error { return validate.Username(p.Username) }
+
 // databaseReport is the result of db.report.
 type databaseReport struct {
 	Databases []database.Size `json:"databases"`
@@ -91,6 +124,8 @@ func databaseMethods(system accountSystem, server databaseServer) map[string]rpc
 		"db.delete_database": {Handler: actions.deleteDatabase, LockKey: webLockKey[databaseParams]},
 		"db.apply_user":      {Handler: actions.applyUser, LockKey: webLockKey[applyUserParams]},
 		"db.delete_user":     {Handler: actions.deleteUser, LockKey: webLockKey[databaseUserParams]},
+		"db.open_sso":        {Handler: actions.openSSO, LockKey: webLockKey[openSSOParams]},
+		"db.close_sso":       {Handler: actions.closeSSO, LockKey: webLockKey[closeSSOParams]},
 		"db.report":          {Handler: actions.report},
 	}
 }
@@ -160,6 +195,42 @@ func (d databaseActions) deleteUser(ctx context.Context, raw json.RawMessage) (a
 
 	if err := d.server.DeleteUser(ctx, params.Username, params.User); err != nil {
 		return nil, databaseError(err, "delete database user "+params.User)
+	}
+
+	return struct{}{}, nil
+}
+
+// openSSO implements db.open_sso: the account's owner user (named like the
+// account) gets the given password and access to exactly the given
+// databases, so phpMyAdmin can sign in as it.
+func (d databaseActions) openSSO(ctx context.Context, raw json.RawMessage) (any, error) {
+	params, err := decodeWebParams[openSSOParams](raw)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := d.accounts.requireAccount(ctx, params.Username); err != nil {
+		return nil, err
+	}
+
+	if err := d.server.ApplyOwner(ctx, params.Username, params.PasswordHash, params.Databases); err != nil {
+		return nil, databaseError(err, "prepare phpMyAdmin for "+params.Username)
+	}
+
+	return struct{}{}, nil
+}
+
+// closeSSO implements db.close_sso: the account's owner user gets a
+// password nobody knows, which ends its phpMyAdmin session. It succeeds
+// when the owner user or the account no longer exists.
+func (d databaseActions) closeSSO(ctx context.Context, raw json.RawMessage) (any, error) {
+	params, err := decodeWebParams[closeSSOParams](raw)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := d.server.CloseOwner(ctx, params.Username); err != nil {
+		return nil, databaseError(err, "end the phpMyAdmin session of "+params.Username)
 	}
 
 	return struct{}{}, nil

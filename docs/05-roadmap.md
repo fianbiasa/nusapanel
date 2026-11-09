@@ -63,7 +63,9 @@ Pekerjaan:
 
 - MariaDB ✅: halaman Databases membuat database (sekaligus user-nya kalau mau, dengan pembuat password) dan user database; satu user bisa diberi akses ke beberapa database dan sebaliknya; nama selalu diawali `<username>_`; batas database dari paket; ukuran diukur tiap 15 menit; user ikut dikunci saat akun di-suspend; semua database & user ikut dihapus bersama akunnya; password tidak pernah dikirim ke agent maupun disimpan, hanya hash-nya.
 
-Berikutnya: phpMyAdmin SSO, lalu SSL hostname untuk mail/FTP.
+- phpMyAdmin SSO ✅: tombol "Buka phpMyAdmin" di halaman Databases membuka phpMyAdmin 5.2 (dipaket bersama rilis, di `https://<hostname>/phpmyadmin/`, origin terpisah dari panel) dalam tab baru, langsung login ke semua database akun tanpa mengetik password; login memakai user pemilik MariaDB akun itu dengan password baru tiap sesi, lewat tiket terenkripsi yang kedaluwarsa dalam semenit dan hanya berlaku di browser yang memintanya; sesi berakhir setelah 60 menit (password diganti acak oleh scheduler); phpMyAdmin berjalan sebagai user `nusa-pma` yang tidak bisa membaca konfigurasi panel maupun file customer.
+
+Berikutnya: SSL hostname untuk mail/FTP.
 
 - Akun user & paket user, buat/suspend/hapus akun, quota disk & inode.
 - Domain, subdomain, pointer, redirect, www/HTTPS.

@@ -11,8 +11,8 @@
 #
 # The package contains everything a server needs to run the panel: Laravel
 # with production dependencies already installed, the React front end already
-# built, and the Go agent already compiled. Servers never need Composer,
-# Node.js or Go.
+# built, the Go agent already compiled, and phpMyAdmin. Servers never need
+# Composer, Node.js or Go.
 #
 # Builds from the working tree, minus anything ignored by Git. Runs on macOS
 # (bash 3.2) and Linux.
@@ -24,12 +24,20 @@ VERSION="${1:-$(git -C "$ROOT" describe --tags --always --dirty 2>/dev/null || e
 DIST="$ROOT/dist"
 ARCHES="amd64 arm64"
 
+# phpMyAdmin is pinned: a new version needs its SHA-256 from
+# https://files.phpmyadmin.net/phpMyAdmin/<version>/ here too. Downloads are
+# kept in a cache, so builds do not fetch it every time.
+PMA_VERSION="5.2.3"
+PMA_SHA256="12ba1c425fa4071abbd4e7668c9ebdeac0b0755a467a6d6d5026122bb47c102b"
+PMA_NAME="phpMyAdmin-$PMA_VERSION-all-languages"
+PMA_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/nusapanel"
+
 if [[ ! "$VERSION" =~ ^[0-9A-Za-z][0-9A-Za-z._-]*$ ]]; then
     echo "Invalid version: $VERSION" >&2
     exit 1
 fi
 
-for tool in git composer pnpm php go make; do
+for tool in git composer pnpm php go make curl; do
     command -v "$tool" >/dev/null || { echo "Missing required tool: $tool" >&2; exit 1; }
 done
 
@@ -95,6 +103,32 @@ echo "==> Compiling the agent"
     make linux VERSION="$VERSION" >/dev/null
 )
 
+echo "==> Preparing phpMyAdmin $PMA_VERSION"
+PMA_TARBALL="$PMA_CACHE/$PMA_NAME.tar.gz"
+mkdir -p "$PMA_CACHE"
+if [[ ! -f "$PMA_TARBALL" || "$(sha256 "$PMA_TARBALL")" != "$PMA_SHA256" ]]; then
+    curl -fsSL --proto '=https' --tlsv1.2 --retry 3 -o "$PMA_TARBALL.part" \
+        "https://files.phpmyadmin.net/phpMyAdmin/$PMA_VERSION/$PMA_NAME.tar.gz"
+    mv "$PMA_TARBALL.part" "$PMA_TARBALL"
+fi
+if [[ "$(sha256 "$PMA_TARBALL")" != "$PMA_SHA256" ]]; then
+    echo "phpMyAdmin $PMA_VERSION does not match its pinned SHA-256" >&2
+    exit 1
+fi
+
+PMA="$WORK/phpmyadmin"
+mkdir -p "$PMA"
+tar -xzf "$PMA_TARBALL" -C "$PMA" --strip-components 1
+# Not needed to run it: the setup wizard (which writes configuration), the
+# examples and the development files.
+rm -rf "$PMA/setup" "$PMA/examples" "$PMA/config.sample.inc.php" "$PMA/show_config_errors.php" \
+    "$PMA/composer.json" "$PMA/composer.lock" "$PMA/package.json" "$PMA/yarn.lock" \
+    "$PMA/babel.config.json" "$PMA/CONTRIBUTING.md"
+# setup.sh writes the real configuration outside the release.
+printf '%s\n' '<?php' '' '// nusapanel: setup.sh writes the configuration there.' \
+    "require '/etc/nusa-pma/config.inc.php';" >"$PMA/config.inc.php"
+cp "$SRC/installer/files/phpmyadmin-sso.php" "$PMA/nusapanel-sso.php"
+
 # The published setup.sh installs exactly this version by default.
 stamp_setup() {
     sed -e "s/^NUSAPANEL_VERSION=\"\"\$/NUSAPANEL_VERSION=\"$VERSION\"/" "$SRC/installer/setup.sh" >"$1"
@@ -127,12 +161,14 @@ for arch in $ARCHES; do
     cp -R "$SRC/public" "$stage/panel/"
     rm -f "$stage/panel/public/hot"
 
+    cp -R "$PMA" "$stage/phpmyadmin"
     cp "$SRC/agent/bin/linux-$arch/nusad" "$SRC/agent/bin/linux-$arch/nusactl" "$stage/bin/"
     cp "$SRC/agent/packaging/nusad.service" "$stage/systemd/"
     cp "$SRC"/installer/files/*.service "$SRC"/installer/files/*.timer "$stage/systemd/"
     cp "$SRC/installer/files/nginx-panel.conf" "$SRC/installer/files/nginx-hostname.conf" \
         "$SRC/installer/files/nginx-default.conf" "$SRC/installer/files/apache-nusapanel.conf" \
-        "$SRC/installer/files/php-fpm-panel.conf" \
+        "$SRC/installer/files/php-fpm-panel.conf" "$SRC/installer/files/php-fpm-phpmyadmin.conf" \
+        "$SRC/installer/files/nginx-phpmyadmin.conf" "$SRC/installer/files/phpmyadmin-config.inc.php" \
         "$SRC/installer/files/logrotate.conf" "$stage/config/"
     stamp_setup "$stage/setup.sh"
     printf '%s\n' "$VERSION" >"$stage/VERSION"

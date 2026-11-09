@@ -28,4 +28,23 @@ return [
 
     'public_ip' => env('NUSAPANEL_PUBLIC_IP'),
 
+    /*
+    |--------------------------------------------------------------------------
+    | phpMyAdmin
+    |--------------------------------------------------------------------------
+    |
+    | Where phpMyAdmin is (https://<hostname>/phpmyadmin/) and the key its
+    | sign-on tickets are sealed with (32 bytes, base64), both written by the
+    | installer; phpMyAdmin has the same key. Without them the Databases page
+    | does not offer phpMyAdmin. A session lasts "session_minutes" from the
+    | moment it is opened.
+    |
+    */
+
+    'phpmyadmin' => [
+        'url' => env('PHPMYADMIN_URL'),
+        'sso_key' => env('PHPMYADMIN_SSO_KEY'),
+        'session_minutes' => (int) env('PHPMYADMIN_SESSION_MINUTES', 60),
+    ],
+
 ];

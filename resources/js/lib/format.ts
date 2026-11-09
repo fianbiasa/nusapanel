@@ -32,6 +32,7 @@ export const auditActionLabels: Record<string, string> = {
     'pointer.deleted': 'Pointer dihapus',
     'database.created': 'Database dibuat',
     'database.deleted': 'Database dihapus',
+    'database.phpmyadmin_opened': 'phpMyAdmin dibuka',
     'database_user.created': 'User database dibuat',
     'database_user.updated': 'User database diubah',
     'database_user.deleted': 'User database dihapus',

@@ -38,6 +38,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property int|null $package_id Null for accounts without limits.
  * @property AccountStatus $status
  * @property string|null $suspend_reason
+ * @property Carbon|null $phpmyadmin_expires_at When the open phpMyAdmin session ends; null while none is open.
  * @property Carbon|null $last_login_at
  * @property string|null $two_factor_secret
  * @property string|null $two_factor_recovery_codes
@@ -68,6 +69,7 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
             'role' => Role::class,
             'status' => AccountStatus::class,
             'last_login_at' => 'datetime',
+            'phpmyadmin_expires_at' => 'datetime',
             'two_factor_confirmed_at' => 'datetime',
         ];
     }
