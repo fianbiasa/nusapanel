@@ -14,10 +14,16 @@ enum SslStatus: string
     case Removing = 'removing';
 
     /**
+     * A new certificate the customer brought is being installed; the
+     * website keeps serving HTTPS with its current one meanwhile.
+     */
+    case Replacing = 'replacing';
+
+    /**
      * The agent is still issuing or removing the certificate.
      */
     public function isBusy(): bool
     {
-        return in_array($this, [self::Pending, self::Removing], true);
+        return in_array($this, [self::Pending, self::Removing, self::Replacing], true);
     }
 }

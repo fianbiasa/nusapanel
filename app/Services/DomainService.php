@@ -7,6 +7,7 @@ use App\Enums\DomainStatus;
 use App\Enums\DomainType;
 use App\Enums\PointerMode;
 use App\Enums\Role;
+use App\Enums\SslSource;
 use App\Enums\SslStatus;
 use App\Listeners\ApplyDomainTaskResult;
 use App\Listeners\ApplySslTaskResult;
@@ -15,6 +16,7 @@ use App\Models\UrlRedirect;
 use App\Models\User;
 use App\Rules\ValidDomain;
 use App\Support\AccountLimits;
+use App\Support\CustomCertificate;
 use Carbon\CarbonImmutable;
 use Carbon\Exceptions\InvalidFormatException;
 use Illuminate\Database\Eloquent\Builder;
@@ -486,8 +488,11 @@ class DomainService
         DB::transaction(function () use ($domain, $output, $account, $actor): void {
             $domain->forceFill([
                 'ssl_status' => SslStatus::Active,
+                'ssl_source' => SslSource::LetsEncrypt,
                 'ssl_names' => $this->certificateNames($output['names'] ?? null),
                 'ssl_expires_at' => $this->certificateExpiry($output['expires_at'] ?? null),
+                'ssl_issuer' => "Let's Encrypt",
+                'ssl_trusted' => true,
                 'ssl_error' => null,
             ])->save();
 
@@ -495,6 +500,93 @@ class DomainService
                 $this->dispatchApply($domain, $account, $actor);
             }
         });
+    }
+
+    /**
+     * Install a certificate the customer brought (already checked by
+     * {@see CustomCertificate}), in place of no certificate, a failed
+     * request, or the website's current certificate, which keeps serving
+     * HTTPS until the new one is in place. The agent checks it again;
+     * the private key only travels in the task's encrypted payload, which
+     * {@see ApplySslTaskResult} empties once the task is done.
+     *
+     * @throws ValidationException
+     */
+    public function installCustomCertificate(Domain $domain, string $certificate, string $privateKey, User $actor): void
+    {
+        $this->ensureDomainIsActive($domain);
+
+        if ($domain->ssl_status?->isBusy()) {
+            throw ValidationException::withMessages([
+                'certificate' => __('Wait until the SSL certificate has been installed or removed.'),
+            ]);
+        }
+
+        $account = $domain->account;
+
+        if (! AccountLimits::for($account)->allowsSsl()) {
+            throw ValidationException::withMessages([
+                'certificate' => __('SSL is not included in your package.'),
+            ]);
+        }
+
+        DB::transaction(function () use ($domain, $certificate, $privateKey, $account, $actor): void {
+            $domain->forceFill([
+                'ssl_status' => $domain->hasActiveSsl() ? SslStatus::Replacing : SslStatus::Pending,
+                'ssl_error' => null,
+            ])->save();
+
+            $this->tasks->dispatch('ssl.install', [
+                'username' => $account->username,
+                'domain' => $domain->name,
+                'certificate' => $certificate,
+                'private_key' => $privateKey,
+            ], $account, $actor);
+
+            $this->audit->record('domain.ssl_custom_installed', $domain, [
+                'domain' => $domain->name,
+                'username' => $account->username,
+            ], $actor);
+        });
+    }
+
+    /**
+     * Record the custom certificate the agent installed and serve HTTPS
+     * with it. Nothing is queued for an account that is being deleted.
+     *
+     * @param  array<string, mixed>  $output  The agent's `ssl.install` result: `names`, an RFC 3339 `expires_at`, `issuer` and `trusted`.
+     */
+    public function completeCustomInstall(Domain $domain, array $output, ?User $actor): void
+    {
+        $account = $domain->account;
+
+        DB::transaction(function () use ($domain, $output, $account, $actor): void {
+            $domain->forceFill([
+                'ssl_status' => SslStatus::Active,
+                'ssl_source' => SslSource::Custom,
+                'ssl_names' => $this->certificateNames($output['names'] ?? null),
+                'ssl_expires_at' => $this->certificateExpiry($output['expires_at'] ?? null),
+                'ssl_issuer' => is_string($output['issuer'] ?? null) ? mb_substr($output['issuer'], 0, 255) : null,
+                'ssl_trusted' => ($output['trusted'] ?? false) === true,
+                'ssl_error' => null,
+            ])->save();
+
+            if ($account->status !== AccountStatus::Deleting) {
+                $this->dispatchApply($domain, $account, $actor);
+            }
+        });
+    }
+
+    /**
+     * Keep why the agent refused a custom certificate. A website that had
+     * a certificate keeps serving HTTPS with it.
+     */
+    public function failCustomInstall(Domain $domain, ?string $error): void
+    {
+        $domain->forceFill([
+            'ssl_status' => $domain->ssl_status === SslStatus::Replacing ? SslStatus::Active : SslStatus::Failed,
+            'ssl_error' => $error,
+        ])->save();
     }
 
     /**
@@ -522,8 +614,11 @@ class DomainService
     {
         $domain->forceFill([
             'ssl_status' => null,
+            'ssl_source' => null,
             'ssl_names' => null,
             'ssl_expires_at' => null,
+            'ssl_issuer' => null,
+            'ssl_trusted' => null,
             'ssl_error' => null,
             'force_https' => false,
         ])->save();
@@ -582,6 +677,10 @@ class DomainService
             'ssl' => $ssl,
             'force_https' => $ssl && $domain->force_https,
         ];
+
+        if ($ssl && $domain->ssl_source === SslSource::Custom) {
+            $params['certificate'] = 'custom';
+        }
 
         if ($domain->type === DomainType::Pointer) {
             $params['kind'] = ($domain->pointer_mode ?? PointerMode::Alias)->agentKind();
@@ -695,6 +794,12 @@ class DomainService
     private function ensureSslIsActive(Domain $domain): void
     {
         $this->ensureDomainIsActive($domain);
+
+        if ($domain->ssl_status === SslStatus::Replacing) {
+            throw ValidationException::withMessages([
+                'domain' => __('Wait until the SSL certificate has been installed or removed.'),
+            ]);
+        }
 
         if (! $domain->hasActiveSsl()) {
             throw ValidationException::withMessages([

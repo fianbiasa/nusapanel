@@ -200,6 +200,7 @@ return [
     'attributes' => [
         'account' => 'akun',
         'bandwidth_mb' => 'kuota bandwidth',
+        'certificate' => 'sertifikat',
         'code' => 'kode autentikasi',
         'credential' => 'kredensial passkey',
         'cron_jobs' => 'batas cron job',
@@ -230,6 +231,7 @@ return [
         'status_code' => 'jenis pengalihan',
         'subdomains' => 'batas subdomain',
         'pointers' => 'batas pointer',
+        'private_key' => 'private key',
         'token' => 'token',
         'username' => 'username',
         'wildcard' => 'pilihan halaman di bawahnya',

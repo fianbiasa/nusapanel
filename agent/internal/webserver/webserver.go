@@ -11,6 +11,7 @@ package webserver
 
 import (
 	"context"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -19,6 +20,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"nusapanel/agent/internal/runner"
 	"nusapanel/agent/internal/sysuser"
@@ -81,6 +83,16 @@ type Config struct {
 	// certificates in live/<domain>/ and their settings in
 	// renewal/<domain>.conf.
 	LetsEncryptDir string
+	// CustomCertificateDir holds the certificates customers bring
+	// themselves, <CustomCertificateDir>/<domain>/{fullchain,privkey}.pem,
+	// readable by root only. Nothing else may live in it: a domain could be
+	// named like any other file there.
+	CustomCertificateDir string
+	// CertificateRoots are the roots a custom certificate must chain up to
+	// to count as trusted; nil means the system's.
+	CertificateRoots *x509.CertPool
+	// Now returns the current time; nil means time.Now.
+	Now func() time.Time
 
 	// Hostnames returns the server's own names, lowercased. No website may
 	// use one of them.
@@ -115,10 +127,13 @@ func DefaultConfig() Config {
 		Backend:        "127.0.0.1:8080",
 		AcmeDir:        "/var/www/nusapanel-acme",
 		LetsEncryptDir: "/etc/letsencrypt",
-		Hostnames:      systemHostnames,
-		Run:            runner.Run,
-		PrepareSite:    sysuser.System{}.PrepareSite,
-		DialHTTP:       dialPublic,
+		// Root only, beside (not among) the panel's own certificate links
+		// in /etc/nusapanel/ssl, so no domain name can clash with them.
+		CustomCertificateDir: "/etc/nusapanel/ssl/domains",
+		Hostnames:            systemHostnames,
+		Run:                  runner.Run,
+		PrepareSite:          sysuser.System{}.PrepareSite,
+		DialHTTP:             dialPublic,
 	}
 }
 
@@ -169,8 +184,13 @@ type Site struct {
 	Domain     string
 	PHPVersion string
 	// SSL serves the domain over HTTPS too, with its Let's Encrypt
-	// certificate, which must exist.
+	// certificate, or its custom one when CustomCertificate is set; that
+	// certificate must exist.
 	SSL bool
+	// CustomCertificate serves HTTPS with the certificate the customer
+	// installed (InstallCertificate) instead of Let's Encrypt's. It needs
+	// SSL.
+	CustomCertificate bool
 	// ForceHTTPS redirects HTTP to HTTPS, except Let's Encrypt challenges.
 	// It needs SSL.
 	ForceHTTPS bool
@@ -202,6 +222,10 @@ func (s Site) Validate() error {
 
 	if s.ForceHTTPS && !s.SSL {
 		return errors.New("forcing HTTPS needs SSL")
+	}
+
+	if s.CustomCertificate && !s.SSL {
+		return errors.New("a custom certificate needs SSL")
 	}
 
 	if err := validate.PHPVersion(s.PHPVersion); err != nil {
@@ -297,7 +321,7 @@ func (m *Manager) ApplyDomain(ctx context.Context, site Site) (string, error) {
 
 	site.Kind = site.kind()
 
-	if site.SSL && !m.HasCertificate(site.Domain) {
+	if site.SSL && !m.hasSiteCertificate(site) {
 		return "", fmt.Errorf("%w: %s", ErrNoCertificate, site.Domain)
 	}
 
@@ -329,7 +353,35 @@ func (m *Manager) ApplyDomain(ctx context.Context, site Site) (string, error) {
 		m.logger().Warn("could not remove unused PHP-FPM pools", "user", site.User, "error", err)
 	}
 
+	// Likewise the certificate a website switched away from: a Let's
+	// Encrypt one would otherwise keep renewing.
+	if site.SSL {
+		if err := m.deleteOtherCertificate(ctx, site); err != nil {
+			m.logger().Warn("could not delete the certificate the website no longer uses", "domain", site.Domain, "error", err)
+		}
+	}
+
 	return m.siteDocumentRoot(site), nil
+}
+
+// hasSiteCertificate reports whether the certificate site asks for exists.
+func (m *Manager) hasSiteCertificate(site Site) bool {
+	if site.CustomCertificate {
+		return m.HasCustomCertificate(site.Domain)
+	}
+
+	return m.HasCertificate(site.Domain)
+}
+
+// deleteOtherCertificate deletes the certificate of site's domain that its
+// HTTPS does not use: the Let's Encrypt one when it serves a custom one,
+// and the other way round.
+func (m *Manager) deleteOtherCertificate(ctx context.Context, site Site) error {
+	if site.CustomCertificate {
+		return m.deleteCertificate(ctx, site.Domain)
+	}
+
+	return m.deleteCustomCertificate(site.Domain)
 }
 
 // prepareFolders creates the folder a domain or an alias serves. A new

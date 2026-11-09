@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\DomainType;
 use App\Enums\SslStatus;
+use App\Http\Requests\StoreCustomCertificateRequest;
 use App\Http\Requests\StoreDomainRequest;
 use App\Models\Domain;
 use App\Services\DomainService;
@@ -58,6 +59,9 @@ class DomainController extends Controller
                 'is_primary' => $domain->is_primary,
                 'status' => $domain->status->value,
                 'ssl_status' => $domain->ssl_status?->value,
+                'ssl_source' => $domain->ssl_source?->value,
+                'ssl_issuer' => $domain->ssl_issuer,
+                'ssl_trusted' => $domain->ssl_trusted,
                 'ssl_expires_at' => $domain->ssl_expires_at?->toIso8601String(),
                 'ssl_error' => $domain->ssl_error,
                 'force_https' => $domain->force_https,
@@ -120,6 +124,27 @@ class DomainController extends Controller
         Inertia::flash('toast', [
             'type' => 'success',
             'message' => __('An SSL certificate for :domain is being requested.', ['domain' => $domain->display_name]),
+        ]);
+
+        return back();
+    }
+
+    /**
+     * Install a certificate the customer brought, or replace the domain's
+     * current one with it; the agent installs it in the background.
+     */
+    public function installCertificate(StoreCustomCertificateRequest $request, Domain $domain): RedirectResponse
+    {
+        $this->domains->installCustomCertificate(
+            $domain,
+            $request->string('certificate')->toString(),
+            $request->string('private_key')->toString(),
+            $request->user(),
+        );
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => __('The certificate for :domain is being installed.', ['domain' => $domain->display_name]),
         ]);
 
         return back();

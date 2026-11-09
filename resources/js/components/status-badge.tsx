@@ -18,6 +18,7 @@ const statuses: Record<string, { label: string; tone: Tone; busy?: boolean }> =
         running: { label: 'Berjalan', tone: 'info', busy: true },
         deleting: { label: 'Dihapus', tone: 'warning', busy: true },
         removing: { label: 'Dilepas', tone: 'warning', busy: true },
+        replacing: { label: 'Diganti', tone: 'info', busy: true },
         suspended: { label: 'Suspend', tone: 'warning' },
         failed: { label: 'Gagal', tone: 'danger' },
         cancelled: { label: 'Dibatalkan', tone: 'neutral' },

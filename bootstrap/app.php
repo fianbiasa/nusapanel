@@ -33,6 +33,10 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        // A custom certificate's private key must never reach the session
+        // as old input when its form fails validation.
+        $exceptions->dontFlash(['private_key', 'certificate']);
+
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );

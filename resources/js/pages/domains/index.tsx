@@ -3,6 +3,7 @@ import {
     ChevronDown,
     CornerDownRight,
     ExternalLink,
+    FileKey,
     Globe,
     Info,
     Lock,
@@ -49,6 +50,7 @@ import {
 } from '@/components/ui/tooltip';
 import { formatDate, formatDateTime } from '@/lib/format';
 import { destroy } from '@/routes/domains';
+import { store as storeCertificate } from '@/routes/domains/certificate';
 import { update as updateForceHttps } from '@/routes/domains/force-https';
 import { update as updatePhpVersion } from '@/routes/domains/php';
 import { destroy as destroySsl, store as storeSsl } from '@/routes/domains/ssl';
@@ -56,7 +58,7 @@ import type { AccountLimits } from '@/types';
 
 type DomainStatus = 'pending' | 'active' | 'failed' | 'deleting';
 
-type SslStatus = 'pending' | 'active' | 'failed' | 'removing';
+type SslStatus = 'pending' | 'active' | 'failed' | 'removing' | 'replacing';
 
 type WebsiteType = 'domain' | 'subdomain' | 'pointer';
 
@@ -73,6 +75,9 @@ type DomainRow = {
     is_primary: boolean;
     status: DomainStatus;
     ssl_status: SslStatus | null;
+    ssl_source: 'letsencrypt' | 'custom' | null;
+    ssl_issuer: string | null;
+    ssl_trusted: boolean | null;
     ssl_expires_at: string | null;
     ssl_error: string | null;
     force_https: boolean;
@@ -80,7 +85,7 @@ type DomainRow = {
 };
 
 type DomainAction = {
-    type: 'request-ssl' | 'remove-ssl' | 'delete';
+    type: 'request-ssl' | 'custom-certificate' | 'remove-ssl' | 'delete';
     domain: DomainRow;
 };
 
@@ -100,7 +105,7 @@ const typeLabels: Record<WebsiteType, string> = {
 
 const busyStatuses: DomainStatus[] = ['pending', 'deleting'];
 
-const busySslStatuses: SslStatus[] = ['pending', 'removing'];
+const busySslStatuses: SslStatus[] = ['pending', 'removing', 'replacing'];
 
 const deletableStatuses: DomainStatus[] = ['active', 'failed'];
 
@@ -302,6 +307,13 @@ export default function DomainsIndex({
                             onSuccess={() => setDialogOpen(false)}
                         />
                     )}
+                    {action?.type === 'custom-certificate' && (
+                        <CustomCertificateForm
+                            key={`custom-certificate-${action.domain.id}`}
+                            domain={action.domain}
+                            onSuccess={() => setDialogOpen(false)}
+                        />
+                    )}
                     {action?.type === 'remove-ssl' && (
                         <RemoveSslForm
                             key={`remove-ssl-${action.domain.id}`}
@@ -465,16 +477,8 @@ function SslCell({
 
     switch (domain.ssl_status) {
         case 'active':
-            return (
-                <div className="flex flex-col items-start gap-1">
-                    <StatusBadge status="active" icon={Lock} />
-                    {domain.ssl_expires_at && (
-                        <span className="text-xs whitespace-nowrap text-muted-foreground">
-                            s/d {formatDate(domain.ssl_expires_at)}
-                        </span>
-                    )}
-                </div>
-            );
+        case 'replacing':
+            return <ActiveCertificate domain={domain} />;
         case 'pending':
             return <StatusBadge status="pending" label="Diproses" />;
         case 'removing':
@@ -553,8 +557,18 @@ function RowActions({
         isActive && sslAllowed && domain.ssl_status === 'failed';
     const canCancelSsl = domain.ssl_status === 'failed';
     const hasActiveSsl = isActive && domain.ssl_status === 'active';
+    const canInstallCertificate =
+        isActive &&
+        sslAllowed &&
+        (domain.ssl_status === null ||
+            domain.ssl_status === 'failed' ||
+            domain.ssl_status === 'active');
     const hasSslActions =
-        canRequestSsl || canRetrySsl || canCancelSsl || hasActiveSsl;
+        canRequestSsl ||
+        canRetrySsl ||
+        canCancelSsl ||
+        hasActiveSsl ||
+        canInstallCertificate;
     const canDelete =
         deletableStatuses.includes(domain.status) && !isSslBusy(domain);
 
@@ -595,6 +609,18 @@ function RowActions({
                             onSelect={() => onAction('request-ssl', domain)}
                         >
                             <RotateCw /> Coba lagi
+                        </DropdownMenuItem>
+                    )}
+                    {canInstallCertificate && (
+                        <DropdownMenuItem
+                            onSelect={() =>
+                                onAction('custom-certificate', domain)
+                            }
+                        >
+                            <FileKey />
+                            {domain.ssl_source === 'custom'
+                                ? 'Ganti sertifikat'
+                                : 'Pasang sertifikat sendiri'}
                         </DropdownMenuItem>
                     )}
                     {hasActiveSsl && (
@@ -720,6 +746,183 @@ function RequestSslForm({
                         <Button type="submit" disabled={processing}>
                             {processing ? <Spinner /> : <Lock />}
                             Pasang SSL
+                        </Button>
+                    </DialogFooter>
+                </>
+            )}
+        </Form>
+    );
+}
+
+/** Days until the certificate expires; negative once it has. */
+function daysUntil(date: string): number {
+    return Math.floor((new Date(date).getTime() - Date.now()) / 86_400_000);
+}
+
+/**
+ * An installed certificate: where it comes from, until when it is valid
+ * (a custom one is never renewed, so its end is pointed out), and anything
+ * the customer should know about it.
+ */
+function ActiveCertificate({ domain }: { domain: DomainRow }) {
+    const isCustom = domain.ssl_source === 'custom';
+    const days =
+        domain.ssl_expires_at === null
+            ? null
+            : daysUntil(domain.ssl_expires_at);
+
+    return (
+        <div className="flex max-w-xs min-w-40 flex-col items-start gap-1">
+            {domain.ssl_status === 'replacing' ? (
+                <StatusBadge status="replacing" icon={Lock} />
+            ) : (
+                <StatusBadge status="active" icon={Lock} />
+            )}
+            <span className="text-xs text-muted-foreground">
+                {isCustom
+                    ? `Sertifikat sendiri${domain.ssl_issuer ? ` · ${domain.ssl_issuer}` : ''}`
+                    : "Let's Encrypt"}
+            </span>
+            {domain.ssl_expires_at && (
+                <span
+                    className={
+                        isCustom && days !== null && days <= 14
+                            ? 'text-xs font-semibold whitespace-nowrap text-destructive'
+                            : 'text-xs whitespace-nowrap text-muted-foreground'
+                    }
+                >
+                    {days !== null && days < 0
+                        ? `Kedaluwarsa ${formatDate(domain.ssl_expires_at)}`
+                        : `s/d ${formatDate(domain.ssl_expires_at)}`}
+                </span>
+            )}
+            {isCustom && domain.ssl_trusted === false && (
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <span
+                            tabIndex={0}
+                            className="inline-flex cursor-help items-center gap-1 text-xs text-muted-foreground"
+                        >
+                            <Info className="size-3.5" />
+                            Tidak dipercaya browser
+                        </span>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-64">
+                        Browser tidak mengenal penerbitnya. Cocok untuk
+                        Cloudflare Origin Certificate dengan proxy Cloudflare
+                        (mode SSL/TLS Full strict), tapi tidak untuk pengunjung
+                        langsung.
+                    </TooltipContent>
+                </Tooltip>
+            )}
+            {domain.ssl_error && (
+                <p className="text-xs break-words whitespace-pre-line text-destructive">
+                    Sertifikat baru gagal dipasang: {domain.ssl_error}
+                </p>
+            )}
+        </div>
+    );
+}
+
+const textareaClass =
+    'min-h-32 w-full rounded-xl border border-input bg-card px-3.5 py-2.5 font-mono text-xs shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20';
+
+function CustomCertificateForm({
+    domain,
+    onSuccess,
+}: {
+    domain: DomainRow;
+    onSuccess: () => void;
+}) {
+    const replaces = domain.ssl_status === 'active';
+
+    return (
+        <Form
+            {...storeCertificate.form(domain.id)}
+            options={{ preserveScroll: true }}
+            onSuccess={onSuccess}
+            className="grid gap-4"
+        >
+            {({ processing, errors }) => (
+                <>
+                    <DialogHeader>
+                        <DialogTitle>
+                            {replaces
+                                ? `Ganti sertifikat ${domain.display_name}`
+                                : `Pasang sertifikat sendiri untuk ${domain.display_name}`}
+                        </DialogTitle>
+                        <DialogDescription>
+                            Sertifikat yang kamu beli, atau Cloudflare Origin
+                            Certificate. Tidak diperpanjang otomatis: ganti
+                            sebelum masa berlakunya habis.
+                            {replaces &&
+                                ' Website tetap memakai sertifikat yang sekarang sampai yang baru terpasang.'}
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="grid gap-2">
+                        <label
+                            htmlFor="certificate"
+                            className="text-sm font-semibold"
+                        >
+                            Sertifikat (PEM)
+                        </label>
+                        <textarea
+                            id="certificate"
+                            name="certificate"
+                            required
+                            spellCheck={false}
+                            autoComplete="off"
+                            placeholder={
+                                '-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----'
+                            }
+                            className={textareaClass}
+                            aria-invalid={errors.certificate ? true : undefined}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                            Sertifikat domain dulu, lalu sertifikat intermediate
+                            / CA bundle dari penerbitnya.
+                        </p>
+                        <InputError message={errors.certificate} />
+                    </div>
+
+                    <div className="grid gap-2">
+                        <label
+                            htmlFor="private_key"
+                            className="text-sm font-semibold"
+                        >
+                            Private key (PEM)
+                        </label>
+                        <textarea
+                            id="private_key"
+                            name="private_key"
+                            required
+                            spellCheck={false}
+                            autoComplete="off"
+                            placeholder={
+                                '-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----'
+                            }
+                            className={textareaClass}
+                            aria-invalid={errors.private_key ? true : undefined}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                            Tanpa password. Disimpan hanya di server, tidak bisa
+                            dilihat lagi dari panel.
+                        </p>
+                        <InputError message={errors.private_key} />
+                    </div>
+
+                    <DialogFooter className="gap-2">
+                        <DialogClose asChild>
+                            <Button type="button" variant="secondary">
+                                Batal
+                            </Button>
+                        </DialogClose>
+                        <Button type="submit" disabled={processing}>
+                            {processing ? <Spinner /> : <FileKey />}
+                            {replaces
+                                ? 'Ganti sertifikat'
+                                : 'Pasang sertifikat'}
                         </Button>
                     </DialogFooter>
                 </>

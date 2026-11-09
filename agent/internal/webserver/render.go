@@ -92,6 +92,11 @@ func (m *Manager) siteData(site Site) siteData {
 		forwardTo = site.Parent
 	}
 
+	certificate, certificateKey := m.certificateFile(site.Domain), m.certificateKeyFile(site.Domain)
+	if site.CustomCertificate {
+		certificate, certificateKey = m.customCertificateFile(site.Domain), m.customCertificateKeyFile(site.Domain)
+	}
+
 	return siteData{
 		User:            site.User,
 		Domain:          site.Domain,
@@ -107,8 +112,8 @@ func (m *Manager) siteData(site Site) siteData {
 		AcmeDir:         m.cfg.AcmeDir,
 		SSL:             site.SSL,
 		ForceHTTPS:      site.ForceHTTPS,
-		Certificate:     m.certificateFile(site.Domain),
-		CertificateKey:  m.certificateKeyFile(site.Domain),
+		Certificate:     certificate,
+		CertificateKey:  certificateKey,
 	}
 }
 
@@ -230,6 +235,20 @@ func (m *Manager) certificateKeyFile(domain string) string {
 // domain; it exists exactly as long as certbot manages that certificate.
 func (m *Manager) renewalFile(domain string) string {
 	return m.cfg.LetsEncryptDir + "/renewal/" + domain + ".conf"
+}
+
+// customCertificateDir is the folder of the certificate the customer
+// installed for domain.
+func (m *Manager) customCertificateDir(domain string) string {
+	return m.cfg.CustomCertificateDir + "/" + domain
+}
+
+func (m *Manager) customCertificateFile(domain string) string {
+	return m.customCertificateDir(domain) + "/fullchain.pem"
+}
+
+func (m *Manager) customCertificateKeyFile(domain string) string {
+	return m.customCertificateDir(domain) + "/privkey.pem"
 }
 
 func (m *Manager) challengeDir() string {

@@ -8,6 +8,7 @@ use App\Events\AgentTaskFinished;
 use App\Models\Domain;
 use App\Models\Task;
 use App\Services\DomainService;
+use Illuminate\Support\Arr;
 
 /**
  * Bring a domain's certificate in line with what the agent did on the
@@ -22,8 +23,12 @@ class ApplySslTaskResult
     {
         $task = $event->task;
 
-        if (! in_array($task->action, ['ssl.issue', 'ssl.delete'], true)) {
+        if (! in_array($task->action, ['ssl.issue', 'ssl.install', 'ssl.delete'], true)) {
             return;
+        }
+
+        if ($task->action === 'ssl.install') {
+            $this->forgetCertificate($task);
         }
 
         $domain = Domain::findForTask($task);
@@ -32,10 +37,43 @@ class ApplySslTaskResult
             return;
         }
 
-        if ($task->action === 'ssl.issue') {
-            $this->applyIssue($domain, $task);
-        } else {
-            $this->applyDelete($domain, $task);
+        match ($task->action) {
+            'ssl.issue' => $this->applyIssue($domain, $task),
+            'ssl.install' => $this->applyInstall($domain, $task),
+            default => $this->applyDelete($domain, $task),
+        };
+    }
+
+    /**
+     * A custom certificate is now on the server (or was refused), so the
+     * task no longer needs its private key: only the agent ever reads it.
+     */
+    private function forgetCertificate(Task $task): void
+    {
+        $task->forceFill([
+            'payload' => [
+                ...Arr::except($task->payload ?? [], ['certificate', 'private_key']),
+                'certificate' => '[removed]',
+                'private_key' => '[removed]',
+            ],
+        ])->save();
+    }
+
+    /**
+     * An installed custom certificate is recorded and the website served
+     * with it; a refused one keeps the agent's explanation, and a website
+     * that had a certificate keeps it.
+     */
+    private function applyInstall(Domain $domain, Task $task): void
+    {
+        if (! in_array($domain->ssl_status, [SslStatus::Pending, SslStatus::Replacing], true)) {
+            return;
+        }
+
+        if ($task->status === TaskStatus::Success) {
+            $this->domains->completeCustomInstall($domain, $task->output ?? [], $task->actor);
+        } elseif ($task->status === TaskStatus::Failed) {
+            $this->domains->failCustomInstall($domain, $task->error);
         }
     }
 

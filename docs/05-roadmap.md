@@ -57,7 +57,9 @@ Pekerjaan:
 
 - pilihan versi PHP ✅: `setup.sh` memasang PHP 7.4, 8.0, 8.1, 8.2, 8.3, 8.4 dan 8.5 untuk website (beserta ekstensi umum WordPress; `--php-versions` untuk memilih), service PHP-FPM bawaan distro versi-versi itu dimatikan; customer mengganti versi per domain/subdomain dari kolom PHP di halaman Domains, pointer ikut domainnya, dan pool versi lama dihapus agent begitu tidak dipakai lagi.
 
-Berikutnya: sertifikat kustom, pengaturan PHP (php.ini) per website.
+- sertifikat kustom ✅: customer menempel sertifikat (beserta CA bundle) dan private key-nya dari menu domain; panel dan agent mengecek pasangan key, nama domain (wildcard boleh), masa berlaku, dan jenis key; sertifikat yang tidak dipercaya browser (Cloudflare Origin Certificate) boleh, dan ditandai; mengganti sertifikat (juga dari/ke Let's Encrypt) tidak mematikan HTTPS, dan sertifikat yang tidak dipakai lagi dihapus; private key hanya lewat payload task terenkripsi dan dihapus dari task begitu selesai.
+
+Berikutnya: pengaturan PHP (php.ini) per website, SSL hostname untuk mail/FTP.
 
 - Akun user & paket user, buat/suspend/hapus akun, quota disk & inode.
 - Domain, subdomain, pointer, redirect, www/HTTPS.

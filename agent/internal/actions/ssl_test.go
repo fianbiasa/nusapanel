@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"math/big"
@@ -302,5 +303,119 @@ func TestRemoveDomainDeletesTheCertificate(t *testing.T) {
 
 	if _, err := os.Stat(env.cfg.LetsEncryptDir + "/renewal/example.com.conf"); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("the certificate still exists (%v)", err)
+	}
+}
+
+// selfSignedCertificate returns a PEM certificate for names, valid now,
+// and its PEM private key.
+func selfSignedCertificate(t *testing.T, names ...string) (string, string) {
+	t.Helper()
+
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: names[0]},
+		DNSNames:     names,
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().AddDate(1, 0, 0),
+	}
+
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	keyDER, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})),
+		string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}))
+}
+
+func TestInstallCertificateInstallsACustomCertificate(t *testing.T) {
+	env := newWebEnv(t)
+
+	if _, err := env.call("web.apply_domain", applyParams("example.com", "8.4")); err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+
+	certificate, key := selfSignedCertificate(t, "example.com", "www.example.com")
+
+	result, err := env.call("ssl.install", map[string]string{
+		"username": "budi", "domain": "example.com", "certificate": certificate, "private_key": key,
+	})
+	if err != nil {
+		t.Fatalf("install failed: %v", err)
+	}
+
+	var info struct {
+		Names     []string `json:"names"`
+		ExpiresAt string   `json:"expires_at"`
+		Issuer    string   `json:"issuer"`
+		Trusted   bool     `json:"trusted"`
+	}
+
+	if err := json.Unmarshal(result, &info); err != nil {
+		t.Fatal(err)
+	}
+
+	if !slices.Equal(info.Names, []string{"example.com", "www.example.com"}) || info.Issuer != "example.com" || info.Trusted {
+		t.Fatalf("unexpected result %s", result)
+	}
+
+	if _, err := time.Parse(time.RFC3339, info.ExpiresAt); err != nil {
+		t.Fatalf("expires_at %q: %v", info.ExpiresAt, err)
+	}
+
+	// HTTPS with it.
+	params := map[string]any{"username": "budi", "domain": "example.com", "php_version": "8.4", "ssl": true, "certificate": "custom"}
+	if _, err := env.call("web.apply_domain", params); err != nil {
+		t.Fatalf("apply with the custom certificate failed: %v", err)
+	}
+
+	nginx, err := os.ReadFile(env.cfg.NginxDir + "/budi/example.com.conf")
+	if err != nil || !strings.Contains(string(nginx), "ssl_certificate "+env.cfg.CustomCertificateDir+"/example.com/fullchain.pem;") {
+		t.Fatalf("the vhost does not use the custom certificate (%v):\n%s", err, nginx)
+	}
+}
+
+func TestInstallCertificateExplainsARefusal(t *testing.T) {
+	env := newWebEnv(t)
+
+	if _, err := env.call("web.apply_domain", applyParams("example.com", "8.4")); err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+
+	certificate, key := selfSignedCertificate(t, "example.org")
+
+	_, err := env.call("ssl.install", map[string]string{
+		"username": "budi", "domain": "example.com", "certificate": certificate, "private_key": key,
+	})
+
+	agentErr := assertCode(t, err, rpc.CodeActionFailed)
+	if agentErr.Message != "the certificate does not cover example.com" {
+		t.Fatalf("message = %q", agentErr.Message)
+	}
+
+	for _, params := range []map[string]any{
+		{"username": "budi", "domain": "example.com", "certificate": certificate},
+		{"username": "budi", "domain": "example.com", "certificate": "", "private_key": key},
+		{"username": "budi", "domain": "../etc", "certificate": certificate, "private_key": key},
+		{"username": "budi", "domain": "example.com", "certificate": certificate, "private_key": key, "chain": "x"},
+		{"username": "budi", "domain": "example.com", "php_version": "8.4", "ssl": true, "certificate": "acme"},
+	} {
+		method := "ssl.install"
+		if _, ok := params["php_version"]; ok {
+			method = "web.apply_domain"
+		}
+
+		_, err := env.call(method, params)
+		assertCode(t, err, rpc.CodeInvalidParams)
 	}
 }

@@ -164,9 +164,10 @@ func (m *Manager) IssueCertificate(ctx context.Context, user, domain string) (Ce
 	return Certificate{Names: names, ExpiresAt: expiresAt}, nil
 }
 
-// DeleteCertificate deletes the certificate of domain of user, unless the
-// domain's vhost still serves HTTPS with it (ErrCertificateInUse). A
-// domain without a certificate succeeds.
+// DeleteCertificate deletes the certificates of domain of user, Let's
+// Encrypt's and a custom one, unless the domain's vhost still serves HTTPS
+// with one of them (ErrCertificateInUse). A domain without a certificate
+// succeeds.
 func (m *Manager) DeleteCertificate(ctx context.Context, user, domain string) error {
 	if err := checkNames(user, domain); err != nil {
 		return err
@@ -177,8 +178,12 @@ func (m *Manager) DeleteCertificate(ctx context.Context, user, domain string) er
 		return err
 	}
 
-	if m.usesCertificate(vhost, domain) {
+	if m.usesCertificate(vhost, domain) || m.usesCustomCertificate(vhost, domain) {
 		return fmt.Errorf("%w: %s", ErrCertificateInUse, domain)
+	}
+
+	if err := m.deleteCustomCertificate(domain); err != nil {
+		return err
 	}
 
 	return m.deleteCertificate(ctx, domain)
@@ -198,6 +203,10 @@ func (m *Manager) deleteUnusedCertificates(ctx context.Context, domains []string
 			m.logger().Info("certificate kept: a website uses the domain", "domain", domain)
 
 			continue
+		}
+
+		if err := m.deleteCustomCertificate(domain); err != nil {
+			return err
 		}
 
 		if err := m.deleteCertificate(ctx, domain); err != nil {

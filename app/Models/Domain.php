@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\DomainStatus;
 use App\Enums\DomainType;
 use App\Enums\PointerMode;
+use App\Enums\SslSource;
 use App\Enums\SslStatus;
 use Database\Factories\DomainFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -40,8 +41,11 @@ use Illuminate\Support\Carbon;
  * @property bool $is_primary
  * @property DomainStatus $status
  * @property SslStatus|null $ssl_status
+ * @property SslSource|null $ssl_source Where the active certificate came from.
  * @property list<string>|null $ssl_names
  * @property Carbon|null $ssl_expires_at
+ * @property string|null $ssl_issuer Who signed a custom certificate.
+ * @property bool|null $ssl_trusted Whether browsers trust a custom certificate.
  * @property string|null $ssl_error
  * @property bool $force_https
  * @property Carbon|null $created_at
@@ -74,6 +78,8 @@ class Domain extends Model
             'pointer_mode' => PointerMode::class,
             'status' => DomainStatus::class,
             'ssl_status' => SslStatus::class,
+            'ssl_source' => SslSource::class,
+            'ssl_trusted' => 'boolean',
             'ssl_names' => 'array',
             'ssl_expires_at' => 'datetime',
             'force_https' => 'boolean',
@@ -99,11 +105,12 @@ class Domain extends Model
     }
 
     /**
-     * Whether the website is served over HTTPS with its own certificate.
+     * Whether the website is served over HTTPS with its own certificate,
+     * also while a new custom certificate replaces it.
      */
     public function hasActiveSsl(): bool
     {
-        return $this->ssl_status === SslStatus::Active;
+        return in_array($this->ssl_status, [SslStatus::Active, SslStatus::Replacing], true);
     }
 
     /**

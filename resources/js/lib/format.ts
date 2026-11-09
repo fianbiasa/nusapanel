@@ -21,6 +21,7 @@ export const auditActionLabels: Record<string, string> = {
     'domain.ssl_requested': 'SSL diminta',
     'domain.ssl_removed': 'SSL dilepas',
     'domain.ssl_cancelled': 'Permintaan SSL dibatalkan',
+    'domain.ssl_custom_installed': 'Sertifikat sendiri dipasang',
     'domain.https_forced': 'Paksa HTTPS diaktifkan',
     'domain.https_unforced': 'Paksa HTTPS dimatikan',
     'domain.php_changed': 'Versi PHP diganti',
@@ -113,6 +114,7 @@ export const taskActionLabels: Record<string, string> = {
     'web.remove_domain': 'Lepas website domain',
     'php.remove_pool': 'Hapus pool PHP',
     'ssl.issue': 'Pasang sertifikat SSL',
+    'ssl.install': 'Pasang sertifikat sendiri',
     'ssl.delete': 'Hapus sertifikat SSL',
     'system.info': 'Baca info server',
 };

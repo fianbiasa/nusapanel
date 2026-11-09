@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"nusapanel/agent/internal/rpc"
 	"nusapanel/agent/internal/sysuser"
@@ -22,6 +23,7 @@ type webServer interface {
 	RemoveDomain(ctx context.Context, user, domain string) error
 	RemovePool(ctx context.Context, user, version string) error
 	IssueCertificate(ctx context.Context, user, domain string) (webserver.Certificate, error)
+	InstallCertificate(ctx context.Context, user, domain, certificatePEM, keyPEM string) (webserver.CustomCertificate, error)
 	DeleteCertificate(ctx context.Context, user, domain string) error
 }
 
@@ -34,6 +36,9 @@ type applyDomainParams struct {
 	PHPVersion string `json:"php_version"`
 	SSL        bool   `json:"ssl"`
 	ForceHTTPS bool   `json:"force_https"`
+	// Certificate says which certificate serves HTTPS: "letsencrypt" (the
+	// default) or "custom" (one installed with ssl.install).
+	Certificate string `json:"certificate"`
 	// Kind is "domain", "alias" (a pointer showing the website of parent)
 	// or "forward" (a pointer redirecting to parent).
 	Kind      string           `json:"kind"`
@@ -56,6 +61,12 @@ func (p applyDomainParams) validate() error {
 		return errors.New("force_https needs ssl")
 	}
 
+	switch p.Certificate {
+	case "", "letsencrypt", "custom":
+	default:
+		return fmt.Errorf("certificate %q must be letsencrypt or custom", p.Certificate)
+	}
+
 	return p.site(sysuser.User{Name: p.Username}).Validate()
 }
 
@@ -67,16 +78,17 @@ func (p applyDomainParams) site(user sysuser.User) webserver.Site {
 	}
 
 	return webserver.Site{
-		User:       user.Name,
-		UID:        user.UID,
-		GID:        user.GID,
-		Domain:     p.Domain,
-		PHPVersion: p.PHPVersion,
-		SSL:        p.SSL,
-		ForceHTTPS: p.ForceHTTPS,
-		Kind:       webserver.Kind(p.Kind),
-		Parent:     p.Parent,
-		Redirects:  redirects,
+		User:              user.Name,
+		UID:               user.UID,
+		GID:               user.GID,
+		Domain:            p.Domain,
+		PHPVersion:        p.PHPVersion,
+		SSL:               p.SSL,
+		ForceHTTPS:        p.ForceHTTPS,
+		CustomCertificate: p.Certificate == "custom",
+		Kind:              webserver.Kind(p.Kind),
+		Parent:            p.Parent,
+		Redirects:         redirects,
 	}
 }
 
@@ -146,6 +158,7 @@ func webMethods(system accountSystem, web webServer) map[string]rpc.Method {
 		"php.remove_pool":   {Handler: actions.removePool, LockKey: webLockKey[removePoolParams]},
 		"php.versions":      {Handler: actions.phpVersions},
 		"ssl.issue":         {Handler: actions.issueCertificate, LockKey: webLockKey[domainParams]},
+		"ssl.install":       {Handler: actions.installCertificate, LockKey: webLockKey[installCertificateParams]},
 		"ssl.delete":        {Handler: actions.deleteCertificate, LockKey: webLockKey[domainParams]},
 	}
 }
@@ -334,6 +347,10 @@ func webError(err error, subject string) error {
 
 	if issue, ok := errors.AsType[*webserver.IssueError](err); ok {
 		return issueError(issue)
+	}
+
+	if refused, ok := errors.AsType[*webserver.CertificateError](err); ok {
+		return rpc.Errorf(rpc.CodeActionFailed, "%s", refused.Reason)
 	}
 
 	switch {

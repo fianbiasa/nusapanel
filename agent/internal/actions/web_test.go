@@ -20,7 +20,7 @@ import (
 	"nusapanel/agent/internal/webserver"
 )
 
-var webMethodNames = []string{"web.apply_domain", "web.remove_domain", "php.remove_pool", "php.versions", "ssl.issue", "ssl.delete"}
+var webMethodNames = []string{"web.apply_domain", "web.remove_domain", "php.remove_pool", "php.versions", "ssl.issue", "ssl.install", "ssl.delete"}
 
 // webEnv runs the web methods against a fake account system and a real
 // webserver.Manager whose files live in a temporary directory and whose
@@ -53,21 +53,22 @@ func newWebEnv(t *testing.T) *webEnv {
 	env.system.addAccount("sari", 1002)
 
 	env.cfg = webserver.Config{
-		NginxDir:       filepath.Join(base, "nginx"),
-		ApacheDir:      filepath.Join(base, "apache2"),
-		PoolDir:        filepath.Join(base, "php-fpm"),
-		UnitDir:        filepath.Join(base, "systemd"),
-		LogDir:         filepath.Join(base, "log"),
-		RunDir:         "/run/nusa-php",
-		HomeRoot:       "/home",
-		PHPFPMDir:      filepath.Join(base, "sbin"),
-		IPv6File:       filepath.Join(base, "if_inet6"),
-		Backend:        "127.0.0.1:8080",
-		AcmeDir:        filepath.Join(base, "acme"),
-		LetsEncryptDir: filepath.Join(base, "letsencrypt"),
-		Hostnames:      func() []string { return []string{"server1.example.net"} },
-		Run:            env.run,
-		DialHTTP:       env.dial,
+		NginxDir:             filepath.Join(base, "nginx"),
+		ApacheDir:            filepath.Join(base, "apache2"),
+		PoolDir:              filepath.Join(base, "php-fpm"),
+		UnitDir:              filepath.Join(base, "systemd"),
+		LogDir:               filepath.Join(base, "log"),
+		RunDir:               "/run/nusa-php",
+		HomeRoot:             "/home",
+		PHPFPMDir:            filepath.Join(base, "sbin"),
+		IPv6File:             filepath.Join(base, "if_inet6"),
+		Backend:              "127.0.0.1:8080",
+		AcmeDir:              filepath.Join(base, "acme"),
+		LetsEncryptDir:       filepath.Join(base, "letsencrypt"),
+		CustomCertificateDir: filepath.Join(base, "ssl"),
+		Hostnames:            func() []string { return []string{"server1.example.net"} },
+		Run:                  env.run,
+		DialHTTP:             env.dial,
 		PrepareSite: func(_ context.Context, site sysuser.Site) error {
 			env.mu.Lock()
 			defer env.mu.Unlock()
@@ -189,6 +190,7 @@ func TestWebMethodsLockTheAccount(t *testing.T) {
 		"php.remove_pool":   `{"username":"budi","php_version":"8.4"}`,
 		"ssl.issue":         `{"username":"budi","domain":"example.com"}`,
 		"ssl.delete":        `{"username":"budi","domain":"example.com"}`,
+		"ssl.install":       `{"username":"budi","domain":"example.com","certificate":"x","private_key":"y"}`,
 	}
 
 	env := newWebEnv(t)

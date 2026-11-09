@@ -58,9 +58,11 @@ func newEnv(t *testing.T) *testEnv {
 		RunDir:    "/run/nusa-php",
 		HomeRoot:  "/home",
 		PHPFPMDir: filepath.Join(base, "usr/sbin"),
-		IPv6File:  filepath.Join(base, "if_inet6"),
-		Backend:   "127.0.0.1:8080",
-		AcmeDir:   filepath.Join(base, "var/www/nusapanel-acme"),
+		// Set before the other locations below, which stay as they were.
+		CustomCertificateDir: filepath.Join(base, "etc/nusapanel/ssl"),
+		IPv6File:             filepath.Join(base, "if_inet6"),
+		Backend:              "127.0.0.1:8080",
+		AcmeDir:              filepath.Join(base, "var/www/nusapanel-acme"),
 		// The same layout as /etc/letsencrypt.
 		LetsEncryptDir: filepath.Join(base, "etc/letsencrypt"),
 		Hostnames:      func() []string { return []string{"server1.example.net", "server1"} },
@@ -1034,6 +1036,12 @@ func TestDefaultConfigUsesTheServerLayout(t *testing.T) {
 		manager.apacheVhost("budi", "example.com") != "/etc/apache2/nusapanel/budi/example.com.conf" ||
 		manager.poolFile("budi", "8.4") != "/etc/nusapanel/php-fpm/8.4/budi.conf" {
 		t.Fatal("unexpected config paths")
+	}
+
+	// Customer certificates have a folder of their own, so a domain named
+	// like the panel's certificate links (panel.crt) cannot touch them.
+	if manager.customCertificateFile("panel.crt") != "/etc/nusapanel/ssl/domains/panel.crt/fullchain.pem" {
+		t.Fatalf("unexpected custom certificate path %s", manager.customCertificateFile("panel.crt"))
 	}
 
 	if cfg.Run == nil || cfg.PrepareSite == nil || cfg.Hostnames == nil {
