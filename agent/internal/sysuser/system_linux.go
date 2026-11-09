@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"nusapanel/agent/internal/runner"
@@ -22,6 +23,7 @@ const (
 	usermodProgram  = "/usr/sbin/usermod"
 	userdelProgram  = "/usr/sbin/userdel"
 	pkillProgram    = "/usr/bin/pkill"
+	crontabProgram  = "/usr/bin/crontab"
 )
 
 // Exit codes documented by those programs.
@@ -225,6 +227,32 @@ func (System) PrepareHome(_ context.Context, home Home) error {
 // default index.html, without following symlinks.
 func (System) PrepareSite(_ context.Context, site Site) error {
 	return prepareSite(site)
+}
+
+// SetCrontab installs crontab as the crontab of user name, which the cron
+// daemon runs as that user, or removes the user's crontab when crontab is
+// empty. Removing a crontab that does not exist succeeds.
+func (System) SetCrontab(ctx context.Context, name string, crontab []byte) error {
+	if len(crontab) == 0 {
+		_, err := runner.Run(ctx, crontabProgram, "-u", name, "-r")
+
+		var runErr *runner.Error
+		if errors.As(err, &runErr) && strings.Contains(runErr.Output, "no crontab for") {
+			return nil
+		}
+
+		if err != nil {
+			return fmt.Errorf("remove the crontab of %s: %w", name, err)
+		}
+
+		return nil
+	}
+
+	if _, err := runner.RunInput(ctx, crontab, crontabProgram, "-u", name, "-"); err != nil {
+		return fmt.Errorf("install the crontab of %s: %w", name, err)
+	}
+
+	return nil
 }
 
 // EnsurePath creates the missing folders of path inside a home, without

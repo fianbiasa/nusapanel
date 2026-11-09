@@ -147,6 +147,16 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     }
 
     /**
+     * The cron jobs of this hosting account.
+     *
+     * @return HasMany<CronJob, $this>
+     */
+    public function cronJobs(): HasMany
+    {
+        return $this->hasMany(CronJob::class);
+    }
+
+    /**
      * The hosting account's disk usage as last measured, if it ever was.
      *
      * @return HasOne<AccountUsage, $this>

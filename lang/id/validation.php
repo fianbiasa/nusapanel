@@ -213,6 +213,8 @@ return [
         'display_errors' => 'tampilkan error',
         'domain' => 'domain',
         'directory' => 'folder',
+        'command' => 'perintah',
+        'schedule' => 'jadwal',
         'domain_id' => 'domain',
         'date_timezone' => 'zona waktu',
         'domains' => 'batas domain',

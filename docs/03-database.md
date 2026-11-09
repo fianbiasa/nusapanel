@@ -222,12 +222,12 @@ Akun, domain, atau mailbox yang di-suspend otomatis tersaring dari view, jadi su
 
 ## 3.7 Fitur lanjutan
 
-| Tabel                                              | Kolom penting                                                                                                |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `cron_jobs`                                        | user_id, minute, hour, day_of_month, month, day_of_week, command, enabled                                    |
-| `ssh_keys`                                         | user_id, name, public_key, fingerprint. Unique `(user_id, fingerprint)`                                      |
-| `app_installs`                                     | user_id, domain_id, subdomain_id (null), app, path, version, database_id (null), admin_username, auto_update |
-| `git_repositories`, `node_apps`, `redis_instances` | P6, skema menyusul                                                                                           |
+| Tabel                                              | Kolom penting                                                                                                                                                                                        |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cron_jobs`                                        | ✅ user_id, schedule (lima kolom atau `@daily` dst., huruf kecil), command (satu baris, ≤ 1024), description (null), enabled. Setiap perubahan mengirim semua job aktif akun ke agent (`cron.apply`) |
+| `ssh_keys`                                         | user_id, name, public_key, fingerprint. Unique `(user_id, fingerprint)`                                                                                                                              |
+| `app_installs`                                     | user_id, domain_id, subdomain_id (null), app, path, version, database_id (null), admin_username, auto_update                                                                                         |
+| `git_repositories`, `node_apps`, `redis_instances` | P6, skema menyusul                                                                                                                                                                                   |
 
 ---
 

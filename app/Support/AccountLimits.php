@@ -63,6 +63,7 @@ final class AccountLimits implements Arrayable
                 ->where('status', '!=', DatabaseStatus::Deleting)
                 ->count(),
             'ftp_accounts' => $this->account->ftpAccounts()->count(),
+            'cron_jobs' => $this->account->cronJobs()->count(),
             'disk_mb' => $this->account->diskUsage?->diskMegabytes(),
             'inodes' => $this->account->diskUsage?->inodes,
             default => null,

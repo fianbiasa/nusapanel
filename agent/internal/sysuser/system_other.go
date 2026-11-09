@@ -67,6 +67,11 @@ func (System) PrepareSite(context.Context, Site) error {
 	return unsupported()
 }
 
+// SetCrontab is not supported on this platform.
+func (System) SetCrontab(context.Context, string, []byte) error {
+	return unsupported()
+}
+
 // EnsurePath is not supported on this platform.
 func (System) EnsurePath(context.Context, Path) error {
 	return unsupported()

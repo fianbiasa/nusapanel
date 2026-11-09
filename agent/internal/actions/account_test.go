@@ -263,7 +263,7 @@ func TestDeleteRemovesWebsitesKillsProcessesThenRemovesTheAccount(t *testing.T) 
 	}
 
 	assertCalls(t, system, "lookup budi", "web remove budi", "db remove budi", "kill 1001",
-		"quotaon -p -u /", "setquota -u -- budi 0 0 0 0 /", "userdel budi")
+		"quotaon -p -u /", "setquota -u -- budi 0 0 0 0 /", "crontab remove budi", "userdel budi")
 
 	if _, exists := system.users["budi"]; exists {
 		t.Fatal("the user still exists")
@@ -443,6 +443,8 @@ type fakeSystem struct {
 	groups map[string]*sysuser.Group
 	homes  map[string]sysuser.Home
 	calls  []string
+	// crontabs are the installed crontabs by user.
+	crontabs map[string]string
 
 	nextID int
 	// failWith, when set, is returned by every change.
@@ -469,6 +471,7 @@ func newFakeSystem() *fakeSystem {
 		users:      map[string]sysuser.User{},
 		groups:     map[string]*sysuser.Group{},
 		homes:      map[string]sysuser.Home{},
+		crontabs:   map[string]string{},
 		nextID:     1001,
 		quotaState: "on",
 	}
@@ -618,6 +621,18 @@ func (f *fakeSystem) DeleteUser(_ context.Context, name string) error {
 	delete(f.groups, name)
 
 	return nil
+}
+
+func (f *fakeSystem) SetCrontab(_ context.Context, name string, crontab []byte) error {
+	if len(crontab) == 0 {
+		delete(f.crontabs, name)
+
+		return f.record("crontab remove %s", name)
+	}
+
+	f.crontabs[name] = string(crontab)
+
+	return f.record("crontab %s", name)
 }
 
 func (f *fakeSystem) PrepareHome(_ context.Context, home sysuser.Home) error {

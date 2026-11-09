@@ -1,5 +1,6 @@
 import { usePage } from '@inertiajs/react';
 import {
+    Clock,
     Database,
     FolderUp,
     Globe,
@@ -12,6 +13,7 @@ import {
     Users,
 } from 'lucide-react';
 import { dashboard } from '@/routes';
+import { index as cronJobsIndex } from '@/routes/cron-jobs';
 import { index as databasesIndex } from '@/routes/databases';
 import { index as accountsIndex } from '@/routes/admin/accounts';
 import { index as auditLogsIndex } from '@/routes/admin/audit-logs';
@@ -107,6 +109,11 @@ export function useNavigation(): {
             href: ftpIndex(),
             icon: FolderUp,
         };
+        const cronJobs: NavItem = {
+            title: 'Cron Jobs',
+            href: cronJobsIndex(),
+            icon: Clock,
+        };
         const redirects: NavItem = {
             title: 'Redirects',
             href: redirectsIndex(),
@@ -115,7 +122,14 @@ export function useNavigation(): {
 
         sections.push({
             label: 'Menu',
-            items: [dashboardItem, domains, databases, ftp, redirects],
+            items: [
+                dashboardItem,
+                domains,
+                databases,
+                ftp,
+                cronJobs,
+                redirects,
+            ],
         });
         dockItems = [
             dashboardItem,

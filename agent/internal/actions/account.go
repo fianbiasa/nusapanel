@@ -55,6 +55,8 @@ type accountSystem interface {
 	KillProcesses(ctx context.Context, uid int) error
 	DeleteUser(ctx context.Context, name string) error
 	PrepareHome(ctx context.Context, home sysuser.Home) error
+	// SetCrontab installs the user's crontab, or removes it when empty.
+	SetCrontab(ctx context.Context, name string, crontab []byte) error
 }
 
 // accountWeb is what the account actions need from the web server side:
@@ -304,6 +306,12 @@ func (a accountActions) remove(ctx context.Context, raw json.RawMessage) (any, e
 	// Quota limits belong to the UID, not the user: without this, the next
 	// account that gets the UID would inherit them.
 	a.quotas.ClearUserLimits(ctx, user.Name)
+
+	// userdel leaves the crontab behind, and a new account with the same
+	// name would run its jobs.
+	if err := a.system.SetCrontab(ctx, user.Name, nil); err != nil {
+		return nil, systemError(err)
+	}
 
 	if err := a.system.DeleteUser(ctx, user.Name); err != nil {
 		return nil, systemError(err)

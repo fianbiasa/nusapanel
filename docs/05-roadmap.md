@@ -67,7 +67,9 @@ Pekerjaan:
 
 - FTP ✅: halaman FTP membuat login `nama@domain` (domain atau subdomain akun) yang hanya bisa membuka satu folder di home-nya (bawaan `domains/<domain>/public_html`, atau seluruh home), dengan password yang bisa diganti kapan saja dan batas jumlah dari paket; Pure-FTPd membaca login langsung dari database panel lewat view yang hanya memuat login siap dari akun aktif, sehingga login akun yang di-suspend langsung ditolak; FTP wajib TLS eksplisit (FTPS) dengan sertifikat hostname, yang ikut diperbarui saat Let's Encrypt memperpanjangnya; file yang diunggah milik akun itu dan terhitung di kuota disknya.
 
-Berikutnya: cron jobs, SFTP, file manager. SSL mail menyusul bersama email (P2).
+- cron jobs ✅: halaman Cron Jobs menambah, mengubah, menjeda dan menghapus job (jadwal siap pakai seperti setiap 5 menit atau harian, atau lima kolom sendiri; perintah satu baris) dengan batas jumlah dari paket; agent menulis crontab akun dari semua job aktif, dijalankan daemon cron sebagai user akun itu; job akun yang di-suspend tidak berjalan (cron menolak akun kedaluwarsa lewat PAM) dan jalan lagi setelah unsuspend; crontab ikut dihapus bersama akun.
+
+Berikutnya: SFTP, file manager. SSL mail menyusul bersama email (P2).
 
 - Akun user & paket user, buat/suspend/hapus akun, quota disk & inode.
 - Domain, subdomain, pointer, redirect, www/HTTPS.

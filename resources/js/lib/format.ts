@@ -39,6 +39,9 @@ export const auditActionLabels: Record<string, string> = {
     'ftp_account.created': 'Akun FTP dibuat',
     'ftp_account.updated': 'Akun FTP diubah',
     'ftp_account.deleted': 'Akun FTP dihapus',
+    'cron_job.created': 'Cron job dibuat',
+    'cron_job.updated': 'Cron job diubah',
+    'cron_job.deleted': 'Cron job dihapus',
     'redirect.created': 'Pengalihan ditambahkan',
     'redirect.deleted': 'Pengalihan dihapus',
     'package.created': 'Paket dibuat',
@@ -144,6 +147,7 @@ export const taskActionLabels: Record<string, string> = {
     'db.apply_user': 'Atur user database',
     'db.delete_user': 'Hapus user database',
     'ftp.ensure_dir': 'Siapkan folder FTP',
+    'cron.apply': 'Terapkan cron job',
     'ssl.delete': 'Hapus sertifikat SSL',
     'system.info': 'Baca info server',
 };

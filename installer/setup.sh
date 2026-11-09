@@ -642,7 +642,7 @@ postfix postfix/main_mailer_type select Internet Site
 postfix postfix/mailname string $server_hostname
 DEBCONF
 
-    quietly "${apt[@]}" install nginx mariadb-server postfix opendkim opendkim-tools certbot python3 quota \
+    quietly "${apt[@]}" install nginx mariadb-server postfix opendkim opendkim-tools certbot python3 quota cron \
         "php$PHP_VERSION-fpm" "php$PHP_VERSION-cli" "php$PHP_VERSION-common" "php$PHP_VERSION-mysql" \
         "php$PHP_VERSION-mbstring" "php$PHP_VERSION-xml" "php$PHP_VERSION-curl" "php$PHP_VERSION-intl" \
         "php$PHP_VERSION-zip" "php$PHP_VERSION-bcmath" "php$PHP_VERSION-opcache" "php$PHP_VERSION-readline" \
@@ -656,7 +656,8 @@ DEBCONF
     quietly "${apt[@]}" install apache2 pure-ftpd-mysql
     remove_policy_rc
 
-    quietly systemctl enable --now mariadb nginx "php$PHP_VERSION-fpm"
+    # cron runs the cron jobs of hosting accounts (the agent writes their crontabs).
+    quietly systemctl enable --now mariadb nginx cron "php$PHP_VERSION-fpm"
     info "Nginx, Apache, MariaDB, Postfix, Pure-FTPd dan PHP $PHP_VERSION terpasang"
 }
 

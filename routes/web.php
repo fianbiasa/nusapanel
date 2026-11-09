@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\AccountController;
 use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\PackageController;
 use App\Http\Controllers\Admin\TaskController;
+use App\Http\Controllers\CronJobController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DatabaseController;
 use App\Http\Controllers\DatabaseUserController;
@@ -37,6 +38,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('database-users', [DatabaseUserController::class, 'store'])->name('database-users.store');
         Route::put('database-users/{databaseUser}', [DatabaseUserController::class, 'update'])->name('database-users.update');
         Route::delete('database-users/{databaseUser}', [DatabaseUserController::class, 'destroy'])->name('database-users.destroy');
+        Route::get('cron-jobs', [CronJobController::class, 'index'])->name('cron-jobs.index');
+        Route::post('cron-jobs', [CronJobController::class, 'store'])->name('cron-jobs.store');
+        Route::put('cron-jobs/{cronJob}', [CronJobController::class, 'update'])->name('cron-jobs.update');
+        Route::delete('cron-jobs/{cronJob}', [CronJobController::class, 'destroy'])->name('cron-jobs.destroy');
         Route::get('ftp', [FtpAccountController::class, 'index'])->name('ftp.index');
         Route::post('ftp', [FtpAccountController::class, 'store'])->name('ftp.store');
         Route::put('ftp/{ftpAccount}', [FtpAccountController::class, 'update'])->name('ftp.update');
