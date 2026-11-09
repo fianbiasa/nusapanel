@@ -224,7 +224,8 @@ func TestRenderedNginxVhostWithHTTPS(t *testing.T) {
 
 	// Without forcing HTTPS, port 80 still serves the website itself.
 	assertContains(t, "HTTP server", plain, "    listen 80;\n", "location / {\n        proxy_pass", "root /home/budi/domains/example.com/public_html;")
-	assertNotContains(t, "HTTP server", plain, "ssl", "443", "return 301")
+	// "listen 443", not "443": the temporary directory in the paths may hold those digits.
+	assertNotContains(t, "HTTP server", plain, "ssl", "listen 443", "return 301")
 
 	if strings.Count(nginx, "proxy_pass") != 4 || strings.Count(nginx, "{") != strings.Count(nginx, "}") {
 		t.Fatalf("unexpected nginx vhost structure:\n%s", nginx)

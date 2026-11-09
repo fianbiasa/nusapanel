@@ -383,7 +383,8 @@ func TestRenderedNginxVhost(t *testing.T) {
 		"proxy_buffers 16 16k;",
 		"proxy_busy_buffers_size 64k;\n    }",
 	)
-	assertNotContains(t, "nginx vhost", nginx, "[::]", "443", "<no value>")
+	// "listen 443", not "443": the temporary directory in the paths may hold those digits.
+	assertNotContains(t, "nginx vhost", nginx, "[::]", "listen 443", "<no value>")
 
 	if strings.Count(nginx, "proxy_pass") != 2 || strings.Count(nginx, "{") != strings.Count(nginx, "}") {
 		t.Fatalf("unexpected nginx vhost structure:\n%s", nginx)
