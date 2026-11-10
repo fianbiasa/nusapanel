@@ -57,7 +57,7 @@ class RunAgentTaskTest extends TestCase
         $this->assertSame(TaskStatus::Success, $task->status);
         $this->assertSame(100, $task->progress);
         $this->assertSame(1, $task->attempts);
-        $this->assertSame('server.nusapanel.test', $task->output['hostname']);
+        $this->assertSame('server.rayxo.test', $task->output['hostname']);
         $this->assertNotNull($task->finished_at);
 
         $agent = $this->app->make(AgentClient::class);

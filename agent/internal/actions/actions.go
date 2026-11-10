@@ -6,13 +6,13 @@ import (
 	"context"
 	"encoding/json"
 
-	"nusapanel/agent/internal/database"
-	"nusapanel/agent/internal/quota"
-	"nusapanel/agent/internal/rpc"
-	"nusapanel/agent/internal/sysinfo"
-	"nusapanel/agent/internal/sysuser"
-	"nusapanel/agent/internal/version"
-	"nusapanel/agent/internal/webserver"
+	"rayxo/agent/internal/database"
+	"rayxo/agent/internal/quota"
+	"rayxo/agent/internal/rpc"
+	"rayxo/agent/internal/sysinfo"
+	"rayxo/agent/internal/sysuser"
+	"rayxo/agent/internal/version"
+	"rayxo/agent/internal/webserver"
 )
 
 // Register adds all agent methods to registry.

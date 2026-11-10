@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"nusapanel/agent/internal/runner"
+	"rayxo/agent/internal/runner"
 )
 
 // testExpiry is when every certificate the fake certbot issues expires.
@@ -156,7 +156,7 @@ func (e *testEnv) issue(user, domain string) (Certificate, error) {
 }
 
 func certonlyCall(names ...string) string {
-	call := "certbot certonly --webroot -w $BASE/var/www/nusapanel-acme --cert-name " + names[0]
+	call := "certbot certonly --webroot -w $BASE/var/www/rayxo-acme --cert-name " + names[0]
 	for _, name := range names {
 		call += " -d " + name
 	}
@@ -565,10 +565,10 @@ func TestCertbotIssueFailures(t *testing.T) {
 }
 
 func TestCertbotIssueArgsNeverExpand(t *testing.T) {
-	args := certbotIssueArgs("/var/www/nusapanel-acme", "example.com", []string{"example.com", "www.example.com"})
+	args := certbotIssueArgs("/var/www/rayxo-acme", "example.com", []string{"example.com", "www.example.com"})
 
 	want := []string{
-		"certonly", "--webroot", "-w", "/var/www/nusapanel-acme", "--cert-name", "example.com",
+		"certonly", "--webroot", "-w", "/var/www/rayxo-acme", "--cert-name", "example.com",
 		"-d", "example.com", "-d", "www.example.com",
 		"--non-interactive", "--agree-tos", "--keep-until-expiring", "--register-unsafely-without-email",
 	}
@@ -638,7 +638,7 @@ func TestRemoveDomainDeletesItsCertificate(t *testing.T) {
 
 	// The removed website's PHP-FPM pool goes too.
 	env.assertCalls(append(slices.Clone(reloadBoth), deleteCall("example.com"),
-		"systemctl is-active --quiet nusa-php84@budi.service", "systemctl reload-or-restart nusa-php84@budi.service")...)
+		"systemctl is-active --quiet rayxo-php84@budi.service", "systemctl reload-or-restart rayxo-php84@budi.service")...)
 
 	if !env.manager.HasCertificate("budi.id") || env.manager.HasCertificate("example.com") {
 		t.Fatal("the wrong certificates were deleted")
@@ -697,7 +697,7 @@ func TestRemoveAccountDeletesItsCertificatesAlsoOnARetry(t *testing.T) {
 		t.Fatalf("retry failed: %v", err)
 	}
 
-	env.assertCalls(append(append([]string{"systemctl disable --now nusa-php84@budi.service"}, reloadBoth...),
+	env.assertCalls(append(append([]string{"systemctl disable --now rayxo-php84@budi.service"}, reloadBoth...),
 		deleteCall("budi.id"), deleteCall("example.com"))...)
 	env.assertMissing(filepath.Join(env.cfg.NginxDir, "budi"), filepath.Join(env.cfg.ApacheDir, "budi"))
 
@@ -759,7 +759,7 @@ func TestDefaultConfigCertificatePaths(t *testing.T) {
 	if manager.certificateFile("example.com") != "/etc/letsencrypt/live/example.com/fullchain.pem" ||
 		manager.certificateKeyFile("example.com") != "/etc/letsencrypt/live/example.com/privkey.pem" ||
 		manager.renewalFile("example.com") != "/etc/letsencrypt/renewal/example.com.conf" ||
-		manager.challengeDir() != "/var/www/nusapanel-acme/.well-known/acme-challenge" {
+		manager.challengeDir() != "/var/www/rayxo-acme/.well-known/acme-challenge" {
 		t.Fatal("unexpected certificate paths")
 	}
 

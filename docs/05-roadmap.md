@@ -19,12 +19,12 @@ Aturan main: tidak ada fitur P6 sebelum P5 selesai.
 
 ## P0 — Fondasi
 
-Struktur repo (panel Laravel ada di root supaya Herd langsung melayaninya di `nusapanel.test`):
+Struktur repo (panel Laravel ada di root supaya Herd langsung melayaninya di `rayxo.test`):
 
 ```
-nusapanel/
+rayxo/
 ├── app/, resources/, routes/, ...   panel Laravel + Inertia + React
-├── agent/       Go (nusad, nusactl)
+├── agent/       Go (rayxod, rayxo)
 ├── templates/   template config
 ├── installer/   setup.sh (installer server), build-release.sh (paket rilis)
 ├── whmcs/       modul WHMCS (P4)
@@ -33,11 +33,11 @@ nusapanel/
 
 Pekerjaan:
 
-- Panel dikembangkan di Herd (`nusapanel.test`); SSL dan versi PHP diatur dari aplikasi Herd.
+- Panel dikembangkan di Herd (`rayxo.test`); SSL dan versi PHP diatur dari aplikasi Herd.
 - VM pengembangan di Mac (OrbStack atau Multipass) dengan Ubuntu 24.04 untuk agent, plus snapshot "bersih" untuk menguji installer berulang kali.
 - Agent: server JSON-RPC di Unix socket, cek `SO_PEERCRED`, kunci per akun, aksi pertama `system.info`.
 - Panel: Laravel + Inertia + React (dari starter kit resmi), login username/email + 2FA, peran admin/reseller/user, tabel `tasks` & `audit_logs`, klien agent (driver `fake` di Mac, `socket` di server).
-- Installer: `setup.sh` mewajibkan A record & PTR hostname yang benar, lalu memasang Nginx, MariaDB, PHP 8.4, Postfix kirim-saja + DKIM (email panel), SSL Let's Encrypt untuk hostname, user `nusapanel`, panel & agent dari paket rilis (`build-release.sh`), dan membuat admin pertama.
+- Installer: `setup.sh` mewajibkan A record & PTR hostname yang benar, lalu memasang Nginx, MariaDB, PHP 8.4, Postfix kirim-saja + DKIM (email panel), SSL Let's Encrypt untuk hostname, user `rayxo`, panel & agent dari paket rilis (`build-release.sh`), dan membuat admin pertama.
 - CI: test Go & PHP; test integrasi agent di VM.
 
 **Selesai kalau:** install di VM bersih → login admin → dashboard menampilkan info sistem dari agent.
@@ -49,7 +49,7 @@ Pekerjaan:
 - akun hosting ✅: buat, suspend, unsuspend, hapus dari panel;
 - domain & website ✅: tambah/hapus domain (halaman Domains user, domain utama saat admin membuat akun), Nginx → Apache → PHP-FPM 8.4 per user, `www.` otomatis, halaman 503 saat suspend, isolasi antar akun & proteksi symlink teruji;
 - SSL Let's Encrypt ✅: pasang/lepas SSL dan Paksa HTTPS dari halaman Domains, cek dulu domain sampai ke server (A record atau proxy Cloudflare), diperpanjang otomatis `certbot.timer`; teruji dengan domain asli lewat Cloudflare;
-- `nusapanel:rebuild-web` ✅: semua website ditulis ulang otomatis setiap upgrade (`setup.sh`), jadi perubahan template ikut terpasang;
+- `rayxo:rebuild-web` ✅: semua website ditulis ulang otomatis setiap upgrade (`setup.sh`), jadi perubahan template ikut terpasang;
 - paket hosting ✅: admin membuat paket (kuota disk, bandwidth, domain, subdomain, email, database, FTP, cron; fitur SSL), memilihnya saat membuat akun dan menggantinya kapan saja; batas domain dan fitur SSL sudah diterapkan, batas lain berlaku begitu fiturnya ada; pemakaian tampil di dashboard customer;
 - kuota disk & inode ✅: `setup.sh` mengaktifkan kuota user ext4 tanpa reboot (fstab dicadangkan, divalidasi, dikembalikan kalau gagal), agent memasang batas per akun dari paketnya, pemakaian diukur tiap 15 menit dan tampil di dashboard & daftar akun; teruji: menulis melebihi kuota ditolak "Disk quota exceeded".
 
@@ -63,7 +63,7 @@ Pekerjaan:
 
 - MariaDB ✅: halaman Databases membuat database (sekaligus user-nya kalau mau, dengan pembuat password) dan user database; satu user bisa diberi akses ke beberapa database dan sebaliknya; nama selalu diawali `<username>_`; batas database dari paket; ukuran diukur tiap 15 menit; user ikut dikunci saat akun di-suspend; semua database & user ikut dihapus bersama akunnya; password tidak pernah dikirim ke agent maupun disimpan, hanya hash-nya.
 
-- phpMyAdmin SSO ✅: tombol "Buka phpMyAdmin" di halaman Databases membuka phpMyAdmin 5.2 (dipaket bersama rilis, di `https://<hostname>/phpmyadmin/`, origin terpisah dari panel) dalam tab baru, langsung login ke semua database akun tanpa mengetik password; login memakai user pemilik MariaDB akun itu dengan password baru tiap sesi, lewat tiket terenkripsi yang kedaluwarsa dalam semenit dan hanya berlaku di browser yang memintanya; sesi berakhir setelah 60 menit (password diganti acak oleh scheduler); phpMyAdmin berjalan sebagai user `nusa-pma` yang tidak bisa membaca konfigurasi panel maupun file customer.
+- phpMyAdmin SSO ✅: tombol "Buka phpMyAdmin" di halaman Databases membuka phpMyAdmin 5.2 (dipaket bersama rilis, di `https://<hostname>/phpmyadmin/`, origin terpisah dari panel) dalam tab baru, langsung login ke semua database akun tanpa mengetik password; login memakai user pemilik MariaDB akun itu dengan password baru tiap sesi, lewat tiket terenkripsi yang kedaluwarsa dalam semenit dan hanya berlaku di browser yang memintanya; sesi berakhir setelah 60 menit (password diganti acak oleh scheduler); phpMyAdmin berjalan sebagai user `rayxo-pma` yang tidak bisa membaca konfigurasi panel maupun file customer.
 
 - FTP ✅: halaman FTP membuat login `nama@domain` (domain atau subdomain akun) yang hanya bisa membuka satu folder di home-nya (bawaan `domains/<domain>/public_html`, atau seluruh home), dengan password yang bisa diganti kapan saja dan batas jumlah dari paket; Pure-FTPd membaca login langsung dari database panel lewat view yang hanya memuat login siap dari akun aktif, sehingga login akun yang di-suspend langsung ditolak; FTP wajib TLS eksplisit (FTPS) dengan sertifikat hostname, yang ikut diperbarui saat Let's Encrypt memperpanjangnya; file yang diunggah milik akun itu dan terhitung di kuota disknya.
 
@@ -80,13 +80,13 @@ Berikutnya: file manager. SSL mail menyusul bersama email (P2).
 - MariaDB: database, user, hak akses, phpMyAdmin SSO.
 - FTP + SFTP, file manager lengkap, cron jobs.
 - Info sistem, service monitor + watchdog, pengaturan server.
-- 2FA, riwayat login, `nusactl`, `nusactl rebuild`.
+- 2FA, riwayat login, `rayxo`, `rayxo rebuild`.
 
 **Selesai kalau:**
 
 - WordPress bisa di-host dengan HTTPS, database, FTP, dan file manager;
 - suspend, unsuspend, dan hapus akun bersih tanpa sisa;
-- `nusactl rebuild` menghasilkan config yang identik;
+- `rayxo rebuild` menghasilkan config yang identik;
 - user A terbukti tidak bisa membaca file user B (diuji otomatis).
 
 ## P2 — DNS & email
@@ -143,7 +143,7 @@ Software manager (setara CustomBuild), app installer & WordPress manager, Git de
 
 ## Strategi pindah dari panel lama
 
-1. Siapkan **server baru** untuk nusapanel. Jangan dipasang di server yang masih menjalankan cPanel/DirectAdmin.
+1. Siapkan **server baru** untuk rayxo. Jangan dipasang di server yang masih menjalankan cPanel/DirectAdmin.
 2. Pindahkan akun milik sendiri atau akun percobaan lebih dulu.
 3. Turunkan TTL DNS ke 300 detik sehari sebelum pindah.
 4. Import backup → cek situs lewat file `hosts` → pindahkan DNS.
@@ -162,7 +162,7 @@ Software manager (setara CustomBuild), app installer & WordPress manager, Git de
 
 ## Langkah pertama
 
-1. Tetapkan nama final (atau pakai codename `nusapanel` dulu).
+1. Tetapkan nama final: **RAYXO** (sebelumnya codename `nusapanel`).
 2. Siapkan VM Ubuntu 24.04 di Mac (OrbStack/Multipass).
 3. Scaffold panel Laravel + React (di Herd) dan agent Go.
 4. Socket agent + `system.info`, tampil di dashboard admin.

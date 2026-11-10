@@ -19,7 +19,7 @@ import (
 const maxErrorOutput = 4096
 
 // environment is the complete environment every program gets. Nothing is
-// inherited from the agent, so programs behave the same however nusad was
+// inherited from the agent, so programs behave the same however rayxod was
 // started and never see the agent's own variables.
 var environment = []string{
 	"PATH=/usr/sbin:/usr/bin:/sbin:/bin",

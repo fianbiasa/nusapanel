@@ -14,12 +14,12 @@ import (
 	"strings"
 	"time"
 
-	"nusapanel/agent/internal/validate"
+	"rayxo/agent/internal/validate"
 )
 
 // A customer can also bring a certificate of their own, such as one bought
 // from a CA or a Cloudflare Origin Certificate. It lives in
-// Config.CustomCertificateDir/<domain>/ (root only, /etc/nusapanel/ssl/domains
+// Config.CustomCertificateDir/<domain>/ (root only, /etc/rayxo/ssl/domains
 // on a server) and is used by the
 // domain's vhost when web.apply_domain asks for it. Nothing renews it.
 

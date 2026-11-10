@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"nusapanel/agent/internal/database"
-	"nusapanel/agent/internal/rpc"
+	"rayxo/agent/internal/database"
+	"rayxo/agent/internal/rpc"
 )
 
 // fakeDatabaseServer records the db.* calls that reach MariaDB.
@@ -165,7 +165,7 @@ func TestDatabaseMethodsRefuseWhatIsNotTheAccounts(t *testing.T) {
 			{"username": "budi", "user": "budi_wp", "password": "secret", "password_hash": testHash},
 		},
 		"db.delete_user":     {{"username": "budi", "user": "sari_wp"}},
-		"db.delete_database": {{"username": "budi", "database": "nusapanel"}},
+		"db.delete_database": {{"username": "budi", "database": "rayxo"}},
 		"db.open_sso": {
 			{"username": "budi", "password_hash": "secret", "databases": []string{"budi_shop"}},
 			{"username": "budi", "password_hash": testHash, "databases": []string{"sari_shop"}},
@@ -173,7 +173,7 @@ func TestDatabaseMethodsRefuseWhatIsNotTheAccounts(t *testing.T) {
 			{"username": "root", "password_hash": testHash},
 			{"username": "budi", "password": "secret", "password_hash": testHash},
 		},
-		"db.close_sso": {{"username": "nusapanel"}, {"username": "Budi"}},
+		"db.close_sso": {{"username": "rayxo"}, {"username": "Budi"}},
 		"db.report":    {{"username": "budi"}},
 	}
 

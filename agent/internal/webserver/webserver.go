@@ -1,6 +1,6 @@
 // Package webserver manages the websites of hosting accounts: an Nginx vhost
 // and an Apache vhost per domain, a PHP-FPM pool per account per PHP
-// version that runs as its own systemd service (nusa-php<ver>@<user>), and
+// version that runs as its own systemd service (rayxo-php<ver>@<user>), and
 // a Let's Encrypt certificate per domain (certificate.go). See
 // docs/02-arsitektur.md 2.6-2.7 and docs/04-agent-dan-server.md 4.4-4.6.
 //
@@ -22,9 +22,9 @@ import (
 	"sync"
 	"time"
 
-	"nusapanel/agent/internal/runner"
-	"nusapanel/agent/internal/sysuser"
-	"nusapanel/agent/internal/validate"
+	"rayxo/agent/internal/runner"
+	"rayxo/agent/internal/sysuser"
+	"rayxo/agent/internal/validate"
 )
 
 // Programs used, by absolute path as installed on Ubuntu 24.04.
@@ -59,7 +59,7 @@ type Config struct {
 	ApacheDir string
 	// PoolDir holds the PHP-FPM pools, <PoolDir>/<version>/<user>.conf.
 	PoolDir string
-	// UnitDir is where the systemd template units nusa-php<ver>@.service go.
+	// UnitDir is where the systemd template units rayxo-php<ver>@.service go.
 	UnitDir string
 	// LogDir holds <domain>.access.log, .error.log and .apache-error.log.
 	LogDir string
@@ -114,22 +114,22 @@ type Config struct {
 // DefaultConfig returns the locations and operations used on a server.
 func DefaultConfig() Config {
 	return Config{
-		NginxDir:       "/etc/nginx/nusapanel",
-		ApacheDir:      "/etc/apache2/nusapanel",
-		PoolDir:        "/etc/nusapanel/php-fpm",
+		NginxDir:       "/etc/nginx/rayxo",
+		ApacheDir:      "/etc/apache2/rayxo",
+		PoolDir:        "/etc/rayxo/php-fpm",
 		UnitDir:        "/etc/systemd/system",
-		LogDir:         "/var/log/nusapanel/domains",
+		LogDir:         "/var/log/rayxo/domains",
 		LogGroup:       "adm",
-		RunDir:         "/run/nusa-php",
+		RunDir:         "/run/rayxo-php",
 		HomeRoot:       "/home",
 		PHPFPMDir:      "/usr/sbin",
 		IPv6File:       "/proc/net/if_inet6",
 		Backend:        "127.0.0.1:8080",
-		AcmeDir:        "/var/www/nusapanel-acme",
+		AcmeDir:        "/var/www/rayxo-acme",
 		LetsEncryptDir: "/etc/letsencrypt",
 		// Root only, beside (not among) the panel's own certificate links
-		// in /etc/nusapanel/ssl, so no domain name can clash with them.
-		CustomCertificateDir: "/etc/nusapanel/ssl/domains",
+		// in /etc/rayxo/ssl, so no domain name can clash with them.
+		CustomCertificateDir: "/etc/rayxo/ssl/domains",
 		Hostnames:            systemHostnames,
 		Run:                  runner.Run,
 		PrepareSite:          sysuser.System{}.PrepareSite,

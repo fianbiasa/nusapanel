@@ -6,7 +6,7 @@ import (
 )
 
 func TestParsePasswd(t *testing.T) {
-	user, err := parsePasswd("budi:x:1001:1002:nusapanel,,,:/home/budi:/usr/sbin/nologin\n")
+	user, err := parsePasswd("budi:x:1001:1002:rayxo,,,:/home/budi:/usr/sbin/nologin\n")
 	if err != nil {
 		t.Fatalf("parse failed: %v", err)
 	}
@@ -15,7 +15,7 @@ func TestParsePasswd(t *testing.T) {
 		Name:    "budi",
 		UID:     1001,
 		GID:     1002,
-		Comment: "nusapanel,,,",
+		Comment: "rayxo,,,",
 		Home:    "/home/budi",
 		Shell:   "/usr/sbin/nologin",
 	}
@@ -25,14 +25,14 @@ func TestParsePasswd(t *testing.T) {
 }
 
 func TestParsePasswdList(t *testing.T) {
-	users, err := parsePasswdList([]byte("root:x:0:0:root:/root:/bin/bash\n\nbudi:x:1001:1001:nusapanel:/home/budi:/usr/sbin/nologin\n"))
+	users, err := parsePasswdList([]byte("root:x:0:0:root:/root:/bin/bash\n\nbudi:x:1001:1001:rayxo:/home/budi:/usr/sbin/nologin\n"))
 	if err != nil {
 		t.Fatalf("parse failed: %v", err)
 	}
 
 	want := []User{
 		{Name: "root", UID: 0, GID: 0, Comment: "root", Home: "/root", Shell: "/bin/bash"},
-		{Name: "budi", UID: 1001, GID: 1001, Comment: "nusapanel", Home: "/home/budi", Shell: "/usr/sbin/nologin"},
+		{Name: "budi", UID: 1001, GID: 1001, Comment: "rayxo", Home: "/home/budi", Shell: "/usr/sbin/nologin"},
 	}
 	if !reflect.DeepEqual(users, want) {
 		t.Fatalf("got %+v, want %+v", users, want)
@@ -46,11 +46,11 @@ func TestParsePasswdList(t *testing.T) {
 func TestParsePasswdRejectsMalformedEntries(t *testing.T) {
 	invalid := []string{
 		"",
-		"budi:x:1001:1001:nusapanel:/home/budi",
-		"budi:x:1001:1001:nusapanel:/home/budi:/bin/sh:extra",
-		"budi:x:-1:1001:nusapanel:/home/budi:/bin/sh",
-		"budi:x:1001:abc:nusapanel:/home/budi:/bin/sh",
-		"budi:x:4294967296:1001:nusapanel:/home/budi:/bin/sh",
+		"budi:x:1001:1001:rayxo:/home/budi",
+		"budi:x:1001:1001:rayxo:/home/budi:/bin/sh:extra",
+		"budi:x:-1:1001:rayxo:/home/budi:/bin/sh",
+		"budi:x:1001:abc:rayxo:/home/budi:/bin/sh",
+		"budi:x:4294967296:1001:rayxo:/home/budi:/bin/sh",
 	}
 	for _, line := range invalid {
 		if _, err := parsePasswd(line); err == nil {
@@ -61,8 +61,8 @@ func TestParsePasswdRejectsMalformedEntries(t *testing.T) {
 
 func TestParseGroup(t *testing.T) {
 	tests := map[string]Group{
-		"nusa-access:x:998:www-data,budi\n": {Name: "nusa-access", GID: 998, Members: []string{"www-data", "budi"}},
-		"budi:x:1001:":                      {Name: "budi", GID: 1001},
+		"rayxo-access:x:998:www-data,budi\n": {Name: "rayxo-access", GID: 998, Members: []string{"www-data", "budi"}},
+		"budi:x:1001:":                       {Name: "budi", GID: 1001},
 	}
 	for line, want := range tests {
 		group, err := parseGroup(line)

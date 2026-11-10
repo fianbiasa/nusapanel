@@ -15,7 +15,7 @@ class ClosePhpMyAdminSessionsCommand extends Command
     /**
      * @var string
      */
-    protected $signature = 'nusapanel:close-phpmyadmin-sessions';
+    protected $signature = 'rayxo:close-phpmyadmin-sessions';
 
     /**
      * @var string

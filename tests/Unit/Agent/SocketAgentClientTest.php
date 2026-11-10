@@ -23,7 +23,7 @@ class SocketAgentClientTest extends TestCase
     {
         parent::setUp();
 
-        $this->socketPath = sys_get_temp_dir().'/nusa-agent-test-'.bin2hex(random_bytes(4)).'.sock';
+        $this->socketPath = sys_get_temp_dir().'/rayxo-agent-test-'.bin2hex(random_bytes(4)).'.sock';
     }
 
     protected function tearDown(): void

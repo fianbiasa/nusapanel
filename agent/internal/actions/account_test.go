@@ -17,12 +17,12 @@ import (
 	"strings"
 	"testing"
 
-	"nusapanel/agent/internal/database"
-	"nusapanel/agent/internal/quota"
-	"nusapanel/agent/internal/rpc"
-	"nusapanel/agent/internal/runner"
-	"nusapanel/agent/internal/sysuser"
-	"nusapanel/agent/internal/webserver"
+	"rayxo/agent/internal/database"
+	"rayxo/agent/internal/quota"
+	"rayxo/agent/internal/rpc"
+	"rayxo/agent/internal/runner"
+	"rayxo/agent/internal/sysuser"
+	"rayxo/agent/internal/webserver"
 )
 
 var accountMethodNames = []string{"account.create", "account.suspend", "account.unsuspend", "account.delete", "account.set_password"}
@@ -39,7 +39,7 @@ func TestAccountMethodsAreRegistered(t *testing.T) {
 }
 
 func TestAccountMethodsRejectInvalidUsernames(t *testing.T) {
-	invalid := []any{"", "ab", "Budi", "1budi", "budi-s", "budi;id", "../etc", "root", "nusapanel", "www-data", "mysql", 42, nil}
+	invalid := []any{"", "ab", "Budi", "1budi", "budi-s", "budi;id", "../etc", "root", "rayxo", "www-data", "mysql", 42, nil}
 
 	for _, method := range accountMethodNames {
 		for _, username := range invalid {
@@ -111,16 +111,16 @@ func TestCreateMakesTheAccount(t *testing.T) {
 		t.Fatalf("unexpected result %s", result)
 	}
 
-	assertCalls(t, system, "lookup budi", "group nusa-access www-data", "useradd budi", "lookup budi", "prepare /home/budi", "group nusa-sftp budi")
+	assertCalls(t, system, "lookup budi", "group rayxo-access www-data", "useradd budi", "lookup budi", "prepare /home/budi", "group rayxo-sftp budi")
 
 	user := system.users["budi"]
-	if user.Comment != "nusapanel" || user.Shell != "/usr/sbin/nologin" || user.Home != "/home/budi" {
+	if user.Comment != "rayxo" || user.Shell != "/usr/sbin/nologin" || user.Home != "/home/budi" {
 		t.Fatalf("user created with unexpected details: %+v", user)
 	}
 
-	access := system.groups["nusa-access"]
+	access := system.groups["rayxo-access"]
 	if access == nil || !slices.Contains(access.Members, "www-data") {
-		t.Fatalf("www-data is not in nusa-access: %+v", access)
+		t.Fatalf("www-data is not in rayxo-access: %+v", access)
 	}
 
 	want := sysuser.Home{
@@ -160,7 +160,7 @@ func TestCreateIsIdempotent(t *testing.T) {
 		t.Fatalf("results differ: %s and %s", first, second)
 	}
 
-	assertCalls(t, system, "lookup budi", "group nusa-access www-data", "prepare /home/budi", "group nusa-sftp budi")
+	assertCalls(t, system, "lookup budi", "group rayxo-access www-data", "prepare /home/budi", "group rayxo-sftp budi")
 }
 
 func TestCreateReportsNamesTakenByGroups(t *testing.T) {
@@ -179,11 +179,11 @@ func TestForeignAccountsAreNeverChanged(t *testing.T) {
 	foreign := map[string]sysuser.User{
 		"no marker":       {Name: "budi", UID: 1001, GID: 1001, Comment: "Budi Santoso", Home: "/home/budi"},
 		"empty comment":   {Name: "budi", UID: 1001, GID: 1001, Home: "/home/budi"},
-		"marker later":    {Name: "budi", UID: 1001, GID: 1001, Comment: "Budi,nusapanel", Home: "/home/budi"},
-		"system uid":      {Name: "budi", UID: 999, GID: 999, Comment: "nusapanel", Home: "/home/budi"},
-		"root uid":        {Name: "budi", UID: 0, GID: 0, Comment: "nusapanel", Home: "/home/budi"},
-		"home elsewhere":  {Name: "budi", UID: 1001, GID: 1001, Comment: "nusapanel", Home: "/var/www"},
-		"home in a child": {Name: "budi", UID: 1001, GID: 1001, Comment: "nusapanel", Home: "/home/budi/x"},
+		"marker later":    {Name: "budi", UID: 1001, GID: 1001, Comment: "Budi,rayxo", Home: "/home/budi"},
+		"system uid":      {Name: "budi", UID: 999, GID: 999, Comment: "rayxo", Home: "/home/budi"},
+		"root uid":        {Name: "budi", UID: 0, GID: 0, Comment: "rayxo", Home: "/home/budi"},
+		"home elsewhere":  {Name: "budi", UID: 1001, GID: 1001, Comment: "rayxo", Home: "/var/www"},
+		"home in a child": {Name: "budi", UID: 1001, GID: 1001, Comment: "rayxo", Home: "/home/budi/x"},
 	}
 
 	for description, user := range foreign {
@@ -520,7 +520,7 @@ func (f *fakeSystem) runQuota(_ context.Context, program string, args ...string)
 
 // addAccount adds a user that looks like one account.create made.
 func (f *fakeSystem) addAccount(name string, uid int) {
-	f.users[name] = sysuser.User{Name: name, UID: uid, GID: uid, Comment: "nusapanel", Home: "/home/" + name, Shell: "/usr/sbin/nologin"}
+	f.users[name] = sysuser.User{Name: name, UID: uid, GID: uid, Comment: "rayxo", Home: "/home/" + name, Shell: "/usr/sbin/nologin"}
 	f.groups[name] = &sysuser.Group{Name: name, GID: uid}
 }
 
@@ -800,7 +800,7 @@ func TestSetPasswordSetsTheHashAndJoinsTheSFTPGroup(t *testing.T) {
 		t.Fatalf("hash = %q", system.passwords["budi"])
 	}
 
-	assertCalls(t, system, "lookup budi", "group nusa-sftp budi", "password budi")
+	assertCalls(t, system, "lookup budi", "group rayxo-sftp budi", "password budi")
 }
 
 func TestSetPasswordWithoutAHashLocksThePassword(t *testing.T) {

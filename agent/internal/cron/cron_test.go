@@ -67,7 +67,7 @@ func TestRender(t *testing.T) {
 		{Schedule: "@daily", Command: `tar czf backup-$(date +%Y%m%d).tgz site && echo 100\% done`},
 	}))
 
-	want := "# Written by nusapanel from the Cron Jobs page of the panel; changes made here are replaced.\n" +
+	want := "# Written by rayxo from the Cron Jobs page of the panel; changes made here are replaced.\n" +
 		"SHELL=/bin/bash\n" +
 		"PATH=/usr/local/bin:/usr/bin:/bin\n" +
 		"MAILTO=\"\"\n" +

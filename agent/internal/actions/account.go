@@ -10,17 +10,17 @@ import (
 	"regexp"
 	"strings"
 
-	"nusapanel/agent/internal/quota"
-	"nusapanel/agent/internal/rpc"
-	"nusapanel/agent/internal/sysuser"
-	"nusapanel/agent/internal/validate"
+	"rayxo/agent/internal/quota"
+	"rayxo/agent/internal/rpc"
+	"rayxo/agent/internal/sysuser"
+	"rayxo/agent/internal/validate"
 )
 
 // How hosting accounts look on the server (docs/04-agent-dan-server.md 4.4).
 // Every account the panel creates carries accountMarker as its GECOS
 // comment; the account actions never touch a user without it.
 const (
-	accountMarker = "nusapanel"
+	accountMarker = "rayxo"
 	minAccountUID = 1000
 	homeRoot      = "/home"
 	homeMode      = fs.FileMode(0o710)
@@ -28,11 +28,11 @@ const (
 
 	// accessGroup owns every home, so the web server (a member) can reach
 	// the domains inside it but cannot list the home.
-	accessGroup   = "nusa-access"
+	accessGroup   = "rayxo-access"
 	webServerUser = "www-data"
 	// sftpGroup holds every hosting account. sshd gives its members SFTP
 	// only, in their home: no shell, no forwarding (setup.sh configures it).
-	sftpGroup = "nusa-sftp"
+	sftpGroup = "rayxo-sftp"
 )
 
 // passwordHashPattern is a SHA512-CRYPT hash as chpasswd -e takes it.
@@ -165,7 +165,7 @@ func decodeAccountParams(raw json.RawMessage) (accountParams, error) {
 
 // create adds the Linux user for a hosting account, with its own group and
 // home layout, and returns its IDs. Calling it again for an existing
-// nusapanel account repairs the home and returns the same result, so a
+// rayxo account repairs the home and returns the same result, so a
 // failed create can simply be retried.
 func (a accountActions) create(ctx context.Context, raw json.RawMessage) (any, error) {
 	params, err := decodeAccountParams(raw)
@@ -336,7 +336,7 @@ func (a accountActions) remove(ctx context.Context, raw json.RawMessage) (any, e
 	return struct{}{}, nil
 }
 
-// existingAccount decodes params and returns the nusapanel account they
+// existingAccount decodes params and returns the rayxo account they
 // name, failing when it does not exist.
 func (a accountActions) existingAccount(ctx context.Context, raw json.RawMessage) (sysuser.User, error) {
 	params, err := decodeAccountParams(raw)
@@ -347,7 +347,7 @@ func (a accountActions) existingAccount(ctx context.Context, raw json.RawMessage
 	return a.requireAccount(ctx, params.Username)
 }
 
-// requireAccount returns the nusapanel account called name, failing when it
+// requireAccount returns the rayxo account called name, failing when it
 // does not exist.
 func (a accountActions) requireAccount(ctx context.Context, name string) (sysuser.User, error) {
 	user, found, err := a.findAccount(ctx, name)
@@ -358,7 +358,7 @@ func (a accountActions) requireAccount(ctx context.Context, name string) (sysuse
 	return user, err
 }
 
-// findAccount looks up name and makes sure it is an account nusapanel
+// findAccount looks up name and makes sure it is an account rayxo
 // manages. found is false when no user has that name.
 func (a accountActions) findAccount(ctx context.Context, name string) (user sysuser.User, found bool, err error) {
 	user, err = a.system.LookupUser(ctx, name)

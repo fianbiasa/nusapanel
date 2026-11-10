@@ -200,12 +200,12 @@ Pembagian level sama seperti DirectAdmin:
 
 ### Notifikasi & integrasi
 
-| Fitur         | Keterangan                                                                                 | Fase |
-| ------------- | ------------------------------------------------------------------------------------------ | ---- |
-| CLI `nusactl` | Operasi lewat terminal                                                                     | P1   |
-| Notifikasi    | Email & Telegram ★: service mati, disk penuh, user lewat quota, backup gagal, SSL gagal    | P3   |
-| REST API      | Semua aksi panel tersedia lewat API                                                        | P3   |
-| Modul WHMCS   | Create, suspend, unsuspend, terminate, ganti paket, ganti password, SSO, sinkron pemakaian | P4   |
+| Fitur       | Keterangan                                                                                 | Fase |
+| ----------- | ------------------------------------------------------------------------------------------ | ---- |
+| CLI `rayxo` | Operasi lewat terminal                                                                     | P1   |
+| Notifikasi  | Email & Telegram ★: service mati, disk penuh, user lewat quota, backup gagal, SSL gagal    | P3   |
+| REST API    | Semua aksi panel tersedia lewat API                                                        | P3   |
+| Modul WHMCS | Create, suspend, unsuspend, terminate, ganti paket, ganti password, SSO, sinkron pemakaian | P4   |
 
 ---
 

@@ -46,10 +46,10 @@ class PhpMyAdminTest extends TestCase
         $response = $this->actingAs($account)
             ->postJson(route('databases.phpmyadmin'))
             ->assertOk()
-            ->assertJsonPath('url', 'https://server.test/phpmyadmin/nusapanel-sso.php')
+            ->assertJsonPath('url', 'https://server.test/phpmyadmin/rayxo-sso.php')
             ->assertHeader('Cache-Control', 'no-store, private');
 
-        $cookie = $response->getCookie('nusa_pma_binding', decrypt: false);
+        $cookie = $response->getCookie('rayxo_pma_binding', decrypt: false);
         $this->assertNotNull($cookie);
         $this->assertSame('/phpmyadmin/', $cookie->getPath());
         $this->assertTrue($cookie->isSecure());
@@ -137,7 +137,7 @@ class PhpMyAdminTest extends TestCase
             ->postJson(route('databases.phpmyadmin'))
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['phpmyadmin' => 'phpMyAdmin could not be opened. Try again in a moment.'])
-            ->assertCookieMissing('nusa_pma_binding');
+            ->assertCookieMissing('rayxo_pma_binding');
 
         $this->assertNull($account->fresh()->phpmyadmin_expires_at);
     }
@@ -156,7 +156,7 @@ class PhpMyAdminTest extends TestCase
         $running = User::factory()->create(['username' => 'sari', 'phpmyadmin_expires_at' => now()->addMinutes(30)]);
         User::factory()->create(['username' => 'joko']);
 
-        $this->artisan('nusapanel:close-phpmyadmin-sessions')
+        $this->artisan('rayxo:close-phpmyadmin-sessions')
             ->expectsOutputToContain('1 phpMyAdmin session ended.')
             ->assertSuccessful();
 
@@ -172,7 +172,7 @@ class PhpMyAdminTest extends TestCase
             ->andThrow(new AgentException('agent is not running')));
         $account = User::factory()->create(['username' => 'budi', 'phpmyadmin_expires_at' => now()->subMinute()]);
 
-        $this->artisan('nusapanel:close-phpmyadmin-sessions')
+        $this->artisan('rayxo:close-phpmyadmin-sessions')
             ->expectsOutputToContain('0 phpMyAdmin sessions ended.')
             ->assertSuccessful();
 

@@ -11,7 +11,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// collect on macOS exists only so nusad can run next to the panel in Herd
+// collect on macOS exists only so rayxod can run next to the panel in Herd
 // during development. Used memory approximates Activity Monitor's "Memory
 // Used": total minus free, speculative, file-cache and purgeable pages.
 func collect() (*Info, error) {

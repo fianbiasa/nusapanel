@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 #
-# nusapanel installer for a fresh Ubuntu 24.04 server. Run as root:
+# RAYXO installer for a fresh Ubuntu 24.04 server. Run as root:
 #
 #   wget https://<release-host>/setup.sh
-#   bash setup.sh --release-url https://<release-host>/nusapanel-<version>-linux-amd64.tar.gz \
+#   bash setup.sh --release-url https://<release-host>/rayxo-<version>-linux-amd64.tar.gz \
 #                 --admin-email you@example.com
 #
 # or with a release package already copied to the server:
 #
-#   bash setup.sh --package nusapanel-<version>-linux-amd64.tar.gz --admin-email you@example.com
+#   bash setup.sh --package rayxo-<version>-linux-amd64.tar.gz --admin-email you@example.com
 #
 # Safe to run again: every step checks what is already done, so a run that
 # stopped halfway can simply be repeated.
@@ -25,39 +25,47 @@ readonly PHP_BIN="/usr/bin/php$PHP_VERSION"
 # package a version does not have (8.5 has opcache built in) is skipped.
 readonly DEFAULT_SITE_PHP_VERSIONS="7.4 8.0 8.1 8.2 8.3 8.4 8.5"
 readonly SITE_PHP_PACKAGES="fpm cli common mysql mbstring xml curl intl zip bcmath opcache readline gd imagick soap"
-readonly PANEL_USER="nusapanel"
+readonly PANEL_USER="rayxo"
 readonly PANEL_PORT="2222"
-readonly INSTALL_DIR="/usr/local/nusapanel"
-readonly CONFIG_DIR="/etc/nusapanel"
-readonly DATA_DIR="/var/lib/nusapanel"
-readonly LOG_DIR="/var/log/nusapanel"
+readonly INSTALL_DIR="/usr/local/rayxo"
+readonly CONFIG_DIR="/etc/rayxo"
+readonly DATA_DIR="/var/lib/rayxo"
+readonly LOG_DIR="/var/log/rayxo"
 readonly ENV_FILE="$CONFIG_DIR/panel.env"
-readonly AGENT_SOCKET="/run/nusapanel/agent.sock"
-readonly INSTALL_LOG="/var/log/nusapanel-install.log"
-readonly ACME_DIR="/var/www/nusapanel-acme"
+readonly AGENT_SOCKET="/run/rayxo/agent.sock"
+readonly INSTALL_LOG="/var/log/rayxo-install.log"
+readonly ACME_DIR="/var/www/rayxo-acme"
 # phpMyAdmin runs as its own user, which can read neither the panel's
 # configuration nor customer files. These paths are also in
 # installer/files/php-fpm-phpmyadmin.conf, phpmyadmin-config.inc.php and
 # phpmyadmin-sso.php.
-readonly PMA_USER="nusa-pma"
-readonly PMA_CONFIG_DIR="/etc/nusa-pma"
-readonly PMA_DATA_DIR="/var/lib/nusa-pma"
+readonly PMA_USER="rayxo-pma"
+readonly PMA_CONFIG_DIR="/etc/rayxo-pma"
+readonly PMA_DATA_DIR="/var/lib/rayxo-pma"
 # Pure-FTPd reads FTP logins from the panel's database as this MariaDB user,
 # which may only read the v_ftp_users view. The hyphen keeps it out of the
 # names customers can give their database users (<username>_<name>).
-readonly FTP_DB_USER="nusapanel-ftp"
+readonly FTP_DB_USER="rayxo-ftp"
 readonly FTP_PASSIVE_PORTS="35000 35999"
 # Pure-FTPd reads its key and certificate from this one file, and only at start.
 readonly FTP_CERTIFICATE="/etc/ssl/private/pure-ftpd.pem"
 # Every hosting account is in this group; sshd gives its members SFTP only
 # (installer/files/sshd-sftp.conf). The agent adds new accounts.
-readonly SFTP_GROUP="nusa-sftp"
-readonly SFTP_SSHD_CONF="/etc/ssh/sshd_config.d/nusapanel-sftp.conf"
-readonly DKIM_SELECTOR="nusapanel"
+readonly SFTP_GROUP="rayxo-sftp"
+readonly SFTP_SSHD_CONF="/etc/ssh/sshd_config.d/rayxo-sftp.conf"
+# A server installed before the rename keeps signing with "nusapanel"
+# (configure_dkim), so the DKIM record its DNS already has stays valid.
+DKIM_SELECTOR="rayxo"
+# Before RAYXO the panel was called nusapanel. migrate_from_nusapanel moves a
+# server installed then to the new names, keeping its accounts, websites,
+# ids and database; finish_rename_migration removes what is left of the old
+# names once the agent has written every website again.
+readonly LEGACY_CONFIG_DIR="/etc/nusapanel"
+readonly MIGRATION_MARKER="$CONFIG_DIR/.nusapanel-migration-pending"
 readonly DNS_REPORT="$CONFIG_DIR/dns-records.txt"
-readonly RELEASE_REPO="fianbiasa/nusapanel"
+readonly RELEASE_REPO="fianbiasa/rayxo"
 readonly POLICY_RC="/usr/sbin/policy-rc.d"
-readonly POLICY_RC_MARKER="# nusapanel setup.sh: temporary"
+readonly POLICY_RC_MARKER="# rayxo setup.sh: temporary"
 # The site PHP versions installed so far, one per line, so an upgrade keeps
 # installing (and configuring) the same ones.
 readonly PHP_VERSIONS_FILE="$CONFIG_DIR/php-versions"
@@ -68,7 +76,7 @@ readonly QUOTA_OPTIONS="usrjquota=aquota.user,jqfmt=vfsv1"
 # Stamped by installer/build-release.sh into the setup.sh published with each
 # release, so that script installs its own version by default. Empty in the
 # repository, where setup.sh installs the latest release instead.
-NUSAPANEL_VERSION=""
+RAYXO_VERSION=""
 
 package_file=""
 release_url=""
@@ -100,6 +108,8 @@ dns_report_lines=()
 quota_mount=""
 # Set while our temporary policy-rc.d is in place.
 policy_rc_created=0
+# Set by preflight when this server still has (some of) its nusapanel names.
+rename_needed=0
 # The PHP versions websites can use, resolved by resolve_php_versions.
 site_php_versions=()
 
@@ -121,7 +131,7 @@ usage() {
     cat <<'USAGE'
 Pemakaian: bash setup.sh [opsi]
 
-Sumber paket (default: rilis dari github.com/fianbiasa/nusapanel):
+Sumber paket (default: rilis dari github.com/fianbiasa/rayxo):
   --version X           pasang versi tertentu, misalnya 0.2.0 (default: versi rilis
                         setup.sh ini, atau rilis terbaru)
   --package FILE        file rilis .tar.gz yang sudah ada di server
@@ -345,7 +355,7 @@ normalize_ipv6() {
 # version given with --version, the version this setup.sh was released with,
 # or else the latest release.
 resolve_github_release() {
-    local wanted="${requested_version:-$NUSAPANEL_VERSION}"
+    local wanted="${requested_version:-$RAYXO_VERSION}"
 
     if [[ -z "$wanted" ]]; then
         wanted="$(latest_release_version)" ||
@@ -355,7 +365,7 @@ resolve_github_release() {
     local version_re='^[0-9A-Za-z][0-9A-Za-z._-]*$'
     [[ "$wanted" =~ $version_re ]] || die "versi tidak valid: $wanted"
 
-    release_url="https://github.com/$RELEASE_REPO/releases/download/v$wanted/nusapanel-$wanted-linux-$arch.tar.gz"
+    release_url="https://github.com/$RELEASE_REPO/releases/download/v$wanted/rayxo-$wanted-linux-$arch.tar.gz"
 }
 
 latest_release_version() {
@@ -376,6 +386,30 @@ is_private_ip() {
     [[ "$1" =~ $private_re ]]
 }
 
+# Whether setup.sh left marker file $1 in its configuration directory, which
+# on a server still to be migrated is the old one.
+has_setup_marker() {
+    [[ -f "$CONFIG_DIR/$1" || -f "$LEGACY_CONFIG_DIR/$1" ]]
+}
+
+# Whether this server still has something of its nusapanel install: the old
+# configuration directory, users, groups or services, or a migration that
+# has not been finished.
+has_nusapanel_install() {
+    [[ (-d "$LEGACY_CONFIG_DIR" && ! -L "$LEGACY_CONFIG_DIR") || -f "$MIGRATION_MARKER" ||
+        -f /etc/systemd/system/nusad.service ]] && return 0
+
+    local name
+    for name in nusapanel nusa-pma; do
+        getent passwd "$name" >/dev/null && return 0
+    done
+    for name in nusapanel nusa-pma nusa-access nusa-sftp; do
+        getent group "$name" >/dev/null && return 0
+    done
+
+    return 1
+}
+
 preflight() {
     step "Memeriksa server"
 
@@ -387,7 +421,7 @@ preflight() {
     os_name="$(. /etc/os-release && printf '%s' "${PRETTY_NAME:-tidak diketahui}")"
 
     if [[ "$os_id" != ubuntu || "$os_version" != 24.04 ]]; then
-        die "nusapanel saat ini hanya mendukung Ubuntu 24.04 LTS (terdeteksi: $os_name)"
+        die "RAYXO saat ini hanya mendukung Ubuntu 24.04 LTS (terdeteksi: $os_name)"
     fi
 
     case "$(uname -m)" in
@@ -423,12 +457,16 @@ preflight() {
     for other_panel in /usr/local/cpanel /usr/local/directadmin /usr/local/hestia /usr/local/vesta \
         /usr/local/CyberCP /usr/local/ispconfig /www/server/panel /etc/webmin; do
         if [[ -e "$other_panel" ]]; then
-            die "panel lain terdeteksi di $other_panel; pasang nusapanel di server baru"
+            die "panel lain terdeteksi di $other_panel; pasang RAYXO di server baru"
         fi
     done
 
+    if has_nusapanel_install; then
+        rename_needed=1
+    fi
+
     # A server we already started installing on is allowed to have our own packages.
-    if [[ ! -f "$CONFIG_DIR/.setup-started" && $force -eq 0 ]]; then
+    if ! has_setup_marker .setup-started && ((force == 0)); then
         local package
         for package in apache2 nginx mysql-server mariadb-server "php$PHP_VERSION-fpm"; do
             if dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q "install ok installed"; then
@@ -456,7 +494,7 @@ preflight() {
     local username_re='^[a-z][a-z0-9]{2,15}$'
     [[ "$admin_user" =~ $username_re ]] || die "username admin harus 3-16 huruf kecil/angka dan diawali huruf"
 
-    if [[ -z "$admin_email" && ! -f "$CONFIG_DIR/admin-created" ]]; then
+    if [[ -z "$admin_email" ]] && ! has_setup_marker admin-created; then
         if { : </dev/tty; } 2>/dev/null; then
             read -r -p "Email admin pertama: " admin_email </dev/tty
         else
@@ -465,7 +503,7 @@ preflight() {
     fi
 
     local email_re='^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$'
-    if [[ ! -f "$CONFIG_DIR/admin-created" && ! "$admin_email" =~ $email_re ]]; then
+    if ! has_setup_marker admin-created && [[ ! "$admin_email" =~ $email_re ]]; then
         die "email admin tidak valid: $admin_email"
     fi
 
@@ -558,10 +596,15 @@ confirm() {
     info "Paket    : ${package_file:-$release_url}"
     info "Admin    : $admin_user ${admin_email:+<$admin_email>}"
     info "Panel    : https://$server_hostname:$PANEL_PORT"
-    info "Dipasang : Nginx + Apache, MariaDB, PHP ${site_php_versions[*]} (repo ondrej/php), Postfix + DKIM (kirim-saja), agent nusad"
+    info "Dipasang : Nginx + Apache, MariaDB, PHP ${site_php_versions[*]} (repo ondrej/php), Postfix + DKIM (kirim-saja), agent rayxod"
     if ((skip_dns_check == 0)); then
         info "SSL      : Let's Encrypt untuk $server_hostname, diperpanjang otomatis"
         info "           (dengan melanjutkan, kamu menyetujui Let's Encrypt Subscriber Agreement)"
+    fi
+    if ((rename_needed)); then
+        info "Migrasi  : nusapanel di server ini dipindah ke nama RAYXO (user, folder, database,"
+        info "           service). Akun, website, database dan email tetap; website terus dilayani"
+        info "           konfigurasi lama sampai agent selesai menulis yang baru. Backup di /root."
     fi
 
     if ((assume_yes)); then
@@ -577,6 +620,368 @@ confirm() {
     [[ "$answer" == y || "$answer" == Y ]] || die "dibatalkan"
 }
 
+# Copy what the migration changes to a root-only folder in /root first: the
+# configuration of every service involved and a dump of the panel database.
+backup_nusapanel() {
+    if ! command -v mariadb-dump >/dev/null; then
+        die "mariadb-dump tidak ditemukan; database nusapanel tidak bisa di-backup"
+    fi
+
+    local dir path paths=()
+    dir="/root/rayxo-migration-$(date +%Y%m%d-%H%M%S)"
+    install -d -m 0700 "$dir"
+
+    for path in etc/nusapanel etc/nusa-pma etc/nginx etc/apache2 etc/php etc/ssh etc/pure-ftpd etc/letsencrypt \
+        etc/logrotate.d etc/systemd/system etc/opendkim etc/passwd etc/group etc/shadow etc/gshadow var/lib/nusa-pma; do
+        if [[ -e "/$path" ]]; then
+            paths+=("$path")
+        fi
+    done
+    tar -czf "$dir/config.tar.gz" -C / "${paths[@]}"
+
+    if [[ "$(mariadb -N -B -e "SHOW DATABASES LIKE 'nusapanel'")" == nusapanel ]]; then
+        mariadb-dump --single-transaction --routines --events nusapanel | gzip >"$dir/nusapanel.sql.gz"
+    fi
+
+    info "Backup konfigurasi dan database lama: $dir"
+}
+
+# Stop what still runs as user $1: usermod cannot rename a user in use.
+stop_user_processes() {
+    local name="$1" attempt
+
+    pkill -TERM -u "$name" || true
+    for attempt in $(seq 1 20); do
+        if ! pgrep -u "$name" >/dev/null; then
+            return 0
+        fi
+        sleep 0.5
+    done
+
+    die "proses user $name masih berjalan (cek: ps -u $name); hentikan dulu lalu jalankan setup.sh lagi"
+}
+
+# Rename group $1 to $2. The gid stays, so files and members keep it.
+rename_legacy_group() {
+    local old="$1" new="$2"
+
+    if getent group "$old" >/dev/null; then
+        if getent group "$new" >/dev/null; then
+            die "grup $old dan $new sama-sama ada; gabungkan secara manual lalu jalankan setup.sh lagi"
+        fi
+        groupmod --new-name "$new" "$old"
+    fi
+}
+
+# Rename system user $1, and its group, to $2 with home $3. The uid stays.
+rename_legacy_user() {
+    local old="$1" new="$2" home="$3"
+
+    if getent passwd "$old" >/dev/null; then
+        if getent passwd "$new" >/dev/null; then
+            die "user $old dan $new sama-sama ada; hapus salah satunya lalu jalankan setup.sh lagi"
+        fi
+        stop_user_processes "$old"
+        usermod --login "$new" --home "$home" "$old"
+    fi
+
+    rename_legacy_group "$old" "$new"
+}
+
+# Move directory $1 to $2 and leave a symlink at $1, so configuration that
+# still names the old path (websites, running PHP pools) keeps working until
+# finish_rename_migration has seen it written again.
+move_legacy_dir() {
+    local old="$1" new="$2"
+
+    if [[ ! -d "$old" || -L "$old" ]]; then
+        return 0
+    fi
+
+    if [[ -e "$new" ]] && ! rmdir "$new" 2>/dev/null; then
+        die "$old dan $new sama-sama ada; pindahkan isinya secara manual lalu jalankan setup.sh lagi"
+    fi
+
+    mv -T "$old" "$new"
+    ln -s "$new" "$old"
+}
+
+# Move the panel's tables to the database "rayxo". Views cannot move between
+# databases, so v_ftp_users is dropped; a panel migration creates it again.
+# The old MariaDB users go too: setup_database and configure_ftp create
+# those of the new names.
+rename_legacy_database() {
+    if ! command -v mariadb >/dev/null ||
+        [[ "$(mariadb -N -B -e "SHOW DATABASES LIKE 'nusapanel'")" != nusapanel ]]; then
+        return 0
+    fi
+
+    local old_tables new_tables
+    old_tables="$(mariadb -N -B -e "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'nusapanel' AND TABLE_TYPE = 'BASE TABLE'")"
+    new_tables="$(mariadb -N -B -e "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'rayxo'")"
+
+    if ((old_tables > 0 && new_tables > 0)); then
+        die "database nusapanel dan rayxo sama-sama berisi tabel; pindahkan secara manual lalu jalankan setup.sh lagi"
+    fi
+
+    mariadb <<'SQL'
+CREATE DATABASE IF NOT EXISTS `rayxo` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+SET @views = (SELECT GROUP_CONCAT(CONCAT('`nusapanel`.`', TABLE_NAME, '`')) FROM information_schema.TABLES
+    WHERE TABLE_SCHEMA = 'nusapanel' AND TABLE_TYPE = 'VIEW');
+EXECUTE IMMEDIATE IF(@views IS NULL, 'DO 0', CONCAT('DROP VIEW ', @views));
+SET @tables = (SELECT GROUP_CONCAT(CONCAT('`nusapanel`.`', TABLE_NAME, '` TO `rayxo`.`', TABLE_NAME, '`'))
+    FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'nusapanel' AND TABLE_TYPE = 'BASE TABLE');
+EXECUTE IMMEDIATE IF(@tables IS NULL, 'DO 0', CONCAT('RENAME TABLE ', @tables));
+SQL
+
+    local left foreign
+    left="$(mariadb -N -B -e "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'nusapanel'")"
+    foreign="$(mariadb -N -B -e "SELECT COUNT(*) FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = 'rayxo' AND UNIQUE_CONSTRAINT_SCHEMA <> 'rayxo'")"
+    if ((left > 0 || foreign > 0)); then
+        die "tabel panel tidak pindah dengan bersih ke database rayxo; database nusapanel dibiarkan (backup ada di /root)"
+    fi
+
+    mariadb <<'SQL'
+DROP DATABASE `nusapanel`;
+DROP USER IF EXISTS 'nusapanel'@'localhost', 'nusapanel'@'127.0.0.1', 'nusapanel-ftp'@'localhost';
+SQL
+
+    info "Tabel panel dipindah ke database rayxo"
+}
+
+# The panel's settings that name the old install. A name changed by hand is kept.
+rename_legacy_env() {
+    if [[ ! -f "$ENV_FILE" ]]; then
+        return 0
+    fi
+
+    sed -i -E \
+        -e 's/^NUSAPANEL_/RAYXO_/' \
+        -e 's/^APP_NAME="?nusapanel"?$/APP_NAME=RAYXO/I' \
+        -e 's/^MAIL_FROM_NAME="?nusapanel"?$/MAIL_FROM_NAME=RAYXO/I' \
+        -e 's/^MAIL_FROM_ADDRESS=nusapanel@/MAIL_FROM_ADDRESS=rayxo@/' \
+        -e 's/^DB_DATABASE=nusapanel$/DB_DATABASE=rayxo/' \
+        -e 's/^DB_USERNAME=nusapanel$/DB_USERNAME=rayxo/' \
+        -e 's|^AGENT_SOCKET=/run/nusapanel/agent\.sock$|AGENT_SOCKET=/run/rayxo/agent.sock|' \
+        "$ENV_FILE"
+    chown "root:$PANEL_USER" "$ENV_FILE"
+    chmod 0640 "$ENV_FILE"
+}
+
+# Move a server installed as nusapanel to the RAYXO names. Every step checks
+# whether it is still needed, so a run that stopped halfway can be repeated.
+# Hosting accounts, their files, websites, databases and mail stay as they
+# are; websites keep being served by their old configuration (still loaded
+# by Nginx and Apache, with its PHP pools running) until the agent has
+# written the new one, and finish_rename_migration removes the old.
+migrate_from_nusapanel() {
+    if ((rename_needed == 0)); then
+        return 0
+    fi
+
+    step "Memindahkan nusapanel ke nama RAYXO"
+
+    if [[ -d "$LEGACY_CONFIG_DIR" && ! -L "$LEGACY_CONFIG_DIR" ]]; then
+        backup_nusapanel
+    fi
+
+    # The panel, its agent and phpMyAdmin stop until the new ones start;
+    # websites are not affected.
+    local unit
+    for unit in nusapanel-scheduler.timer nusapanel-scheduler.service nusapanel-queue.service nusad.service; do
+        if [[ -f "/etc/systemd/system/$unit" ]]; then
+            quietly systemctl disable --now "$unit"
+            rm -f "/etc/systemd/system/$unit"
+        fi
+    done
+    systemctl daemon-reload
+
+    local pool_dir="/etc/php/$PHP_VERSION/fpm/pool.d"
+    if [[ -f "$pool_dir/nusapanel.conf" || -f "$pool_dir/nusapanel-phpmyadmin.conf" ]]; then
+        systemctl stop "php$PHP_VERSION-fpm"
+        rm -f "$pool_dir/nusapanel.conf" "$pool_dir/nusapanel-phpmyadmin.conf"
+
+        # PHP-FPM does not start without a pool, and install_packages starts
+        # it; configure_php_fpm adds the panel's pools and turns "www" off again.
+        if ! compgen -G "$pool_dir/*.conf" >/dev/null && [[ -f "$pool_dir/www.conf.disabled" ]]; then
+            mv "$pool_dir/www.conf.disabled" "$pool_dir/www.conf"
+        fi
+    fi
+
+    # SFTP: sshd matches the new group name before the group is renamed, so
+    # accounts never log in without the SFTP-only rules.
+    local old_sftp_conf=/etc/ssh/sshd_config.d/nusapanel-sftp.conf
+    if [[ -f "$old_sftp_conf" ]]; then
+        sed 's/nusa-sftp/rayxo-sftp/g' "$old_sftp_conf" >"$SFTP_SSHD_CONF"
+        chmod 0644 "$SFTP_SSHD_CONF"
+        install -d -m 0755 /run/sshd
+        if ! /usr/sbin/sshd -t >>"$INSTALL_LOG" 2>&1; then
+            rm -f "$SFTP_SSHD_CONF"
+            die "sshd menolak konfigurasi SFTP baru; konfigurasi lama tetap dipakai (detail di $INSTALL_LOG)"
+        fi
+        quietly systemctl try-reload-or-restart ssh.service
+    fi
+
+    rename_legacy_group nusa-sftp "$SFTP_GROUP"
+    rename_legacy_group nusa-access rayxo-access
+
+    if [[ -f "$old_sftp_conf" ]]; then
+        rm -f "$old_sftp_conf"
+        quietly systemctl try-reload-or-restart ssh.service
+    fi
+
+    rename_legacy_user nusapanel "$PANEL_USER" "$DATA_DIR"
+    rename_legacy_user nusa-pma "$PMA_USER" "$PMA_DATA_DIR"
+
+    # Hosting accounts are recognised by their GECOS comment.
+    local name comment
+    while IFS=: read -r name comment; do
+        quietly usermod --comment "rayxo${comment#nusapanel}" "$name"
+    done < <(getent passwd | awk -F: '$3 >= 1000 && $5 ~ /^nusapanel(,|$)/ {print $1 ":" $5}')
+
+    move_legacy_dir "$LEGACY_CONFIG_DIR" "$CONFIG_DIR"
+    move_legacy_dir /etc/nusa-pma "$PMA_CONFIG_DIR"
+    move_legacy_dir /var/lib/nusapanel "$DATA_DIR"
+    move_legacy_dir /var/lib/nusa-pma "$PMA_DATA_DIR"
+    move_legacy_dir /var/log/nusapanel "$LOG_DIR"
+    move_legacy_dir /var/www/nusapanel-acme "$ACME_DIR"
+
+    rename_legacy_database
+    rename_legacy_env
+
+    # The panel's own Nginx sites keep their content until configure_* write
+    # them again in this run.
+    local site new_site
+    for site in /etc/nginx/sites-available/nusapanel*.conf; do
+        if [[ ! -f "$site" ]]; then
+            continue
+        fi
+        new_site="/etc/nginx/sites-available/rayxo${site#/etc/nginx/sites-available/nusapanel}"
+        mv -f "$site" "$new_site"
+        if [[ -L "/etc/nginx/sites-enabled/${site##*/}" ]]; then
+            rm -f "/etc/nginx/sites-enabled/${site##*/}"
+            ln -sfn "$new_site" "/etc/nginx/sites-enabled/${new_site##*/}"
+        fi
+    done
+
+    local renewal
+    for renewal in /etc/letsencrypt/renewal/*.conf; do
+        if [[ -f "$renewal" ]] && grep -qF /var/www/nusapanel-acme "$renewal"; then
+            sed -i "s|/var/www/nusapanel-acme|$ACME_DIR|g" "$renewal"
+        fi
+    done
+
+    # Their replacements are written later in this run.
+    rm -f /etc/letsencrypt/renewal-hooks/deploy/nusapanel-reload.sh /etc/logrotate.d/nusapanel /usr/local/bin/nusactl
+
+    if [[ -f /var/log/nusapanel-install.log && -d "$LOG_DIR" ]]; then
+        mv /var/log/nusapanel-install.log "$LOG_DIR/nusapanel-install.log"
+    fi
+
+    # finish_rename_migration waits for the websites queued after this moment.
+    date -u '+%Y-%m-%d %H:%M:%S' >"$MIGRATION_MARKER"
+    info "User, grup, folder, database dan service sekarang memakai nama RAYXO"
+}
+
+# Remove what is left of the nusapanel names once the agent has written every
+# website again: the old Nginx and Apache includes, the old PHP pools, and
+# the symlinks at the old paths. Nothing is removed while websites still
+# wait for the agent or could not be written; a later run tries again.
+finish_rename_migration() {
+    if [[ ! -f "$MIGRATION_MARKER" ]]; then
+        return 0
+    fi
+
+    step "Menyelesaikan perpindahan ke RAYXO"
+
+    local since pending="" failed attempt
+    since="$(head -n 1 "$MIGRATION_MARKER")"
+    if [[ ! "$since" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}$ ]]; then
+        since="$(date -u '+%Y-%m-%d %H:%M:%S')"
+    fi
+
+    info "Menunggu agent menulis ulang konfigurasi semua website (paling lama 10 menit)"
+    for attempt in $(seq 1 120); do
+        pending="$(mariadb -N -B rayxo -e "SELECT COUNT(*) FROM tasks WHERE action LIKE 'web.%' AND status IN ('queued', 'running') AND created_at >= '$since'")"
+        if [[ "$pending" == 0 ]]; then
+            break
+        fi
+        sleep 5
+    done
+    failed="$(mariadb -N -B rayxo -e "SELECT COUNT(*) FROM tasks WHERE action LIKE 'web.%' AND status = 'failed' AND created_at >= '$since'")"
+
+    if [[ "$pending" != 0 || "$failed" != 0 ]]; then
+        warn "$pending website belum selesai dan $failed gagal ditulis ulang; website tetap dilayani konfigurasi lama."
+        warn "Cek Tasks di panel, lalu jalankan setup.sh lagi untuk menyelesaikan perpindahan."
+        return 0
+    fi
+
+    # Websites the panel did not write again are not active there.
+    local old_vhost orphans=()
+    for old_vhost in /etc/nginx/nusapanel/*/*.conf; do
+        if [[ -f "$old_vhost" && ! -f "/etc/nginx/rayxo/${old_vhost#/etc/nginx/nusapanel/}" ]]; then
+            orphans+=("$(basename "$old_vhost" .conf)")
+        fi
+    done
+    if ((${#orphans[@]} > 0)); then
+        warn "tidak aktif di panel, jadi tidak dilayani lagi: ${orphans[*]}"
+    fi
+
+    local legacy_sites=/etc/nginx/conf.d/nusapanel-sites.conf
+    if [[ -f "$legacy_sites" ]]; then
+        rm -f "$legacy_sites"
+        if ! nginx -t >>"$INSTALL_LOG" 2>&1; then
+            printf 'include /etc/nginx/nusapanel/*/*.conf;\n' >"$legacy_sites"
+            warn "Nginx menolak konfigurasi tanpa include lama, jadi include lama dipasang lagi (detail di $INSTALL_LOG)"
+            return 0
+        fi
+        systemctl reload nginx
+    fi
+
+    if [[ -e /etc/apache2/conf-available/nusapanel.conf ]]; then
+        if [[ -e /etc/apache2/conf-enabled/nusapanel.conf ]]; then
+            quietly a2disconf -q nusapanel
+        fi
+        rm -f /etc/apache2/conf-available/nusapanel.conf
+        quietly apache2ctl configtest
+        quietly systemctl reload apache2
+    fi
+    rm -rf /etc/nginx/nusapanel /etc/apache2/nusapanel
+
+    # Websites now run in rayxo-php<ver>@<user>.
+    local unit
+    while read -r unit _; do
+        quietly systemctl disable --now "$unit"
+    done < <(systemctl list-units --all --plain --no-legend 'nusa-php*@*.service' || true)
+    find /etc/systemd/system -name 'nusa-php*@*.service' \( -type f -o -type l \) -delete
+    systemctl daemon-reload
+    systemctl reset-failed 'nusa-php*' >/dev/null 2>&1 || true
+    rm -rf /run/nusa-php
+
+    local old_paths=(/etc/nusapanel /etc/nusa-pma /var/lib/nusapanel /var/lib/nusa-pma /var/log/nusapanel
+        /var/www/nusapanel-acme /usr/local/nusapanel)
+    local path patterns=() in_use
+    for path in "${old_paths[@]}"; do
+        patterns+=(-e "$path")
+    done
+    in_use="$(grep -rIlsF "${patterns[@]}" /etc/nginx /etc/apache2 /etc/php /etc/systemd/system /etc/letsencrypt/renewal \
+        /etc/letsencrypt/renewal-hooks /etc/pure-ftpd /etc/ssh /etc/logrotate.d "$CONFIG_DIR" "$PMA_CONFIG_DIR" || true)"
+
+    if [[ -n "$in_use" ]]; then
+        warn "path lama masih disebut di $(paste -sd ' ' <<<"$in_use"); symlink lama dan /usr/local/nusapanel dibiarkan"
+    else
+        for path in "${old_paths[@]}"; do
+            if [[ -L "$path" ]]; then
+                rm -f "$path"
+            fi
+        done
+        rm -rf /usr/local/nusapanel
+    fi
+
+    rm -f "$MIGRATION_MARKER"
+    info "Perpindahan ke RAYXO selesai; konfigurasi nusapanel yang lama sudah dihapus"
+}
+
 create_layout() {
     step "Menyiapkan user dan folder"
 
@@ -586,13 +991,13 @@ create_layout() {
         info "User sistem $PANEL_USER dibuat"
     fi
 
-    # Hosting homes are 0710 <user>:nusa-access, so only the web server can
+    # Hosting homes are 0710 <user>:rayxo-access, so only the web server can
     # enter them. Created before any web server starts, so its workers get
     # the group without a restart.
-    if ! getent group nusa-access >/dev/null; then
-        groupadd --system nusa-access
+    if ! getent group rayxo-access >/dev/null; then
+        groupadd --system rayxo-access
     fi
-    usermod -aG nusa-access www-data
+    usermod -aG rayxo-access www-data
 
     install -d -m 0755 -o root -g root "$INSTALL_DIR" "$INSTALL_DIR/releases"
     install -d -m 0750 -o root -g "$PANEL_USER" "$CONFIG_DIR"
@@ -687,11 +1092,16 @@ DEBCONF
 # the defaults on a first install without the option. The panel's own
 # version is always one of them. Versions are never removed here.
 resolve_php_versions() {
-    local list="" v
+    local list="" v versions_file="$PHP_VERSIONS_FILE"
     local -A seen=()
 
-    if [[ -s "$PHP_VERSIONS_FILE" ]]; then
-        list="$(tr '\n' ' ' <"$PHP_VERSIONS_FILE")"
+    # Read before migrate_from_nusapanel has moved the old directory.
+    if [[ ! -s "$versions_file" && -s "$LEGACY_CONFIG_DIR/php-versions" ]]; then
+        versions_file="$LEGACY_CONFIG_DIR/php-versions"
+    fi
+
+    if [[ -s "$versions_file" ]]; then
+        list="$(tr '\n' ' ' <"$versions_file")"
     elif [[ -z "$requested_php_versions" ]]; then
         list="$DEFAULT_SITE_PHP_VERSIONS"
     fi
@@ -711,7 +1121,7 @@ resolve_php_versions() {
 }
 
 # Every site PHP version with the extensions WordPress and most PHP apps
-# need. Websites run in the agent's pools per account (nusa-php<ver>@<user>),
+# need. Websites run in the agent's pools per account (rayxo-php<ver>@<user>),
 # so the distribution's own PHP-FPM service of each version stays off; only
 # that of the panel's version runs, with the panel's pool.
 install_site_php() {
@@ -745,7 +1155,7 @@ install_site_php() {
 
         # Running pools load newly installed extensions; stopped ones (of
         # suspended accounts) stay stopped.
-        systemctl try-reload-or-restart 'nusa-php*@*.service' >>"$INSTALL_LOG" 2>&1 ||
+        systemctl try-reload-or-restart 'rayxo-php*@*.service' >>"$INSTALL_LOG" 2>&1 ||
             warn "pool PHP website tidak bisa dimuat ulang; ekstensi baru aktif setelah pool di-restart"
     fi
 
@@ -760,7 +1170,7 @@ install_site_php() {
 }
 
 fetch_release() {
-    step "Mengambil paket nusapanel"
+    step "Mengambil paket RAYXO"
 
     work_dir="$(mktemp -d "$INSTALL_DIR/.setup.XXXXXX")"
 
@@ -794,9 +1204,9 @@ fetch_release() {
     local entries=("$extract_dir"/*)
     local top="${entries[0]}"
 
-    if [[ ${#entries[@]} -ne 1 || ! -f "$top/VERSION" || ! -x "$top/bin/nusad" || ! -f "$top/panel/artisan" ||
+    if [[ ${#entries[@]} -ne 1 || ! -f "$top/VERSION" || ! -x "$top/bin/rayxod" || ! -f "$top/panel/artisan" ||
         ! -f "$top/phpmyadmin/index.php" ]]; then
-        die "isi paket tidak dikenali; pastikan ini file rilis nusapanel"
+        die "isi paket tidak dikenali; pastikan ini file rilis RAYXO"
     fi
 
     if [[ "$(basename "$top")" != *"-linux-$arch" ]]; then
@@ -831,7 +1241,7 @@ fetch_release() {
     chown -R "$PANEL_USER:$PANEL_USER" "$panel/bootstrap/cache"
     chmod 0750 "$panel/bootstrap/cache"
 
-    info "nusapanel $version disalin ke $release_dir"
+    info "RAYXO $version disalin ke $release_dir"
 }
 
 setup_database() {
@@ -847,17 +1257,17 @@ setup_database() {
     mariadb <<SQL
 DELETE FROM mysql.global_priv WHERE User = '';
 DROP DATABASE IF EXISTS test;
-CREATE DATABASE IF NOT EXISTS \`nusapanel\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS 'nusapanel'@'localhost' IDENTIFIED BY '$db_password';
-CREATE USER IF NOT EXISTS 'nusapanel'@'127.0.0.1' IDENTIFIED BY '$db_password';
-ALTER USER 'nusapanel'@'localhost' IDENTIFIED BY '$db_password';
-ALTER USER 'nusapanel'@'127.0.0.1' IDENTIFIED BY '$db_password';
-GRANT ALL PRIVILEGES ON \`nusapanel\`.* TO 'nusapanel'@'localhost';
-GRANT ALL PRIVILEGES ON \`nusapanel\`.* TO 'nusapanel'@'127.0.0.1';
+CREATE DATABASE IF NOT EXISTS \`rayxo\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS 'rayxo'@'localhost' IDENTIFIED BY '$db_password';
+CREATE USER IF NOT EXISTS 'rayxo'@'127.0.0.1' IDENTIFIED BY '$db_password';
+ALTER USER 'rayxo'@'localhost' IDENTIFIED BY '$db_password';
+ALTER USER 'rayxo'@'127.0.0.1' IDENTIFIED BY '$db_password';
+GRANT ALL PRIVILEGES ON \`rayxo\`.* TO 'rayxo'@'localhost';
+GRANT ALL PRIVILEGES ON \`rayxo\`.* TO 'rayxo'@'127.0.0.1';
 FLUSH PRIVILEGES;
 SQL
 
-    info "Database dan user MariaDB \"nusapanel\" siap"
+    info "Database dan user MariaDB \"rayxo\" siap"
 }
 
 # The panel tells users to point their domains' A records to this address
@@ -874,7 +1284,7 @@ add_public_ip_env() {
         return
     fi
 
-    add_env_value NUSAPANEL_PUBLIC_IP "$public_ip"
+    add_env_value RAYXO_PUBLIC_IP "$public_ip"
 }
 
 # Where phpMyAdmin is, and the key the panel seals its sign-on tickets with
@@ -914,7 +1324,7 @@ write_env() {
     (
         umask 027
         cat >"$ENV_FILE" <<ENV
-APP_NAME=nusapanel
+APP_NAME=RAYXO
 APP_ENV=production
 APP_KEY=$app_key
 APP_DEBUG=false
@@ -929,8 +1339,8 @@ LOG_LEVEL=info
 DB_CONNECTION=mariadb
 DB_HOST=127.0.0.1
 DB_PORT=3306
-DB_DATABASE=nusapanel
-DB_USERNAME=nusapanel
+DB_DATABASE=rayxo
+DB_USERNAME=rayxo
 DB_PASSWORD=$db_password
 
 SESSION_DRIVER=database
@@ -942,8 +1352,8 @@ QUEUE_CONNECTION=database
 MAIL_MAILER=smtp
 MAIL_HOST=127.0.0.1
 MAIL_PORT=25
-MAIL_FROM_ADDRESS=nusapanel@$server_hostname
-MAIL_FROM_NAME=nusapanel
+MAIL_FROM_ADDRESS=rayxo@$server_hostname
+MAIL_FROM_NAME=RAYXO
 
 AGENT_DRIVER=socket
 AGENT_SOCKET=$AGENT_SOCKET
@@ -962,6 +1372,13 @@ configure_dkim() {
     step "Mengatur DKIM (tanda tangan untuk email panel)"
 
     local key_dir="/etc/opendkim/keys/$server_hostname"
+
+    # The key of a server installed as nusapanel is published in DNS under
+    # that selector; keep using it.
+    if [[ ! -f "$key_dir/$DKIM_SELECTOR.private" && -f "$key_dir/nusapanel.private" ]]; then
+        DKIM_SELECTOR="nusapanel"
+    fi
+
     local private_key="$key_dir/$DKIM_SELECTOR.private"
 
     if [[ ! -f "$private_key" ]]; then
@@ -974,7 +1391,7 @@ configure_dkim() {
     chmod 0600 "$private_key"
 
     cat >/etc/opendkim.conf <<CONF
-# Managed by nusapanel setup.sh: signs mail sent from $server_hostname.
+# Managed by rayxo setup.sh: signs mail sent from $server_hostname.
 Syslog                  yes
 SyslogSuccess           yes
 UMask                   007
@@ -1032,8 +1449,8 @@ configure_mail() {
         set_env_value MAIL_MAILER smtp
         set_env_value MAIL_HOST 127.0.0.1
         set_env_value MAIL_PORT 25
-        set_env_value MAIL_FROM_ADDRESS "nusapanel@$server_hostname"
-        set_env_value MAIL_FROM_NAME nusapanel
+        set_env_value MAIL_FROM_ADDRESS "rayxo@$server_hostname"
+        set_env_value MAIL_FROM_NAME RAYXO
         info "Panel dipindah dari MAIL_MAILER=log ke Postfix lokal"
     fi
 }
@@ -1058,8 +1475,8 @@ create_admin() {
     # other processes could see it.
     local output
     output="$(
-        export NUSAPANEL_ADMIN_PASSWORD="$admin_password"
-        artisan nusapanel:create-admin "$admin_user" "$admin_email" --no-ansi 2>&1
+        export RAYXO_ADMIN_PASSWORD="$admin_password"
+        artisan rayxo:create-admin "$admin_user" "$admin_email" --no-ansi 2>&1
     )" || {
         printf '%s\n' "$output" >&2
         die "admin pertama gagal dibuat"
@@ -1079,7 +1496,7 @@ activate_release() {
     ln -sfn "releases/$version" "$INSTALL_DIR/current.new"
     mv -Tf "$INSTALL_DIR/current.new" "$INSTALL_DIR/current"
     ln -sfn current/bin "$INSTALL_DIR/bin"
-    ln -sfn "$INSTALL_DIR/bin/nusactl" /usr/local/bin/nusactl
+    ln -sfn "$INSTALL_DIR/bin/rayxo" /usr/local/bin/rayxo
     info "$INSTALL_DIR/current -> releases/$version"
 }
 
@@ -1090,14 +1507,14 @@ configure_acme_site() {
 
     install -d -m 0755 -o root -g root "$ACME_DIR"
 
-    local site=/etc/nginx/sites-available/nusapanel-hostname.conf
+    local site=/etc/nginx/sites-available/rayxo-hostname.conf
     render "$release_dir/config/nginx-hostname.conf" "$site"
 
     if ! grep -q . /proc/net/if_inet6 2>/dev/null; then
         sed -i '/listen \[::\]/d' "$site"
     fi
 
-    ln -sfn "$site" /etc/nginx/sites-enabled/nusapanel-hostname.conf
+    ln -sfn "$site" /etc/nginx/sites-enabled/rayxo-hostname.conf
     rm -f /etc/nginx/sites-enabled/default
 
     quietly nginx -t
@@ -1137,9 +1554,9 @@ issue_certificate() {
 # customer domains can still get theirs.
 install_renewal_hook() {
     install -d -m 0755 /etc/letsencrypt/renewal-hooks/deploy
-    cat >/etc/letsencrypt/renewal-hooks/deploy/nusapanel-reload.sh <<HOOK
+    cat >/etc/letsencrypt/renewal-hooks/deploy/rayxo-reload.sh <<HOOK
 #!/bin/sh
-# Installed by nusapanel setup.sh: reload Nginx, which serves the hostname
+# Installed by rayxo setup.sh: reload Nginx, which serves the hostname
 # certificate and those of customer websites. A renewed hostname certificate
 # also goes to Pure-FTPd, which reads key and certificate from one file, and
 # only at start.
@@ -1152,7 +1569,7 @@ if [ "\$RENEWED_LINEAGE" = "/etc/letsencrypt/live/$server_hostname" ] && [ -f $F
         systemctl try-restart pure-ftpd-mysql
 fi
 HOOK
-    chmod 0755 /etc/letsencrypt/renewal-hooks/deploy/nusapanel-reload.sh
+    chmod 0755 /etc/letsencrypt/renewal-hooks/deploy/rayxo-reload.sh
 }
 
 configure_ssl() {
@@ -1196,8 +1613,8 @@ configure_php_fpm() {
     step "Mengatur PHP-FPM untuk panel"
 
     local pool_dir="/etc/php/$PHP_VERSION/fpm/pool.d"
-    render "$release_dir/config/php-fpm-panel.conf" "$pool_dir/nusapanel.conf"
-    render "$release_dir/config/php-fpm-phpmyadmin.conf" "$pool_dir/nusapanel-phpmyadmin.conf"
+    render "$release_dir/config/php-fpm-panel.conf" "$pool_dir/rayxo.conf"
+    render "$release_dir/config/php-fpm-phpmyadmin.conf" "$pool_dir/rayxo-phpmyadmin.conf"
 
     if [[ -f "$pool_dir/www.conf" ]]; then
         mv "$pool_dir/www.conf" "$pool_dir/www.conf.disabled"
@@ -1206,13 +1623,13 @@ configure_php_fpm() {
 
     quietly "php-fpm$PHP_VERSION" -t
     systemctl restart "php$PHP_VERSION-fpm"
-    info "Pool \"nusapanel\" dan \"nusapanel-phpmyadmin\" aktif (fungsi exec dimatikan)"
+    info "Pool \"rayxo\" dan \"rayxo-phpmyadmin\" aktif (fungsi exec dimatikan)"
 }
 
 configure_nginx() {
     step "Mengatur Nginx untuk panel (port $PANEL_PORT)"
 
-    local site=/etc/nginx/sites-available/nusapanel.conf
+    local site=/etc/nginx/sites-available/rayxo.conf
     render "$release_dir/config/nginx-panel.conf" "$site"
 
     # procfs files always report size 0, so check for content instead.
@@ -1221,7 +1638,7 @@ configure_nginx() {
         info "IPv6 tidak aktif; panel hanya mendengar di IPv4"
     fi
 
-    ln -sfn "$site" /etc/nginx/sites-enabled/nusapanel.conf
+    ln -sfn "$site" /etc/nginx/sites-enabled/rayxo.conf
     rm -f /etc/nginx/sites-enabled/default
 
     quietly nginx -t
@@ -1231,7 +1648,7 @@ configure_nginx() {
 
 # phpMyAdmin at https://<hostname>/phpmyadmin/ (port 443, so not the panel's
 # origin), in the release's phpmyadmin/ folder. Its configuration and keys
-# live in $PMA_CONFIG_DIR, readable by nusa-pma only.
+# live in $PMA_CONFIG_DIR, readable by rayxo-pma only.
 configure_phpmyadmin() {
     step "Mengatur phpMyAdmin (https://$server_hostname/phpmyadmin/)"
 
@@ -1252,14 +1669,14 @@ configure_phpmyadmin() {
     chown "root:$PMA_USER" "$PMA_CONFIG_DIR/blowfish.key" "$PMA_CONFIG_DIR/sso.key" "$PMA_CONFIG_DIR/config.inc.php"
     chmod 0640 "$PMA_CONFIG_DIR/blowfish.key" "$PMA_CONFIG_DIR/sso.key" "$PMA_CONFIG_DIR/config.inc.php"
 
-    local site=/etc/nginx/sites-available/nusapanel-phpmyadmin.conf
+    local site=/etc/nginx/sites-available/rayxo-phpmyadmin.conf
     render "$release_dir/config/nginx-phpmyadmin.conf" "$site"
 
     if ! grep -q . /proc/net/if_inet6 2>/dev/null; then
         sed -i '/listen \[::\]/d' "$site"
     fi
 
-    ln -sfn "$site" /etc/nginx/sites-enabled/nusapanel-phpmyadmin.conf
+    ln -sfn "$site" /etc/nginx/sites-enabled/rayxo-phpmyadmin.conf
 
     quietly nginx -t
     systemctl reload nginx
@@ -1282,7 +1699,7 @@ configure_ftp() {
     mariadb <<SQL
 CREATE USER IF NOT EXISTS '$FTP_DB_USER'@'localhost' IDENTIFIED BY '$password';
 ALTER USER '$FTP_DB_USER'@'localhost' IDENTIFIED BY '$password';
-GRANT SELECT ON \`nusapanel\`.\`v_ftp_users\` TO '$FTP_DB_USER'@'localhost';
+GRANT SELECT ON \`rayxo\`.\`v_ftp_users\` TO '$FTP_DB_USER'@'localhost';
 SQL
 
     local db_conf=/etc/pure-ftpd/db/mysql.conf
@@ -1344,7 +1761,7 @@ OPTIONS
 }
 
 # SFTP for hosting accounts, as their own Linux user with the password they
-# set in the panel. sshd gives the members of nusa-sftp SFTP only; nothing
+# set in the panel. sshd gives the members of rayxo-sftp SFTP only; nothing
 # changes for root or other users of the server. If sshd refuses the
 # configuration, it is removed again, so SSH always keeps working.
 configure_sftp() {
@@ -1355,13 +1772,13 @@ configure_sftp() {
     fi
 
     # Accounts created before SFTP join the group too (the panel's accounts
-    # carry "nusapanel" as their GECOS comment).
+    # carry "rayxo" as their GECOS comment).
     local name
     while read -r name; do
         if ! id -nG "$name" | tr ' ' '\n' | grep -qx "$SFTP_GROUP"; then
             quietly gpasswd --add "$name" "$SFTP_GROUP"
         fi
-    done < <(getent passwd | awk -F: '$3 >= 1000 && $5 ~ /^nusapanel(,|$)/ {print $1}')
+    done < <(getent passwd | awk -F: '$3 >= 1000 && $5 ~ /^rayxo(,|$)/ {print $1}')
 
     render "$release_dir/config/sshd-sftp.conf" "$SFTP_SSHD_CONF"
     chmod 0644 "$SFTP_SSHD_CONF"
@@ -1385,23 +1802,23 @@ configure_sftp() {
 configure_web() {
     step "Mengatur web server untuk website customer (Nginx -> Apache 127.0.0.1:8080)"
 
-    install -d -m 0755 -o root -g root /etc/nginx/nusapanel /etc/apache2/nusapanel
+    install -d -m 0755 -o root -g root /etc/nginx/rayxo /etc/apache2/rayxo
     install -d -m 0750 -o root -g adm "$LOG_DIR/domains"
 
     cat >/etc/apache2/ports.conf <<'CONF'
-# Managed by nusapanel setup.sh. Apache only serves Nginx, on loopback;
+# Managed by rayxo setup.sh. Apache only serves Nginx, on loopback;
 # Nginx owns ports 80 and 443.
 Listen 127.0.0.1:8080
 CONF
 
-    render "$release_dir/config/apache-nusapanel.conf" /etc/apache2/conf-available/nusapanel.conf
+    render "$release_dir/config/apache-rayxo.conf" /etc/apache2/conf-available/rayxo.conf
 
     if [[ -e /etc/apache2/sites-enabled/000-default.conf ]]; then
         quietly a2dissite -q 000-default
     fi
 
-    # security: loads after nusapanel.conf and would undo its ServerTokens
-    # and ServerSignature (nusapanel.conf carries its settings instead).
+    # security: loads after rayxo.conf and would undo its ServerTokens
+    # and ServerSignature (rayxo.conf carries its settings instead).
     # other-vhosts-access-log: Nginx already logs every request.
     # php-fpm: PHP only runs in the per-account pools, never in a shared one.
     local conf v php_confs=()
@@ -1417,12 +1834,12 @@ CONF
 
     quietly a2dismod -q mpm_prefork mpm_worker
     quietly a2enmod -q mpm_event proxy_fcgi remoteip rewrite headers setenvif
-    quietly a2enconf -q nusapanel
+    quietly a2enconf -q rayxo
 
     {
-        printf '# Managed by nusapanel setup.sh: customer websites, one file per domain,\n'
-        printf '# written by the agent (nusad).\n'
-        printf 'include /etc/nginx/nusapanel/*/*.conf;\n'
+        printf '# Managed by rayxo setup.sh: customer websites, one file per domain,\n'
+        printf '# written by the agent (rayxod).\n'
+        printf 'include /etc/nginx/rayxo/*/*.conf;\n'
 
         # Room for long domain names (253 characters plus "www.") and many
         # websites; with the defaults, nginx -t fails on a long name.
@@ -1432,17 +1849,24 @@ CONF
         if ! grep -Eqs '^[[:space:]]*server_names_hash_max_size' /etc/nginx/nginx.conf; then
             printf 'server_names_hash_max_size 4096;\n'
         fi
-    } >/etc/nginx/conf.d/nusapanel-sites.conf
+    } >/etc/nginx/conf.d/rayxo-sites.conf
+
+    # A server moved from nusapanel serves its websites from their old files
+    # until finish_rename_migration; that include stays, the settings above
+    # must only appear once.
+    if [[ -f /etc/nginx/conf.d/nusapanel-sites.conf ]]; then
+        printf 'include /etc/nginx/nusapanel/*/*.conf;\n' >/etc/nginx/conf.d/nusapanel-sites.conf
+    fi
 
     # Host names no website uses get a 404, never a customer's site.
-    local site=/etc/nginx/sites-available/nusapanel-default.conf
+    local site=/etc/nginx/sites-available/rayxo-default.conf
     render "$release_dir/config/nginx-default.conf" "$site"
 
     if ! grep -q . /proc/net/if_inet6 2>/dev/null; then
         sed -i '/listen \[::\]/d' "$site"
     fi
 
-    ln -sfn "$site" /etc/nginx/sites-enabled/nusapanel-default.conf
+    ln -sfn "$site" /etc/nginx/sites-enabled/rayxo-default.conf
 
     quietly apache2ctl configtest
     quietly nginx -t
@@ -1488,7 +1912,7 @@ user_quota_on() {
 # does not verify before or after the change. Every step is checked by hand:
 # callers test the result, which turns off set -e in here.
 add_fstab_quota_options() {
-    local target="$1" backup="$2" candidate=/etc/fstab.nusapanel-new
+    local target="$1" backup="$2" candidate=/etc/fstab.rayxo-new
 
     if ! findmnt --verify --tab-file /etc/fstab >>"$INSTALL_LOG" 2>&1; then
         warn "/etc/fstab sudah bermasalah menurut findmnt --verify; tidak diubah, kuota disk dilewati"
@@ -1592,7 +2016,7 @@ enable_journaled_quota() {
     fi
 
     if ! has_user_quota_option "$fstab_options"; then
-        backup="/etc/fstab.nusapanel-$(date +%Y%m%d-%H%M%S)"
+        backup="/etc/fstab.rayxo-$(date +%Y%m%d-%H%M%S)"
         add_fstab_quota_options "$target" "$backup" || return 0
         systemctl daemon-reload >>"$INSTALL_LOG" 2>&1 || true
     fi
@@ -1684,8 +2108,8 @@ configure_quota() {
 }
 
 configure_logrotate() {
-    render "$release_dir/config/logrotate.conf" /etc/logrotate.d/nusapanel
-    info "Rotasi log panel diatur (/etc/logrotate.d/nusapanel)"
+    render "$release_dir/config/logrotate.conf" /etc/logrotate.d/rayxo
+    info "Rotasi log panel diatur (/etc/logrotate.d/rayxo)"
 }
 
 install_services() {
@@ -1693,10 +2117,10 @@ install_services() {
 
     install -m 0644 "$release_dir"/systemd/*.service "$release_dir"/systemd/*.timer /etc/systemd/system/
     systemctl daemon-reload
-    quietly systemctl enable nusad.service nusapanel-queue.service nusapanel-scheduler.timer
-    systemctl restart nusad.service nusapanel-queue.service
-    systemctl start nusapanel-scheduler.timer
-    info "nusad, queue worker dan scheduler berjalan"
+    quietly systemctl enable rayxod.service rayxo-queue.service rayxo-scheduler.timer
+    systemctl restart rayxod.service rayxo-queue.service
+    systemctl start rayxo-scheduler.timer
+    info "rayxod, queue worker dan scheduler berjalan"
 }
 
 # Websites set up by an older release keep their old web server config until
@@ -1705,10 +2129,10 @@ install_services() {
 rebuild_websites() {
     step "Memperbarui konfigurasi website customer"
 
-    if artisan nusapanel:rebuild-web >>"$INSTALL_LOG" 2>&1; then
+    if artisan rayxo:rebuild-web >>"$INSTALL_LOG" 2>&1; then
         info "Konfigurasi semua website diperbarui di latar belakang (lihat Tasks di panel)"
     else
-        warn "konfigurasi website tidak bisa diperbarui; jalankan lagi: runuser -u $PANEL_USER -- $PHP_BIN $INSTALL_DIR/current/panel/artisan nusapanel:rebuild-web"
+        warn "konfigurasi website tidak bisa diperbarui; jalankan lagi: runuser -u $PANEL_USER -- $PHP_BIN $INSTALL_DIR/current/panel/artisan rayxo:rebuild-web"
     fi
 }
 
@@ -1718,10 +2142,10 @@ rebuild_websites() {
 apply_quotas() {
     step "Menerapkan kuota disk akun hosting"
 
-    if artisan nusapanel:apply-quotas >>"$INSTALL_LOG" 2>&1; then
+    if artisan rayxo:apply-quotas >>"$INSTALL_LOG" 2>&1; then
         info "Kuota disk semua akun diterapkan di latar belakang (lihat Tasks di panel)"
     else
-        warn "kuota disk akun tidak bisa diterapkan; jalankan lagi: runuser -u $PANEL_USER -- $PHP_BIN $INSTALL_DIR/current/panel/artisan nusapanel:apply-quotas"
+        warn "kuota disk akun tidak bisa diterapkan; jalankan lagi: runuser -u $PANEL_USER -- $PHP_BIN $INSTALL_DIR/current/panel/artisan rayxo:apply-quotas"
     fi
 }
 
@@ -1736,16 +2160,16 @@ verify_install() {
         sleep 0.5
     done
 
-    [[ -S "$AGENT_SOCKET" ]] || die "agent nusad tidak berjalan (cek: journalctl -u nusad)"
+    [[ -S "$AGENT_SOCKET" ]] || die "agent rayxod tidak berjalan (cek: journalctl -u rayxod)"
 
     # Call the agent as the panel user, exactly like the panel will.
-    if ! runuser -u "$PANEL_USER" -- "$INSTALL_DIR/bin/nusactl" -socket "$AGENT_SOCKET" ping >>"$INSTALL_LOG" 2>&1; then
-        die "user $PANEL_USER tidak bisa memanggil agent (cek: journalctl -u nusad)"
+    if ! runuser -u "$PANEL_USER" -- "$INSTALL_DIR/bin/rayxo" -socket "$AGENT_SOCKET" ping >>"$INSTALL_LOG" 2>&1; then
+        die "user $PANEL_USER tidak bisa memanggil agent (cek: journalctl -u rayxod)"
     fi
-    info "Agent nusad menjawab panggilan dari panel"
+    info "Agent rayxod menjawab panggilan dari panel"
 
-    systemctl is-active --quiet nusapanel-queue.service ||
-        die "queue worker tidak berjalan (cek: journalctl -u nusapanel-queue)"
+    systemctl is-active --quiet rayxo-queue.service ||
+        die "queue worker tidak berjalan (cek: journalctl -u rayxo-queue)"
 
     local status
     status="$(curl -sk -o /dev/null -w '%{http_code}' "https://127.0.0.1:$PANEL_PORT/login" || true)"
@@ -1823,7 +2247,7 @@ verify_install() {
         (
             exec 4<>/dev/tcp/127.0.0.1/21
             while read -r -t 5 line <&4 && [[ "$line" != "220 "* ]]; do :; done
-            printf 'USER nusapanel-check\r\n' >&4
+            printf 'USER rayxo-check\r\n' >&4
             read -r -t 5 line <&4 && printf '%s' "$line"
         ) 2>/dev/null || true
     )"
@@ -1891,7 +2315,7 @@ build_dns_report() {
 }
 
 summary() {
-    printf '\n%s✔ nusapanel %s terpasang%s\n\n' "$green" "$version" "$reset"
+    printf '\n%s✔ RAYXO %s terpasang%s\n\n' "$green" "$version" "$reset"
     info "Panel    : https://$server_hostname:$PANEL_PORT"
     info "phpMyAdmin: dibuka customer dari halaman Databases (https://$server_hostname/phpmyadmin/)"
     info "Username : $admin_user"
@@ -1936,8 +2360,8 @@ summary() {
     printf '\n'
     info "Catatan:"
     info "- Pastikan port 80, 443, $PANEL_PORT, 21 dan ${FTP_PASSIVE_PORTS/ /-} (FTP passive) terbuka di firewall / security group provider VPS."
-    info "- Cek agent: nusactl ping"
-    info "- Lupa password admin: runuser -u $PANEL_USER -- php$PHP_VERSION $INSTALL_DIR/current/panel/artisan nusapanel:reset-password $admin_user"
+    info "- Cek agent: rayxo ping"
+    info "- Lupa password admin: runuser -u $PANEL_USER -- php$PHP_VERSION $INSTALL_DIR/current/panel/artisan rayxo:reset-password $admin_user"
     info "- Log instalasi: $INSTALL_LOG"
 }
 
@@ -1957,12 +2381,13 @@ main() {
     trap 'on_error $LINENO' ERR
     trap cleanup EXIT
 
-    printf '\n%snusapanel installer%s (%s)\n' "$bold" "$reset" "$(date -Is)"
+    printf '\n%sRAYXO installer%s (%s)\n' "$bold" "$reset" "$(date -Is)"
 
     preflight
     resolve_php_versions
     check_dns
     confirm
+    migrate_from_nusapanel
     create_layout
     install_packages
     install_site_php
@@ -1987,6 +2412,7 @@ main() {
     verify_install
     rebuild_websites
     apply_quotas
+    finish_rename_migration
     # Last, right before the summary, so a failure in an earlier step can never
     # leave an admin whose generated password was not shown.
     create_admin

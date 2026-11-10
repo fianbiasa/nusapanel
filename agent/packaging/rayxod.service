@@ -1,0 +1,23 @@
+[Unit]
+Description=rayxo agent (rayxod)
+Documentation=file:///usr/local/rayxo/docs/04-agent-dan-server.md
+After=network.target
+
+[Service]
+Type=simple
+# rayxod must run as root: it is the only component allowed to change the
+# system. Only root and the panel user (rayxo) may call its socket.
+ExecStart=/usr/local/rayxo/bin/rayxod \
+    --socket /run/rayxo/agent.sock \
+    --allow-user rayxo \
+    --socket-group rayxo
+# /run/rayxo is world-traversable; the socket itself is 0660 root:rayxo.
+RuntimeDirectory=rayxo
+RuntimeDirectoryMode=0755
+Restart=on-failure
+RestartSec=2
+# Give in-flight calls time to finish before systemd kills the agent.
+TimeoutStopSec=15min
+
+[Install]
+WantedBy=multi-user.target

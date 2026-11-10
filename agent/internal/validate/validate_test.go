@@ -13,7 +13,7 @@ func TestUsername(t *testing.T) {
 		}
 	}
 
-	invalid := []string{"", "ab", "Budi", "1budi", "budi-santoso", "budi_s", "budi.s", "a234567890123456b", "root", "mysql", "nusapanel", "budi\n"}
+	invalid := []string{"", "ab", "Budi", "1budi", "budi-santoso", "budi_s", "budi.s", "a234567890123456b", "root", "mysql", "rayxo", "budi\n"}
 	for _, name := range invalid {
 		if err := Username(name); err == nil {
 			t.Errorf("Username(%q) = nil, want an error", name)

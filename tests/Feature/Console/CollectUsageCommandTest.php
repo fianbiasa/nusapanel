@@ -47,7 +47,7 @@ class CollectUsageCommandTest extends TestCase
             ],
         ]);
 
-        $this->artisan('nusapanel:collect-usage')
+        $this->artisan('rayxo:collect-usage')
             ->expectsOutputToContain('Disk usage of 2 accounts stored.')
             ->assertSuccessful();
 
@@ -72,7 +72,7 @@ class CollectUsageCommandTest extends TestCase
             ['name' => 'sari_other', 'size_bytes' => 4096],
         ]);
 
-        $this->artisan('nusapanel:collect-usage')
+        $this->artisan('rayxo:collect-usage')
             ->expectsOutputToContain('Size of 2 databases stored.')
             ->assertSuccessful();
 
@@ -89,7 +89,7 @@ class CollectUsageCommandTest extends TestCase
 
         $this->agentReports(['enabled' => false, 'filesystem' => '/', 'accounts' => []]);
 
-        $this->artisan('nusapanel:collect-usage')
+        $this->artisan('rayxo:collect-usage')
             ->expectsOutputToContain('Disk quotas are not enabled on this server')
             ->assertSuccessful();
 
@@ -115,7 +115,7 @@ class CollectUsageCommandTest extends TestCase
                 ->andThrow(new AgentException('Connection refused'));
         });
 
-        $this->artisan('nusapanel:collect-usage')
+        $this->artisan('rayxo:collect-usage')
             ->expectsOutputToContain('Connection refused')
             ->assertFailed();
 
@@ -131,7 +131,7 @@ class CollectUsageCommandTest extends TestCase
         $budi = User::factory()->create(['username' => 'budi', 'package_id' => $package->id]);
         User::factory()->create(['status' => AccountStatus::Pending]);
 
-        $this->artisan('nusapanel:collect-usage')
+        $this->artisan('rayxo:collect-usage')
             ->expectsOutputToContain('Disk usage of 1 account stored.')
             ->assertSuccessful();
 
@@ -147,7 +147,7 @@ class CollectUsageCommandTest extends TestCase
     public function test_it_runs_every_fifteen_minutes_without_overlapping()
     {
         $event = collect($this->app->make(Schedule::class)->events())
-            ->first(fn (Event $event): bool => str_contains((string) $event->command, 'nusapanel:collect-usage'));
+            ->first(fn (Event $event): bool => str_contains((string) $event->command, 'rayxo:collect-usage'));
 
         $this->assertNotNull($event);
         $this->assertSame('*/15 * * * *', $event->expression);

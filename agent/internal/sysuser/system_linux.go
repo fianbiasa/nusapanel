@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"nusapanel/agent/internal/runner"
+	"rayxo/agent/internal/runner"
 )
 
 // Programs used, by absolute path as installed on Ubuntu 24.04.

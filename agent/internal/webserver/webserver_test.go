@@ -15,8 +15,8 @@ import (
 	"sync"
 	"testing"
 
-	"nusapanel/agent/internal/runner"
-	"nusapanel/agent/internal/sysuser"
+	"rayxo/agent/internal/runner"
+	"rayxo/agent/internal/sysuser"
 )
 
 var budiSite = Site{User: "budi", UID: 1001, GID: 1001, Domain: "example.com", PHPVersion: "8.4"}
@@ -49,20 +49,20 @@ func newEnv(t *testing.T) *testEnv {
 	env.runner.certbot = env.fakeCertbot
 
 	env.cfg = Config{
-		NginxDir:  filepath.Join(base, "etc/nginx/nusapanel"),
-		ApacheDir: filepath.Join(base, "etc/apache2/nusapanel"),
-		PoolDir:   filepath.Join(base, "etc/nusapanel/php-fpm"),
+		NginxDir:  filepath.Join(base, "etc/nginx/rayxo"),
+		ApacheDir: filepath.Join(base, "etc/apache2/rayxo"),
+		PoolDir:   filepath.Join(base, "etc/rayxo/php-fpm"),
 		UnitDir:   filepath.Join(base, "etc/systemd/system"),
-		LogDir:    filepath.Join(base, "var/log/nusapanel/domains"),
+		LogDir:    filepath.Join(base, "var/log/rayxo/domains"),
 		LogGroup:  currentGroup(t),
-		RunDir:    "/run/nusa-php",
+		RunDir:    "/run/rayxo-php",
 		HomeRoot:  "/home",
 		PHPFPMDir: filepath.Join(base, "usr/sbin"),
 		// Set before the other locations below, which stay as they were.
-		CustomCertificateDir: filepath.Join(base, "etc/nusapanel/ssl"),
+		CustomCertificateDir: filepath.Join(base, "etc/rayxo/ssl"),
 		IPv6File:             filepath.Join(base, "if_inet6"),
 		Backend:              "127.0.0.1:8080",
-		AcmeDir:              filepath.Join(base, "var/www/nusapanel-acme"),
+		AcmeDir:              filepath.Join(base, "var/www/rayxo-acme"),
 		// The same layout as /etc/letsencrypt.
 		LetsEncryptDir: filepath.Join(base, "etc/letsencrypt"),
 		Hostnames:      func() []string { return []string{"server1.example.net", "server1"} },
@@ -153,7 +153,7 @@ func (e *testEnv) poolFile(user, version string) string {
 }
 
 func (e *testEnv) unitFile(tag string) string {
-	return filepath.Join(e.cfg.UnitDir, "nusa-php"+tag+"@.service")
+	return filepath.Join(e.cfg.UnitDir, "rayxo-php"+tag+"@.service")
 }
 
 func (e *testEnv) apply(site Site) (string, error) {
@@ -302,8 +302,8 @@ func TestApplyDomainSetsUpEverything(t *testing.T) {
 	env.assertCalls(append([]string{
 		"systemctl daemon-reload",
 		"php-fpm8.4 -t --fpm-config .budi.conf.tmp",
-		"systemctl is-active --quiet nusa-php84@budi.service",
-		"systemctl enable --now nusa-php84@budi.service",
+		"systemctl is-active --quiet rayxo-php84@budi.service",
+		"systemctl enable --now rayxo-php84@budi.service",
 	}, reloadBoth...)...)
 
 	if len(env.sites) != 1 {
@@ -409,7 +409,7 @@ func TestRenderedApacheVhost(t *testing.T) {
 		"    DocumentRoot /home/budi/domains/example.com/public_html\n",
 		"ErrorLog "+env.cfg.LogDir+"/example.com.apache-error.log\n",
 		"DirectoryIndex index.php index.html index.htm\n",
-		"<FilesMatch \"\\.(php|phtml)$\">\n        SetHandler \"proxy:unix:/run/nusa-php/php84-budi-a379a6f6eeaf.sock|fcgi://php84-budi-a379a6f6eeaf\"\n    </FilesMatch>",
+		"<FilesMatch \"\\.(php|phtml)$\">\n        SetHandler \"proxy:unix:/run/rayxo-php/php84-budi-a379a6f6eeaf.sock|fcgi://php84-budi-a379a6f6eeaf\"\n    </FilesMatch>",
 		"</VirtualHost>\n",
 	)
 	assertNotContains(t, "apache vhost", apache, "CustomLog", "<no value>")
@@ -421,9 +421,9 @@ func TestRenderedPoolAndUnit(t *testing.T) {
 
 	pool := env.read(env.poolFile("budi", "8.4"))
 
-	if pool != "; PHP 8.4 of account budi, run by nusa-php84@budi.service, with\n"+
-		"; a pool per website in "+env.cfg.PoolDir+"/8.4/budi.d/. Written by nusad; changes are overwritten.\n"+
-		"[global]\npid = /run/nusa-php/php84-budi.pid\nerror_log = syslog\nsyslog.ident = nusa-php84-budi\ndaemonize = no\n\n"+
+	if pool != "; PHP 8.4 of account budi, run by rayxo-php84@budi.service, with\n"+
+		"; a pool per website in "+env.cfg.PoolDir+"/8.4/budi.d/. Written by rayxod; changes are overwritten.\n"+
+		"[global]\npid = /run/rayxo-php/php84-budi.pid\nerror_log = syslog\nsyslog.ident = rayxo-php84-budi\ndaemonize = no\n\n"+
 		"include = "+env.cfg.PoolDir+"/8.4/budi.d/*.conf\n" {
 		t.Fatalf("unexpected main pool configuration:\n%s", pool)
 	}
@@ -432,7 +432,7 @@ func TestRenderedPoolAndUnit(t *testing.T) {
 
 	assertContains(t, "pool", section,
 		"\n[example.com]\nuser = budi\ngroup = budi\n",
-		"listen = /run/nusa-php/php84-budi-a379a6f6eeaf.sock\nlisten.owner = budi\nlisten.group = www-data\nlisten.mode = 0660\n",
+		"listen = /run/rayxo-php/php84-budi-a379a6f6eeaf.sock\nlisten.owner = budi\nlisten.group = www-data\nlisten.mode = 0660\n",
 		"pm = ondemand\npm.max_children = 10\npm.process_idle_timeout = 30s\npm.max_requests = 500\nrequest_terminate_timeout = 300s\n",
 		"chdir = /home/budi\n",
 		"env[TMPDIR] = /home/budi/tmp\n",
@@ -464,7 +464,7 @@ func TestRenderedPoolAndUnit(t *testing.T) {
 		"Type=notify\n",
 		"ExecStart="+env.cfg.PHPFPMDir+"/php-fpm8.4 --nodaemonize --fpm-config "+poolDir+"/%i.conf\n",
 		"ExecReload=/bin/kill -USR2 $MAINPID\n",
-		"RuntimeDirectory=nusa-php\n",
+		"RuntimeDirectory=rayxo-php\n",
 		"RuntimeDirectoryPreserve=yes\n",
 		"Restart=on-failure\n",
 		"RestartSec=2\n",
@@ -486,7 +486,7 @@ func TestApplyDomainIsIdempotent(t *testing.T) {
 
 	// Same files, no pool test or restart; the web servers are still tested
 	// and reloaded, so a retry after a failed reload does reload.
-	env.assertCalls(append([]string{"systemctl is-active --quiet nusa-php84@budi.service"}, reloadBoth...)...)
+	env.assertCalls(append([]string{"systemctl is-active --quiet rayxo-php84@budi.service"}, reloadBoth...)...)
 
 	for path, content := range before {
 		if env.read(path) != content {
@@ -505,8 +505,8 @@ func TestApplyDomainReloadsAChangedPool(t *testing.T) {
 
 	env.assertCalls(append([]string{
 		"php-fpm8.4 -t --fpm-config .budi.conf.tmp",
-		"systemctl is-active --quiet nusa-php84@budi.service",
-		"systemctl reload-or-restart nusa-php84@budi.service",
+		"systemctl is-active --quiet rayxo-php84@budi.service",
+		"systemctl reload-or-restart rayxo-php84@budi.service",
 	}, reloadBoth...)...)
 }
 
@@ -520,8 +520,8 @@ func TestApplyDomainRestartsPoolsOnANewUnit(t *testing.T) {
 
 	env.assertCalls(append([]string{
 		"systemctl daemon-reload",
-		"systemctl is-active --quiet nusa-php84@budi.service",
-		"systemctl restart nusa-php84@budi.service",
+		"systemctl is-active --quiet rayxo-php84@budi.service",
+		"systemctl restart rayxo-php84@budi.service",
 	}, reloadBoth...)...)
 }
 
@@ -534,7 +534,7 @@ func TestApplyDomainKeepsPHPOfASuspendedAccountStopped(t *testing.T) {
 	env.assertCalls(append([]string{
 		"systemctl daemon-reload",
 		"php-fpm8.4 -t --fpm-config .budi.conf.tmp",
-		"systemctl enable nusa-php84@budi.service",
+		"systemctl enable rayxo-php84@budi.service",
 	}, reloadBoth...)...)
 }
 
@@ -600,7 +600,7 @@ func TestApplyDomainRestoresTheVhostsARejectedChangeReplaced(t *testing.T) {
 		t.Fatal("the previous vhosts were not restored")
 	}
 
-	env.assertCalls("systemctl is-active --quiet nusa-php84@budi.service", "nginx -t", "apache2ctl configtest")
+	env.assertCalls("systemctl is-active --quiet rayxo-php84@budi.service", "nginx -t", "apache2ctl configtest")
 }
 
 func TestApplyDomainReportsFolderProblems(t *testing.T) {
@@ -678,7 +678,7 @@ func TestRemoveDomainKeepsOtherDomainsAndReloads(t *testing.T) {
 		t.Fatalf("remove failed: %v", err)
 	}
 
-	env.assertCalls(append(slices.Clone(reloadBoth), "systemctl is-active --quiet nusa-php84@budi.service", "systemctl reload-or-restart nusa-php84@budi.service")...)
+	env.assertCalls(append(slices.Clone(reloadBoth), "systemctl is-active --quiet rayxo-php84@budi.service", "systemctl reload-or-restart rayxo-php84@budi.service")...)
 	env.assertMissing(env.poolSection("budi", "8.4", "example.com"))
 	env.read(env.poolSection("budi", "8.4", "budi.id"))
 	env.assertMissing(env.nginxVhost("budi", "example.com"), env.apacheVhost("budi", "example.com"))
@@ -740,7 +740,7 @@ func TestRemovePoolStopsAndDeletesIt(t *testing.T) {
 		t.Fatalf("remove pool failed: %v", err)
 	}
 
-	env.assertCalls("systemctl disable --now nusa-php84@budi.service")
+	env.assertCalls("systemctl disable --now rayxo-php84@budi.service")
 	env.assertMissing(env.poolFile("budi", "8.4"))
 	env.read(env.unitFile("84"))
 }
@@ -787,7 +787,7 @@ func TestRemovePoolKeepsAPoolAVhostStillUses(t *testing.T) {
 		t.Fatalf("remove pool failed: %v", err)
 	}
 
-	env.assertCalls("systemctl disable --now nusa-php84@budi.service")
+	env.assertCalls("systemctl disable --now rayxo-php84@budi.service")
 	env.assertMissing(env.poolFile("budi", "8.4"))
 	env.read(env.poolFile("budi", "8.3"))
 	env.read(env.poolFile("sari", "8.4"))
@@ -807,8 +807,8 @@ func TestSuspendAccountServesTheSuspendedPageAndStopsPHP(t *testing.T) {
 	env.assertCalls(
 		"nginx -t",
 		"systemctl reload nginx",
-		"systemctl stop nusa-php83@budi.service",
-		"systemctl stop nusa-php84@budi.service",
+		"systemctl stop rayxo-php83@budi.service",
+		"systemctl stop rayxo-php84@budi.service",
 	)
 
 	page := env.read(filepath.Join(env.cfg.NginxDir, "budi/suspended.inc"))
@@ -869,13 +869,13 @@ func TestUnsuspendAccountRemovesThePageAndStartsPHP(t *testing.T) {
 		t.Fatalf("unsuspend failed: %v", err)
 	}
 
-	env.assertCalls("nginx -t", "systemctl reload nginx", "systemctl start nusa-php84@budi.service")
+	env.assertCalls("nginx -t", "systemctl reload nginx", "systemctl start rayxo-php84@budi.service")
 	env.assertMissing(filepath.Join(env.cfg.NginxDir, "budi/suspended.inc"))
 
 	// A domain applied after unsuspending starts PHP normally again.
 	env.runner.reset()
 	env.mustApply(budiSite)
-	env.assertCalls(append([]string{"systemctl is-active --quiet nusa-php84@budi.service"}, reloadBoth...)...)
+	env.assertCalls(append([]string{"systemctl is-active --quiet rayxo-php84@budi.service"}, reloadBoth...)...)
 }
 
 func TestRemoveAccountRemovesItsWebsitesPoolsAndLogs(t *testing.T) {
@@ -912,8 +912,8 @@ func TestRemoveAccountRemovesItsWebsitesPoolsAndLogs(t *testing.T) {
 	}
 
 	env.assertCalls(append([]string{
-		"systemctl disable --now nusa-php83@budi.service",
-		"systemctl disable --now nusa-php84@budi.service",
+		"systemctl disable --now rayxo-php83@budi.service",
+		"systemctl disable --now rayxo-php84@budi.service",
 	}, reloadBoth...)...)
 
 	env.assertMissing(
@@ -1047,23 +1047,23 @@ func TestDefaultConfigUsesTheServerLayout(t *testing.T) {
 	}
 
 	data := manager.unitData("8.4")
-	if data.RuntimeDirectory != "nusa-php" || data.Binary != "/usr/sbin/php-fpm8.4" || data.PoolDir != "/etc/nusapanel/php-fpm/8.4" {
+	if data.RuntimeDirectory != "rayxo-php" || data.Binary != "/usr/sbin/php-fpm8.4" || data.PoolDir != "/etc/rayxo/php-fpm/8.4" {
 		t.Fatalf("unexpected unit data %+v", data)
 	}
 
-	if manager.unitTemplate("8.4") != "/etc/systemd/system/nusa-php84@.service" {
+	if manager.unitTemplate("8.4") != "/etc/systemd/system/rayxo-php84@.service" {
 		t.Fatalf("unexpected unit path %s", manager.unitTemplate("8.4"))
 	}
 
-	if manager.nginxVhost("budi", "example.com") != "/etc/nginx/nusapanel/budi/example.com.conf" ||
-		manager.apacheVhost("budi", "example.com") != "/etc/apache2/nusapanel/budi/example.com.conf" ||
-		manager.poolFile("budi", "8.4") != "/etc/nusapanel/php-fpm/8.4/budi.conf" {
+	if manager.nginxVhost("budi", "example.com") != "/etc/nginx/rayxo/budi/example.com.conf" ||
+		manager.apacheVhost("budi", "example.com") != "/etc/apache2/rayxo/budi/example.com.conf" ||
+		manager.poolFile("budi", "8.4") != "/etc/rayxo/php-fpm/8.4/budi.conf" {
 		t.Fatal("unexpected config paths")
 	}
 
 	// Customer certificates have a folder of their own, so a domain named
 	// like the panel's certificate links (panel.crt) cannot touch them.
-	if manager.customCertificateFile("panel.crt") != "/etc/nusapanel/ssl/domains/panel.crt/fullchain.pem" {
+	if manager.customCertificateFile("panel.crt") != "/etc/rayxo/ssl/domains/panel.crt/fullchain.pem" {
 		t.Fatalf("unexpected custom certificate path %s", manager.customCertificateFile("panel.crt"))
 	}
 

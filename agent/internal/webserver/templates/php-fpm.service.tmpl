@@ -1,7 +1,7 @@
-# PHP {{.PHPVersion}} pool of one nusapanel account; the instance name is the
-# username, e.g. nusa-php{{.PHPTag}}@budi.service. Written by nusad; changes are overwritten.
+# PHP {{.PHPVersion}} pool of one rayxo account; the instance name is the
+# username, e.g. rayxo-php{{.PHPTag}}@budi.service. Written by rayxod; changes are overwritten.
 [Unit]
-Description=PHP {{.PHPVersion}} FastCGI pool of %i (nusapanel)
+Description=PHP {{.PHPVersion}} FastCGI pool of %i (rayxo)
 After=network.target
 ConditionPathExists={{.PoolDir}}/%i.conf
 # The PHP of a suspended account stays stopped, also after a reboot.

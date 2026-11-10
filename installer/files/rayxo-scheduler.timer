@@ -1,5 +1,5 @@
 [Unit]
-Description=Run nusapanel scheduled jobs every minute
+Description=Run rayxo scheduled jobs every minute
 
 [Timer]
 OnCalendar=*-*-* *:*:00

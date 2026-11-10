@@ -1,6 +1,6 @@
 # 3. Skema Database Panel
 
-Database `nusapanel` (MariaDB). PowerDNS memakai database terpisah `pdns` dengan skema bawaan PowerDNS.
+Database `rayxo` (MariaDB). PowerDNS memakai database terpisah `pdns` dengan skema bawaan PowerDNS.
 
 Konvensi:
 
@@ -142,7 +142,7 @@ Subdomain dan pointer adalah baris `domains` juga, karena masing-masing punya vh
 
 ### `ssl_certificates`
 
-Private key **tidak** disimpan di database, hanya di `/etc/nusapanel/ssl/` dengan mode `0600 root`.
+Private key **tidak** disimpan di database, hanya di `/etc/rayxo/ssl/` dengan mode `0600 root`.
 
 | Kolom                  | Keterangan                               |
 | ---------------------- | ---------------------------------------- |
@@ -210,12 +210,12 @@ Password user database **tidak disimpan** dan tidak pernah dikirim ke agent. Pan
 
 Setiap layanan punya user MariaDB sendiri yang hanya boleh `SELECT` dari view-nya.
 
-| View               | Dipakai oleh     | Isi                                                                                                                                                                                                                                 |
-| ------------------ | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `v_mail_domains`   | Postfix          | Domain aktif dengan mail lokal                                                                                                                                                                                                      |
-| `v_mail_mailboxes` | Postfix, Dovecot | Alamat, password_hash, uid, gid, home, quota                                                                                                                                                                                        |
-| `v_mail_aliases`   | Postfix          | Forwarder + catch-all                                                                                                                                                                                                               |
-| `v_ftp_users`      | Pure-FTPd        | ✅ login, password, uid, gid, dir (`/home/<user>/<directory>`); hanya login `active` dari akun `active` ber-role user yang uid & gid-nya sudah diketahui. Dibaca user MariaDB `nusapanel-ftp` yang hanya punya `SELECT` di view ini |
+| View               | Dipakai oleh     | Isi                                                                                                                                                                                                                             |
+| ------------------ | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `v_mail_domains`   | Postfix          | Domain aktif dengan mail lokal                                                                                                                                                                                                  |
+| `v_mail_mailboxes` | Postfix, Dovecot | Alamat, password_hash, uid, gid, home, quota                                                                                                                                                                                    |
+| `v_mail_aliases`   | Postfix          | Forwarder + catch-all                                                                                                                                                                                                           |
+| `v_ftp_users`      | Pure-FTPd        | ✅ login, password, uid, gid, dir (`/home/<user>/<directory>`); hanya login `active` dari akun `active` ber-role user yang uid & gid-nya sudah diketahui. Dibaca user MariaDB `rayxo-ftp` yang hanya punya `SELECT` di view ini |
 
 Akun, domain, atau mailbox yang di-suspend otomatis tersaring dari view, jadi suspend berlaku seketika tanpa reload service.
 

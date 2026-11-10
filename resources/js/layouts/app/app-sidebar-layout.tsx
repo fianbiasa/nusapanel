@@ -18,7 +18,7 @@ export default function AppSidebarLayout({
             <AppSidebar />
             <AppContent
                 variant="sidebar"
-                className="nusa-page-bg min-w-0 overflow-x-clip bg-background"
+                className="rayxo-page-bg min-w-0 overflow-x-clip bg-background"
             >
                 <AppSidebarHeader breadcrumbs={breadcrumbs} />
                 <div className="mx-auto flex w-full max-w-[1440px] flex-1 flex-col gap-6 px-4 pt-2 pb-10 md:px-8 md:pb-32">

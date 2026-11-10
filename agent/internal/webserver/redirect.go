@@ -9,7 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	"nusapanel/agent/internal/validate"
+	"rayxo/agent/internal/validate"
 )
 
 // Kind is what a site serves.
@@ -167,7 +167,7 @@ type redirectData struct {
 	Location string
 	// RequestPattern is matched against the raw $request_uri of a
 	// wildcard redirect and captures the rest of the path, still encoded,
-	// as $nusa_rest.
+	// as $rayxo_rest.
 	RequestPattern string
 	// Target is where the redirect goes; that of a wildcard redirect ends
 	// in a slash, so the rest of the path can follow.
@@ -211,7 +211,7 @@ func redirectsData(redirects []Redirect) []redirectData {
 
 		if redirect.Wildcard {
 			item.Location = "^" + base + "(?:/.*)?$"
-			item.RequestPattern = "^" + base + "(?:/(?<nusa_rest>[^?]*))?"
+			item.RequestPattern = "^" + base + "(?:/(?<rayxo_rest>[^?]*))?"
 			item.Target = strings.TrimSuffix(redirect.Destination, "/") + "/"
 		}
 

@@ -30,7 +30,7 @@ class RebuildWebCommandTest extends TestCase
         $leaving = User::factory()->create(['username' => 'leaving', 'status' => AccountStatus::Deleting]);
         Domain::factory()->for($leaving, 'account')->create(['name' => 'leaving.example']);
 
-        $this->artisan('nusapanel:rebuild-web')
+        $this->artisan('rayxo:rebuild-web')
             ->expectsOutputToContain('3 websites queued')
             ->assertSuccessful();
 

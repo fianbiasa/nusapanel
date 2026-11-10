@@ -108,7 +108,7 @@ export default function TwoFactorChallenge() {
 
                             <Button
                                 type="submit"
-                                className="h-11 w-full rounded-xl nusa-brand-gradient text-[15px] font-semibold shadow-brand"
+                                className="h-11 w-full rounded-xl rayxo-brand-gradient text-[15px] font-semibold shadow-brand"
                                 disabled={processing}
                             >
                                 {processing && <Spinner />}

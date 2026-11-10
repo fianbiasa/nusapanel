@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"nusapanel/agent/internal/rpc"
+	"rayxo/agent/internal/rpc"
 )
 
 func callCron(t *testing.T, system *fakeSystem, params any) error {

@@ -15,7 +15,7 @@ class ApplyQuotasCommand extends Command
     /**
      * @var string
      */
-    protected $signature = 'nusapanel:apply-quotas';
+    protected $signature = 'rayxo:apply-quotas';
 
     /**
      * @var string

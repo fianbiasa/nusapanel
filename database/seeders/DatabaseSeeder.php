@@ -15,20 +15,20 @@ class DatabaseSeeder extends Seeder
      * Seed demo accounts and packages for local development only.
      *
      * Every account uses the factory password ("password"). On a real server
-     * the first admin is created with `php artisan nusapanel:create-admin`.
+     * the first admin is created with `php artisan rayxo:create-admin`.
      */
     public function run(): void
     {
         $admin = User::factory()->admin()->create([
             'username' => 'admin',
             'name' => 'Administrator',
-            'email' => 'admin@nusapanel.test',
+            'email' => 'admin@rayxo.test',
         ]);
 
         $reseller = User::factory()->reseller()->create([
             'username' => 'reseller1',
             'name' => 'Demo Reseller',
-            'email' => 'reseller1@nusapanel.test',
+            'email' => 'reseller1@rayxo.test',
             'owner_id' => $admin->id,
         ]);
 
@@ -46,7 +46,7 @@ class DatabaseSeeder extends Seeder
         User::factory()->create([
             'username' => 'budi',
             'name' => 'Budi Santoso',
-            'email' => 'budi@nusapanel.test',
+            'email' => 'budi@rayxo.test',
             'owner_id' => $reseller->id,
             'package_id' => $basic->id,
         ]);

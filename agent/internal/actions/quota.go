@@ -7,9 +7,9 @@ import (
 	"errors"
 	"slices"
 
-	"nusapanel/agent/internal/quota"
-	"nusapanel/agent/internal/rpc"
-	"nusapanel/agent/internal/validate"
+	"rayxo/agent/internal/quota"
+	"rayxo/agent/internal/rpc"
+	"rayxo/agent/internal/validate"
 )
 
 // maxDiskMB is the largest disk_mb whose limit fits the quota format.
@@ -122,7 +122,7 @@ func (a accountActions) setQuota(ctx context.Context, raw json.RawMessage) (any,
 }
 
 // quotaReport implements quota.report: the disk usage and limits of every
-// nusapanel account, sorted by username. Accounts without a quota entry use
+// rayxo account, sorted by username. Accounts without a quota entry use
 // nothing and have no limits. When user quotas are off, enabled is false
 // and accounts is empty.
 func (a accountActions) quotaReport(ctx context.Context, raw json.RawMessage) (any, error) {

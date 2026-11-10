@@ -1,6 +1,6 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
-LDFLAGS := -s -w -X nusapanel/agent/internal/version.Version=$(VERSION)
-BINARIES := nusad nusactl
+LDFLAGS := -s -w -X rayxo/agent/internal/version.Version=$(VERSION)
+BINARIES := rayxod rayxo
 
 .PHONY: build linux test vet check clean
 

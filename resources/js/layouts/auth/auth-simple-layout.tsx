@@ -20,7 +20,7 @@ export default function AuthSimpleLayout({
     description,
 }: AuthLayoutProps) {
     return (
-        <div className="nusa-page-bg flex min-h-svh bg-background">
+        <div className="rayxo-page-bg flex min-h-svh bg-background">
             <aside className="relative hidden w-[44%] max-w-2xl flex-col justify-between overflow-hidden bg-[#0b1530] p-12 text-white lg:flex">
                 <div className="pointer-events-none absolute -top-40 -right-40 size-[34rem] rounded-full bg-[#1688ff]/30 blur-3xl" />
                 <div className="pointer-events-none absolute -bottom-48 -left-32 size-[30rem] rounded-full bg-[#9561f5]/20 blur-3xl" />
@@ -54,7 +54,7 @@ export default function AuthSimpleLayout({
                 </div>
 
                 <p className="relative text-xs text-white/50">
-                    © {new Date().getFullYear()} Nusapanel
+                    © {new Date().getFullYear()} RAYXO
                 </p>
             </aside>
 

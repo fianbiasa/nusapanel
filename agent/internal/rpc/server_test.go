@@ -16,8 +16,8 @@ import (
 	"testing"
 	"time"
 
-	"nusapanel/agent/internal/client"
-	"nusapanel/agent/internal/rpc"
+	"rayxo/agent/internal/client"
+	"rayxo/agent/internal/rpc"
 )
 
 func TestCallReturnsTheResult(t *testing.T) {
@@ -271,7 +271,7 @@ func startServer(t *testing.T, configure func(*rpc.Server)) string {
 func shortTempDir(t *testing.T) string {
 	t.Helper()
 
-	dir, err := os.MkdirTemp("", "nusad")
+	dir, err := os.MkdirTemp("", "rayxod")
 	if err != nil {
 		t.Fatal(err)
 	}

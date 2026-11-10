@@ -112,8 +112,8 @@ export default function Dashboard({
                 title={<>Halo, {firstName} 👋</>}
                 description={
                     isAdmin
-                        ? 'Berikut ringkasan server dan layanan di Nusapanel.'
-                        : 'Berikut ringkasan website kamu di Nusapanel.'
+                        ? 'Berikut ringkasan server dan layanan di RAYXO.'
+                        : 'Berikut ringkasan website kamu di RAYXO.'
                 }
                 actions={
                     isAdmin ? (

@@ -6,7 +6,7 @@ use Illuminate\Support\Str;
 use JsonException;
 
 /**
- * Talks to nusad over its Unix socket using JSON-RPC 2.0, one request and one
+ * Talks to rayxod over its Unix socket using JSON-RPC 2.0, one request and one
  * response per line. Uses no exec/shell functions, so it keeps working with
  * those functions disabled for the panel's PHP pool.
  */

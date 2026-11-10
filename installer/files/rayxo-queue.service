@@ -1,13 +1,13 @@
 [Unit]
-Description=nusapanel queue worker (sends tasks to the agent)
-After=network.target mariadb.service nusad.service
-Wants=nusad.service
+Description=rayxo queue worker (sends tasks to the agent)
+After=network.target mariadb.service rayxod.service
+Wants=rayxod.service
 
 [Service]
 Type=simple
-User=nusapanel
-Group=nusapanel
-WorkingDirectory=/usr/local/nusapanel/current/panel
+User=rayxo
+Group=rayxo
+WorkingDirectory=/usr/local/rayxo/current/panel
 # Restarts hourly so it always runs the code of the current release.
 ExecStart=/usr/bin/php8.4 artisan queue:work --sleep=1 --max-time=3600
 Restart=always

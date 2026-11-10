@@ -1,4 +1,4 @@
-module nusapanel/agent
+module rayxo/agent
 
 go 1.27.3
 

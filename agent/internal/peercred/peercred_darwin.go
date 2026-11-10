@@ -3,7 +3,7 @@
 // Package peercred reports which user is on the other end of a Unix socket,
 // as told by the kernel (it cannot be spoofed by the caller).
 //
-// macOS support exists only so nusad can run next to the panel in Herd
+// macOS support exists only so rayxod can run next to the panel in Herd
 // during development.
 package peercred
 

@@ -1,4 +1,4 @@
-// Command nusad is the nusapanel agent: the only process that changes the
+// Command rayxod is the rayxo agent: the only process that changes the
 // server. It runs as root and answers the panel over a Unix socket.
 package main
 
@@ -14,9 +14,9 @@ import (
 	"syscall"
 	"time"
 
-	"nusapanel/agent/internal/actions"
-	"nusapanel/agent/internal/rpc"
-	"nusapanel/agent/internal/version"
+	"rayxo/agent/internal/actions"
+	"rayxo/agent/internal/rpc"
+	"rayxo/agent/internal/version"
 )
 
 type config struct {
@@ -29,9 +29,9 @@ type config struct {
 func main() {
 	var cfg config
 
-	flag.StringVar(&cfg.socketPath, "socket", "/run/nusapanel/agent.sock", "Unix socket to listen on")
-	flag.StringVar(&cfg.allowUser, "allow-user", "nusapanel", "system user that may call the agent besides root")
-	flag.StringVar(&cfg.socketGroup, "socket-group", "nusapanel", "group that owns the socket (empty keeps the current group)")
+	flag.StringVar(&cfg.socketPath, "socket", "/run/rayxo/agent.sock", "Unix socket to listen on")
+	flag.StringVar(&cfg.allowUser, "allow-user", "rayxo", "system user that may call the agent besides root")
+	flag.StringVar(&cfg.socketGroup, "socket-group", "rayxo", "group that owns the socket (empty keeps the current group)")
 	flag.DurationVar(&cfg.callTimeout, "call-timeout", 10*time.Minute, "maximum time one call may run")
 	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
@@ -48,7 +48,7 @@ func main() {
 	slog.SetDefault(logger)
 
 	if err := run(logger, cfg); err != nil {
-		logger.Error("nusad stopped", "error", err)
+		logger.Error("rayxod stopped", "error", err)
 		os.Exit(1)
 	}
 }
@@ -96,7 +96,7 @@ func run(logger *slog.Logger, cfg config) error {
 		},
 	}
 
-	logger.Info("nusad listening",
+	logger.Info("rayxod listening",
 		"socket", cfg.socketPath,
 		"version", version.Version,
 		"allowed_uid", allowedUID,
@@ -104,7 +104,7 @@ func run(logger *slog.Logger, cfg config) error {
 	)
 
 	err = server.Serve(ctx, listener)
-	logger.Info("nusad shut down")
+	logger.Info("rayxod shut down")
 
 	return err
 }

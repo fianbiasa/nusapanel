@@ -18,11 +18,11 @@ class CreateAdminCommand extends Command
     /**
      * @var string
      */
-    protected $signature = 'nusapanel:create-admin
+    protected $signature = 'rayxo:create-admin
         {username : Login name, also used as the Linux user name}
         {email : Contact email address}
         {--name= : Display name (defaults to the username)}
-        {--password= : Password; falls back to $NUSAPANEL_ADMIN_PASSWORD, then a generated one}';
+        {--password= : Password; falls back to $RAYXO_ADMIN_PASSWORD, then a generated one}';
 
     /**
      * @var string
@@ -88,7 +88,7 @@ class CreateAdminCommand extends Command
      */
     private function passwordFromEnvironment(): ?string
     {
-        $password = getenv('NUSAPANEL_ADMIN_PASSWORD');
+        $password = getenv('RAYXO_ADMIN_PASSWORD');
 
         return is_string($password) && $password !== '' ? $password : null;
     }

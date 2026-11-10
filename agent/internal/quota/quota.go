@@ -18,8 +18,8 @@ import (
 	"strconv"
 	"strings"
 
-	"nusapanel/agent/internal/runner"
-	"nusapanel/agent/internal/validate"
+	"rayxo/agent/internal/runner"
+	"rayxo/agent/internal/validate"
 )
 
 // Programs used, by absolute path as the quota package installs them on

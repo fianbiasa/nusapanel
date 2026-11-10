@@ -3,7 +3,7 @@
 namespace App\Agent;
 
 /**
- * The only way the panel changes the server: a call to the root agent (nusad).
+ * The only way the panel changes the server: a call to the root agent (rayxod).
  *
  * Implementations: SocketAgentClient (production, Unix socket) and
  * FakeAgentClient (simulated responses for local development on macOS).

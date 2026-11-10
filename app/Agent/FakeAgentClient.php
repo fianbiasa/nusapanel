@@ -51,7 +51,7 @@ final class FakeAgentClient implements AgentClient
     private function systemInfo(): array
     {
         return [
-            'hostname' => 'server.nusapanel.test',
+            'hostname' => 'server.rayxo.test',
             'os' => ['name' => 'Ubuntu', 'version' => '24.04 LTS', 'kernel' => '6.8.0-generic'],
             'cpu' => ['model' => 'Simulated vCPU', 'cores' => 4],
             'load' => [0.42, 0.37, 0.31],

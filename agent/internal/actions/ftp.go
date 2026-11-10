@@ -8,9 +8,9 @@ import (
 	"regexp"
 	"strings"
 
-	"nusapanel/agent/internal/rpc"
-	"nusapanel/agent/internal/sysuser"
-	"nusapanel/agent/internal/validate"
+	"rayxo/agent/internal/rpc"
+	"rayxo/agent/internal/sysuser"
+	"rayxo/agent/internal/validate"
 )
 
 const (

@@ -8,5 +8,5 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-Schedule::command('nusapanel:collect-usage')->everyFifteenMinutes()->withoutOverlapping();
-Schedule::command('nusapanel:close-phpmyadmin-sessions')->everyFiveMinutes()->withoutOverlapping();
+Schedule::command('rayxo:collect-usage')->everyFifteenMinutes()->withoutOverlapping();
+Schedule::command('rayxo:close-phpmyadmin-sessions')->everyFiveMinutes()->withoutOverlapping();

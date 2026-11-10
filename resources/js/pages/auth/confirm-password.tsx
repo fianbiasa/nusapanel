@@ -43,7 +43,7 @@ export default function ConfirmPassword() {
                         </div>
 
                         <Button
-                            className="h-11 w-full rounded-xl nusa-brand-gradient text-[15px] font-semibold shadow-brand"
+                            className="h-11 w-full rounded-xl rayxo-brand-gradient text-[15px] font-semibold shadow-brand"
                             disabled={processing}
                             data-test="confirm-password-button"
                         >

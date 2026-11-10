@@ -15,7 +15,7 @@ class CreateAdminCommandTest extends TestCase
 
     public function test_it_creates_an_active_verified_admin()
     {
-        $this->artisan('nusapanel:create-admin', [
+        $this->artisan('rayxo:create-admin', [
             'username' => 'fian',
             'email' => 'Fian@Example.com',
             '--password' => 'a-Strong-pass-123',
@@ -38,17 +38,17 @@ class CreateAdminCommandTest extends TestCase
 
     public function test_it_reads_the_password_from_the_environment()
     {
-        putenv('NUSAPANEL_ADMIN_PASSWORD=env-Strong-pass-456');
+        putenv('RAYXO_ADMIN_PASSWORD=env-Strong-pass-456');
 
         try {
-            $this->artisan('nusapanel:create-admin', [
+            $this->artisan('rayxo:create-admin', [
                 'username' => 'fian',
                 'email' => 'fian@example.com',
             ])
                 ->doesntExpectOutputToContain('Generated password')
                 ->assertSuccessful();
         } finally {
-            putenv('NUSAPANEL_ADMIN_PASSWORD');
+            putenv('RAYXO_ADMIN_PASSWORD');
         }
 
         $admin = User::query()->where('username', 'fian')->sole();
@@ -58,7 +58,7 @@ class CreateAdminCommandTest extends TestCase
 
     public function test_it_generates_a_password_when_none_is_given()
     {
-        $this->artisan('nusapanel:create-admin', [
+        $this->artisan('rayxo:create-admin', [
             'username' => 'fian',
             'email' => 'fian@example.com',
         ])
@@ -71,7 +71,7 @@ class CreateAdminCommandTest extends TestCase
     public function test_it_rejects_reserved_and_invalid_usernames()
     {
         foreach (['root', 'mysql', 'Admin', 'ab', 'www-data', '1admin'] as $username) {
-            $this->artisan('nusapanel:create-admin', [
+            $this->artisan('rayxo:create-admin', [
                 'username' => $username,
                 'email' => 'someone@example.com',
                 '--password' => 'a-Strong-pass-123',

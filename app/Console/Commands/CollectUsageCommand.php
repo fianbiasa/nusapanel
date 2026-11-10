@@ -18,7 +18,7 @@ class CollectUsageCommand extends Command
     /**
      * @var string
      */
-    protected $signature = 'nusapanel:collect-usage';
+    protected $signature = 'rayxo:collect-usage';
 
     /**
      * @var string

@@ -14,7 +14,7 @@ import (
 	"syscall"
 	"time"
 
-	"nusapanel/agent/internal/validate"
+	"rayxo/agent/internal/validate"
 )
 
 // Before certbot asks Let's Encrypt for a certificate, the agent checks the
@@ -104,7 +104,7 @@ func (m *Manager) checkReaches(ctx context.Context, name string) error {
 		return err
 	}
 
-	file := "nusapanel-" + rand.Text()
+	file := "rayxo-" + rand.Text()
 	token := []byte(rand.Text())
 	path := dir + "/" + file
 
@@ -146,7 +146,7 @@ func (m *Manager) fetchToken(ctx context.Context, url string) ([]byte, error) {
 		return nil, err
 	}
 
-	request.Header.Set("User-Agent", "nusapanel-agent reachability check")
+	request.Header.Set("User-Agent", "rayxo-agent reachability check")
 
 	response, err := m.reachClient().Do(request)
 	if err != nil {

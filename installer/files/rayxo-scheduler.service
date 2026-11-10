@@ -1,0 +1,10 @@
+[Unit]
+Description=rayxo scheduled jobs (SSL renewal, backups, statistics)
+After=network.target mariadb.service
+
+[Service]
+Type=oneshot
+User=rayxo
+Group=rayxo
+WorkingDirectory=/usr/local/rayxo/current/panel
+ExecStart=/usr/bin/php8.4 artisan schedule:run

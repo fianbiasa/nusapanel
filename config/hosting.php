@@ -13,7 +13,7 @@ return [
     |
     */
 
-    'default_php_version' => env('NUSAPANEL_PHP_VERSION', '8.4'),
+    'default_php_version' => env('RAYXO_PHP_VERSION', '8.4'),
 
     /*
     |--------------------------------------------------------------------------
@@ -26,7 +26,7 @@ return [
     |
     */
 
-    'public_ip' => env('NUSAPANEL_PUBLIC_IP'),
+    'public_ip' => env('RAYXO_PUBLIC_IP'),
 
     /*
     |--------------------------------------------------------------------------

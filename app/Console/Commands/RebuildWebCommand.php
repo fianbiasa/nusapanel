@@ -18,7 +18,7 @@ class RebuildWebCommand extends Command
     /**
      * @var string
      */
-    protected $signature = 'nusapanel:rebuild-web';
+    protected $signature = 'rayxo:rebuild-web';
 
     /**
      * @var string

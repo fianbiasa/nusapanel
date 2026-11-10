@@ -1,11 +1,11 @@
 <?php
 
 /**
- * Single sign-on from nusapanel into phpMyAdmin.
+ * Single sign-on from rayxo into phpMyAdmin.
  *
  * The panel gives the account's MariaDB owner user a fresh password and
  * posts a ticket here: the user, that password, an expiry a minute away and
- * a binding value, sealed with the key in /etc/nusa-pma/sso.key (the
+ * a binding value, sealed with the key in /etc/rayxo-pma/sso.key (the
  * panel's PHPMYADMIN_SSO_KEY). The panel also set the binding value as a
  * cookie for /phpmyadmin/ in the same browser, so a ticket only works in the
  * browser that asked for it. This script opens phpMyAdmin's signon session
@@ -15,17 +15,17 @@
  * returns to the panel.
  *
  * build-release.sh copies this file into the release as
- * phpmyadmin/nusapanel-sso.php.
+ * phpmyadmin/rayxo-sso.php.
  */
 
 declare(strict_types=1);
 
-const NUSA_SSO_KEY_FILE = '/etc/nusa-pma/sso.key';
-const NUSA_SSO_BINDING_COOKIE = 'nusa_pma_binding';
+const RAYXO_SSO_KEY_FILE = '/etc/rayxo-pma/sso.key';
+const RAYXO_SSO_BINDING_COOKIE = 'rayxo_pma_binding';
 
 /** @var array<string, mixed> $cfg */
 $cfg = [];
-require '/etc/nusa-pma/config.inc.php';
+require '/etc/rayxo-pma/config.inc.php';
 
 /** @var array{SignonSession: string, SignonCookieParams: array<string, mixed>, SignonURL: string} $server */
 $server = $cfg['Servers'][1];
@@ -37,7 +37,7 @@ header('X-Content-Type-Options: nosniff');
 /**
  * Send the browser to $url and stop.
  */
-function nusa_sso_redirect(string $url): never
+function rayxo_sso_redirect(string $url): never
 {
     header('Location: '.$url, true, 303);
     exit;
@@ -46,7 +46,7 @@ function nusa_sso_redirect(string $url): never
 /**
  * Expire a cookie of phpMyAdmin's folder.
  */
-function nusa_sso_forget_cookie(string $name): void
+function rayxo_sso_forget_cookie(string $name): void
 {
     setcookie($name, '', [
         'expires' => 1,
@@ -62,7 +62,7 @@ function nusa_sso_forget_cookie(string $name): void
  *
  * @param  array{SignonSession: string, SignonCookieParams: array<string, mixed>}  $server
  */
-function nusa_sso_start_session(array $server): void
+function rayxo_sso_start_session(array $server): void
 {
     session_set_cookie_params($server['SignonCookieParams']);
     session_name($server['SignonSession']);
@@ -75,9 +75,9 @@ function nusa_sso_start_session(array $server): void
  *
  * @return array{user: string, password: string}|null
  */
-function nusa_sso_open_ticket(string $ticket, string $binding): ?array
+function rayxo_sso_open_ticket(string $ticket, string $binding): ?array
 {
-    $key = base64_decode(trim((string) @file_get_contents(NUSA_SSO_KEY_FILE)), true);
+    $key = base64_decode(trim((string) @file_get_contents(RAYXO_SSO_KEY_FILE)), true);
 
     if ($key === false || strlen($key) !== SODIUM_CRYPTO_SECRETBOX_KEYBYTES) {
         return null;
@@ -126,36 +126,36 @@ function nusa_sso_open_ticket(string $ticket, string $binding): ?array
 
 if (isset($_GET['logout'])) {
     if (isset($_COOKIE[$server['SignonSession']])) {
-        nusa_sso_start_session($server);
+        rayxo_sso_start_session($server);
         $_SESSION = [];
         session_destroy();
-        nusa_sso_forget_cookie($server['SignonSession']);
+        rayxo_sso_forget_cookie($server['SignonSession']);
     }
 
-    nusa_sso_redirect($server['SignonURL']);
+    rayxo_sso_redirect($server['SignonURL']);
 }
 
 $ticket = $_POST['ticket'] ?? null;
-$binding = $_COOKIE[NUSA_SSO_BINDING_COOKIE] ?? '';
+$binding = $_COOKIE[RAYXO_SSO_BINDING_COOKIE] ?? '';
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || ! is_string($ticket) || ! is_string($binding)) {
-    nusa_sso_redirect($server['SignonURL']);
+    rayxo_sso_redirect($server['SignonURL']);
 }
 
-$credentials = nusa_sso_open_ticket($ticket, $binding);
+$credentials = rayxo_sso_open_ticket($ticket, $binding);
 
 // The binding works once.
-nusa_sso_forget_cookie(NUSA_SSO_BINDING_COOKIE);
+rayxo_sso_forget_cookie(RAYXO_SSO_BINDING_COOKIE);
 
 if ($credentials === null) {
-    nusa_sso_redirect($server['SignonURL']);
+    rayxo_sso_redirect($server['SignonURL']);
 }
 
 // A new signon session, and none of phpMyAdmin's state from an earlier one.
-nusa_sso_forget_cookie('phpMyAdmin');
-nusa_sso_forget_cookie('phpMyAdmin_https');
+rayxo_sso_forget_cookie('phpMyAdmin');
+rayxo_sso_forget_cookie('phpMyAdmin_https');
 
-nusa_sso_start_session($server);
+rayxo_sso_start_session($server);
 session_regenerate_id(true);
 $_SESSION = [
     'PMA_single_signon_user' => $credentials['user'],
@@ -163,4 +163,4 @@ $_SESSION = [
 ];
 session_write_close();
 
-nusa_sso_redirect('index.php');
+rayxo_sso_redirect('index.php');

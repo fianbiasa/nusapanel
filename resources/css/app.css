@@ -8,7 +8,7 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * nusapanel theme, after docs/style/nusapanelv1: navy text, one strong blue,
+ * rayxo theme, after docs/style/nusapanelv1: navy text, one strong blue,
  * white cards with soft blue shadows on a pale blue page. Dark mode uses the
  * navy palette of the sidebar asset sheet.
  */
@@ -171,7 +171,7 @@
 
 @layer components {
     /* The soft sky of the reference: a pale glow behind the top of each page. */
-    .nusa-page-bg {
+    .rayxo-page-bg {
         background-image:
             radial-gradient(
                 60rem 22rem at 85% -6rem,
@@ -185,7 +185,7 @@
             );
     }
 
-    .dark .nusa-page-bg {
+    .dark .rayxo-page-bg {
         background-image:
             radial-gradient(
                 60rem 22rem at 85% -6rem,
@@ -202,6 +202,16 @@
 
 /* The active navigation pill and primary call to action. A utility, so
    variants such as data-[active=true]: can apply it. */
-@utility nusa-brand-gradient {
+@utility rayxo-brand-gradient {
     background-image: linear-gradient(135deg, #1688ff 0%, #086cf0 100%);
+}
+
+/* The X of the RAYXO wordmark, as in the logo: cyan to blue to violet. */
+@utility rayxo-logo-gradient {
+    background-image: linear-gradient(
+        135deg,
+        #12c8ff 0%,
+        #1f6fff 55%,
+        #7a2cf5 100%
+    );
 }

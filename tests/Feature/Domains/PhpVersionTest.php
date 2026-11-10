@@ -62,7 +62,7 @@ class PhpVersionTest extends TestCase
         $versions->available();
         $agent->shouldHaveReceived('call')->with('php.versions')->once();
 
-        $this->artisan('nusapanel:rebuild-web')->assertSuccessful();
+        $this->artisan('rayxo:rebuild-web')->assertSuccessful();
 
         $this->assertFalse(Cache::has(PhpVersionService::CACHE_KEY));
     }

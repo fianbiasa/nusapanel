@@ -1,6 +1,8 @@
-# nusapanel — Panel Hosting Mandiri
+<p align="center">
+  <img src="public/images/rayxo-logo.png" alt="RAYXO" width="360">
+</p>
 
-> `nusapanel` hanya codename sementara; nama final bisa diganti kapan saja.
+# RAYXO — Webhosting Manager
 
 Panel hosting self-hosted dengan fitur **minimal setara DirectAdmin**: tiga level akses (Admin, Reseller, User), web, DNS, email, database, FTP, SSL, backup, migrasi, dan keamanan, tanpa biaya lisensi.
 
@@ -21,7 +23,7 @@ Panel hosting self-hosted dengan fitur **minimal setara DirectAdmin**: tiga leve
 | OS                 | Ubuntu 24.04 LTS dulu, Debian menyusul                                           | Paling umum di provider VPS; satu OS mengurangi beban perawatan                      |
 | Panel web          | Laravel + Inertia + React (TypeScript, Tailwind, shadcn/ui)                      | UI dibangun sendiri; interaktif untuk file manager, editor, dan progres task         |
 | Login              | Laravel Fortify                                                                  | Username/email, 2FA, passkey; pendaftaran publik dimatikan                           |
-| Pengembangan lokal | Herd (`nusapanel.test`)                                                          | SSL & versi PHP diatur dari aplikasi Herd; agent disimulasikan (`AGENT_DRIVER=fake`) |
+| Pengembangan lokal | Herd (`rayxo.test`)                                                              | SSL & versi PHP diatur dari aplikasi Herd; agent disimulasikan (`AGENT_DRIVER=fake`) |
 | Agent              | Go, satu binary, jalan sebagai root                                              | Eksekusi tanpa shell, mudah dipasang; SSL lewat certbot yang sudah ada di server     |
 | Pemisahan hak      | Panel bukan root; semua perubahan sistem lewat agent dengan daftar aksi tertutup | Bug di panel tidak otomatis jadi akses root                                          |
 | Web server         | Nginx → Apache → PHP-FPM per user                                                | Cepat, dan `.htaccess` tetap jalan untuk WordPress & pelanggan pindahan              |
@@ -44,7 +46,7 @@ DirectAdmin dikembangkan lebih dari 20 tahun. Mengejar fitur selengkap itu bisa,
 
 ## Menjalankan secara lokal (Herd)
 
-Panel dilayani Herd di `http://nusapanel.test`. Di Mac, agent server disimulasikan (`AGENT_DRIVER=fake`) karena agent asli hanya jalan di Linux.
+Panel dilayani Herd di `http://rayxo.test`. Di Mac, agent server disimulasikan (`AGENT_DRIVER=fake`) karena agent asli hanya jalan di Linux.
 
 ```bash
 composer install && pnpm install
@@ -53,8 +55,8 @@ php artisan migrate --seed      # akun demo admin, reseller, dan user (lihat dat
 pnpm run build                  # atau `composer run dev` untuk mode pengembangan
 ```
 
-- **SSL & versi PHP:** atur dari aplikasi Herd (Sites → `nusapanel`). Setelah mengaktifkan HTTPS, ubah `APP_URL` di `.env` menjadi `https://nusapanel.test`.
-- **Admin pertama di server:** `php artisan nusapanel:create-admin <username> <email>` (password acak ditampilkan sekali).
+- **SSL & versi PHP:** atur dari aplikasi Herd (Sites → `rayxo`). Setelah mengaktifkan HTTPS, ubah `APP_URL` di `.env` menjadi `https://rayxo.test`.
+- **Admin pertama di server:** `php artisan rayxo:create-admin <username> <email>` (password acak ditampilkan sekali).
 - **Test & pengecekan:** `php artisan test`, `vendor/bin/pint`, `vendor/bin/phpstan analyse`, `pnpm run check`, `pnpm run types:check`.
 
 ## Agent server (`agent/`, Go)
@@ -62,24 +64,24 @@ pnpm run build                  # atau `composer run dev` untuk mode pengembanga
 ```bash
 cd agent
 make check     # go vet (Mac + Linux), test dengan race detector, gofmt
-make build     # bin/nusad dan bin/nusactl untuk Mac
+make build     # bin/rayxod dan bin/rayxo untuk Mac
 make linux     # binary statis untuk server: bin/linux-amd64/ dan bin/linux-arm64/
 ```
 
-**Uji panel dengan agent asli di Mac.** nusad bisa jalan di macOS khusus untuk pengembangan, karena PHP-FPM Herd jalan sebagai user kamu:
+**Uji panel dengan agent asli di Mac.** rayxod bisa jalan di macOS khusus untuk pengembangan, karena PHP-FPM Herd jalan sebagai user kamu:
 
 ```bash
-agent/bin/nusad --socket "$PWD/storage/app/nusad.sock" --allow-user "$(whoami)" --socket-group ""
+agent/bin/rayxod --socket "$PWD/storage/app/rayxod.sock" --allow-user "$(whoami)" --socket-group ""
 ```
 
-Lalu di `.env` set `AGENT_DRIVER=socket` dan `AGENT_SOCKET` ke path socket di atas. Kembalikan ke `AGENT_DRIVER=fake` setelah selesai. Cek cepat tanpa panel: `agent/bin/nusactl -socket storage/app/nusad.sock ping`.
+Lalu di `.env` set `AGENT_DRIVER=socket` dan `AGENT_SOCKET` ke path socket di atas. Kembalikan ke `AGENT_DRIVER=fake` setelah selesai. Cek cepat tanpa panel: `agent/bin/rayxo -socket storage/app/rayxod.sock ping`.
 
 ## Instalasi di server (Ubuntu 24.04)
 
 Di server baru, sebagai root:
 
 ```bash
-wget https://github.com/fianbiasa/nusapanel/releases/latest/download/setup.sh
+wget https://github.com/fianbiasa/rayxo/releases/latest/download/setup.sh
 ```
 
 ```bash
@@ -100,23 +102,25 @@ Dengan syarat itu terpenuhi, `setup.sh` otomatis memasang **SSL Let's Encrypt** 
 
 Di akhir instalasi muncul alamat panel (`https://<hostname>:2222`), username, dan password admin (hanya ditampilkan sekali, tidak masuk log). `setup.sh` aman dijalankan ulang kalau berhenti di tengah. Pilihan lengkap: `bash setup.sh --help`.
 
-**Email panel** (verifikasi, reset password) dikirim lewat Postfix kirim-saja (hanya mendengar di `127.0.0.1`) dan ditandatangani DKIM oleh OpenDKIM. Di akhir instalasi, `setup.sh` menampilkan rekaman DNS yang perlu dipasang beserta statusnya (✔/✘), dan menyimpannya di `/etc/nusapanel/dns-records.txt`:
+**Email panel** (verifikasi, reset password) dikirim lewat Postfix kirim-saja (hanya mendengar di `127.0.0.1`) dan ditandatangani DKIM oleh OpenDKIM. Di akhir instalasi, `setup.sh` menampilkan rekaman DNS yang perlu dipasang beserta statusnya (✔/✘), dan menyimpannya di `/etc/rayxo/dns-records.txt`:
 
-| Rekaman | Nama                                  | Nilai                                               |
-| ------- | ------------------------------------- | --------------------------------------------------- |
-| SPF     | TXT `<hostname>`                      | `v=spf1 a ~all`                                     |
-| DKIM    | TXT `nusapanel._domainkey.<hostname>` | `v=DKIM1; k=rsa; p=…` (kunci dibuat saat instalasi) |
-| DMARC   | TXT `_dmarc.<hostname>`               | `v=DMARC1; p=none; adkim=r; aspf=r`                 |
+| Rekaman | Nama                              | Nilai                                               |
+| ------- | --------------------------------- | --------------------------------------------------- |
+| SPF     | TXT `<hostname>`                  | `v=spf1 a ~all`                                     |
+| DKIM    | TXT `rayxo._domainkey.<hostname>` | `v=DKIM1; k=rsa; p=…` (kunci dibuat saat instalasi) |
+| DMARC   | TXT `_dmarc.<hostname>`           | `v=DMARC1; p=none; adkim=r; aspf=r`                 |
 
 Jalankan `setup.sh` lagi kapan saja untuk mengecek ulang statusnya.
 
 Lupa password admin? Di server, sebagai root:
 
 ```bash
-runuser -u nusapanel -- php8.4 /usr/local/nusapanel/current/panel/artisan nusapanel:reset-password admin
+runuser -u rayxo -- php8.4 /usr/local/rayxo/current/panel/artisan rayxo:reset-password admin
 ```
 
 Password baru ditampilkan sekali, dan semua session lama akun itu dikeluarkan.
+
+**Pindah dari nusapanel.** Sebelum bernama RAYXO, panel ini bernama nusapanel. Server yang dipasang dengan nama lama itu dipindah otomatis begitu `setup.sh` versi baru dijalankan: user, grup, folder, database, dan service berganti nama dengan uid/gid yang sama, dan akun, website, database, FTP, SFTP, serta cron tetap jalan. Konfigurasi dan database lama di-backup dulu ke `/root/rayxo-migration-<waktu>/`. Website terus dilayani konfigurasi lama sampai agent selesai menulis yang baru, baru setelah itu sisa nama lama dihapus. Selector DKIM `nusapanel` tetap dipakai, jadi rekaman DNS tidak perlu diubah.
 
 ## Membuat rilis
 
@@ -126,6 +130,6 @@ Rilis dibuat otomatis oleh GitHub Actions (`.github/workflows/release.yml`) seti
 git tag v0.2.0 && git push origin v0.2.0
 ```
 
-Workflow menjalankan `installer/build-release.sh`, lalu menerbitkan `setup.sh`, `nusapanel-<versi>-linux-{amd64,arm64}.tar.gz`, dan file `.sha256`-nya di [Releases](https://github.com/fianbiasa/nusapanel/releases). Server tidak butuh Composer, Node.js, atau Go.
+Workflow menjalankan `installer/build-release.sh`, lalu menerbitkan `setup.sh`, `rayxo-<versi>-linux-{amd64,arm64}.tar.gz`, dan file `.sha256`-nya di [Releases](https://github.com/fianbiasa/rayxo/releases). Server tidak butuh Composer, Node.js, atau Go.
 
-Untuk uji tanpa rilis: jalankan `installer/build-release.sh 0.2.0-dev` di Mac, salin isi `dist/` ke server, lalu `bash setup.sh --package nusapanel-0.2.0-dev-linux-amd64.tar.gz`.
+Untuk uji tanpa rilis: jalankan `installer/build-release.sh 0.2.0-dev` di Mac, salin isi `dist/` ke server, lalu `bash setup.sh --package rayxo-0.2.0-dev-linux-amd64.tar.gz`.

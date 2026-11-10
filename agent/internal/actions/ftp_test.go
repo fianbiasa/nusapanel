@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"nusapanel/agent/internal/rpc"
-	"nusapanel/agent/internal/sysuser"
+	"rayxo/agent/internal/rpc"
+	"rayxo/agent/internal/sysuser"
 )
 
 // fakeFTPSystem records the folders ftp.ensure_dir asks for.

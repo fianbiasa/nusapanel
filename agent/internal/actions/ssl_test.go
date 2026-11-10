@@ -21,8 +21,8 @@ import (
 	"testing"
 	"time"
 
-	"nusapanel/agent/internal/rpc"
-	"nusapanel/agent/internal/runner"
+	"rayxo/agent/internal/rpc"
+	"rayxo/agent/internal/runner"
 )
 
 // certificateExpiry is when every certificate the fake certbot issues

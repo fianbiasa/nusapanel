@@ -25,7 +25,7 @@ export default function VerifyEmail({ status }: { status?: string }) {
                     <>
                         <Button
                             disabled={processing}
-                            className="h-11 w-full rounded-xl nusa-brand-gradient text-[15px] font-semibold shadow-brand"
+                            className="h-11 w-full rounded-xl rayxo-brand-gradient text-[15px] font-semibold shadow-brand"
                         >
                             {processing && <Spinner />}
                             Kirim ulang email verifikasi

@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"nusapanel/agent/internal/runner"
+	"rayxo/agent/internal/runner"
 )
 
 // sampleReport is what `repquota -u -v -n -O csv /` prints with quota 4.06,

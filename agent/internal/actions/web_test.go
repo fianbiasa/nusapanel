@@ -14,10 +14,10 @@ import (
 	"sync"
 	"testing"
 
-	"nusapanel/agent/internal/rpc"
-	"nusapanel/agent/internal/runner"
-	"nusapanel/agent/internal/sysuser"
-	"nusapanel/agent/internal/webserver"
+	"rayxo/agent/internal/rpc"
+	"rayxo/agent/internal/runner"
+	"rayxo/agent/internal/sysuser"
+	"rayxo/agent/internal/webserver"
 )
 
 var webMethodNames = []string{"web.apply_domain", "web.remove_domain", "php.remove_pool", "php.versions", "ssl.issue", "ssl.install", "ssl.delete"}
@@ -58,7 +58,7 @@ func newWebEnv(t *testing.T) *webEnv {
 		PoolDir:              filepath.Join(base, "php-fpm"),
 		UnitDir:              filepath.Join(base, "systemd"),
 		LogDir:               filepath.Join(base, "log"),
-		RunDir:               "/run/nusa-php",
+		RunDir:               "/run/rayxo-php",
 		HomeRoot:             "/home",
 		PHPFPMDir:            filepath.Join(base, "sbin"),
 		IPv6File:             filepath.Join(base, "if_inet6"),
@@ -301,7 +301,7 @@ func TestApplyDomainSetsUpTheWebsite(t *testing.T) {
 		env.cfg.NginxDir + "/budi/example.com.conf",
 		env.cfg.ApacheDir + "/budi/example.com.conf",
 		env.cfg.PoolDir + "/8.4/budi.conf",
-		env.cfg.UnitDir + "/nusa-php84@.service",
+		env.cfg.UnitDir + "/rayxo-php84@.service",
 	} {
 		if _, err := os.Stat(path); err != nil {
 			t.Errorf("%s was not written: %v", path, err)
@@ -339,7 +339,7 @@ func TestApplyDomainSetsUpPointersAndRedirects(t *testing.T) {
 	}
 
 	nginx, err := os.ReadFile(env.cfg.NginxDir + "/budi/example.net.conf")
-	if err != nil || !strings.Contains(string(nginx), `return 302 "https://example.com/sale/$nusa_rest$is_args$args";`) {
+	if err != nil || !strings.Contains(string(nginx), `return 302 "https://example.com/sale/$rayxo_rest$is_args$args";`) {
 		t.Fatalf("the redirect is missing from the vhost (%v):\n%s", err, nginx)
 	}
 

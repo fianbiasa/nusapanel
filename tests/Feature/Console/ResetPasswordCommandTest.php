@@ -23,7 +23,7 @@ class ResetPasswordCommandTest extends TestCase
             'last_activity' => now()->timestamp,
         ]);
 
-        $this->artisan('nusapanel:reset-password', ['username' => 'admin', '--password' => 'new-Strong-pass-789'])
+        $this->artisan('rayxo:reset-password', ['username' => 'admin', '--password' => 'new-Strong-pass-789'])
             ->expectsOutputToContain('Password for [admin] reset')
             ->doesntExpectOutputToContain('New password (shown only once)')
             ->assertSuccessful();
@@ -41,7 +41,7 @@ class ResetPasswordCommandTest extends TestCase
         $user = User::factory()->admin()->create(['username' => 'admin']);
         $oldHash = $user->password;
 
-        $this->artisan('nusapanel:reset-password', ['username' => 'admin'])
+        $this->artisan('rayxo:reset-password', ['username' => 'admin'])
             ->expectsOutputToContain('New password (shown only once)')
             ->assertSuccessful();
 
@@ -50,7 +50,7 @@ class ResetPasswordCommandTest extends TestCase
 
     public function test_it_fails_for_an_unknown_account()
     {
-        $this->artisan('nusapanel:reset-password', ['username' => 'ghost'])
+        $this->artisan('rayxo:reset-password', ['username' => 'ghost'])
             ->expectsOutputToContain('No account named [ghost]')
             ->assertFailed();
     }

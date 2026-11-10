@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Cache;
 /**
  * The PHP versions websites can run on: those installed on the server, as
  * the agent reports them. setup.sh installs them; the answer is cached for
- * a few minutes, and `nusapanel:rebuild-web` (run after every upgrade)
+ * a few minutes, and `rayxo:rebuild-web` (run after every upgrade)
  * forgets it, so newly installed versions show up right away.
  */
 class PhpVersionService

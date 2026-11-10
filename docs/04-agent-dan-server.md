@@ -7,12 +7,12 @@ Tanda ✅ = sudah ada (P0); sisanya menyusul sesuai fase.
 ```
 agent/
 ├── cmd/
-│   ├── nusad/          ✅ daemon agent
-│   └── nusactl/        ✅ CLI (ping, call <method> [params])
+│   ├── rayxod/          ✅ daemon agent
+│   └── rayxo/        ✅ CLI (ping, call <method> [params])
 ├── internal/
 │   ├── rpc/            ✅ server JSON-RPC, socket, cek UID pemanggil, registry method, kunci per akun
 │   ├── peercred/       ✅ UID pemanggil dari kernel (SO_PEERCRED di Linux, LOCAL_PEERCRED di Mac)
-│   ├── client/         ✅ klien socket (dipakai nusactl dan test)
+│   ├── client/         ✅ klien socket (dipakai rayxo dan test)
 │   ├── actions/        ✅ daftar method; menyusul satu paket per namespace: account, web, php, ssl, dns, db, mail, fs, ...
 │   ├── sysinfo/        ✅ data untuk system.info (Linux; Mac khusus pengembangan)
 │   ├── validate/       ✅ username, domain, versi PHP; menyusul path dan nilai config
@@ -23,30 +23,30 @@ agent/
 │   ├── daemons/        brute force monitor, watchdog
 │   └── services/       wrapper postfix, API PowerDNS, MariaDB, ...
 ├── packaging/
-│   └── nusad.service   ✅ unit systemd
+│   └── rayxod.service   ✅ unit systemd
 └── Makefile            ✅ build (Mac), linux (amd64/arm64 static), test, vet, check
 ```
 
-Template config (vhost, pool PHP-FPM, unit systemd, halaman default & suspended) ada di `internal/webserver/templates/` dan ditanam di binary `nusad`, jadi tidak bisa diubah tanpa root. Override template per server (`/etc/nusapanel/templates/custom/`) menyusul di P3.
+Template config (vhost, pool PHP-FPM, unit systemd, halaman default & suspended) ada di `internal/webserver/templates/` dan ditanam di binary `rayxod`, jadi tidak bisa diubah tanpa root. Override template per server (`/etc/rayxo/templates/custom/`) menyusul di P3.
 
 ```
 
 ```
 
-### Menjalankan nusad
+### Menjalankan rayxod
 
 ```
-nusad --socket /run/nusapanel/agent.sock --allow-user nusapanel --socket-group nusapanel
+rayxod --socket /run/rayxo/agent.sock --allow-user rayxo --socket-group rayxo
 ```
 
-| Flag             | Default                     | Fungsi                                                   |
-| ---------------- | --------------------------- | -------------------------------------------------------- |
-| `--socket`       | `/run/nusapanel/agent.sock` | Lokasi Unix socket                                       |
-| `--allow-user`   | `nusapanel`                 | User yang boleh memanggil agent (selain root)            |
-| `--socket-group` | `nusapanel`                 | Grup pemilik socket; kosong = tidak diubah               |
-| `--call-timeout` | `10m`                       | Batas waktu satu panggilan, termasuk menunggu kunci akun |
+| Flag             | Default                 | Fungsi                                                   |
+| ---------------- | ----------------------- | -------------------------------------------------------- |
+| `--socket`       | `/run/rayxo/agent.sock` | Lokasi Unix socket                                       |
+| `--allow-user`   | `rayxo`                 | User yang boleh memanggil agent (selain root)            |
+| `--socket-group` | `rayxo`                 | Grup pemilik socket; kosong = tidak diubah               |
+| `--call-timeout` | `10m`                   | Batas waktu satu panggilan, termasuk menunggu kunci akun |
 
-Socket dibuat dengan izin `0660` (umask ketat saat dibuat, jadi tidak ada celah sebelum izin final). Saat menerima `SIGTERM`, nusad berhenti menerima koneksi, menunggu panggilan yang sedang berjalan selesai, lalu menghapus socket. Log berformat JSON ke stderr (dibaca journald).
+Socket dibuat dengan izin `0660` (umask ketat saat dibuat, jadi tidak ada celah sebelum izin final). Saat menerima `SIGTERM`, rayxod berhenti menerima koneksi, menunggu panggilan yang sedang berjalan selesai, lalu menghapus socket. Log berformat JSON ke stderr (dibaca journald).
 
 ### Protokol
 
@@ -67,7 +67,7 @@ JSON-RPC 2.0, satu koneksi = satu request dan satu response, masing-masing satu 
 
 | Input                         | Aturan                                                                                                                                                                                              |
 | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Username                      | `^[a-z][a-z0-9]{2,15}$`; bukan nama tercadang (`root`, `nusapanel`, `www-data`, `mysql`, `postfix`, `dovecot`, dll.); belum ada di `/etc/passwd`                                                    |
+| Username                      | `^[a-z][a-z0-9]{2,15}$`; bukan nama tercadang (`root`, `rayxo`, `www-data`, `mysql`, `postfix`, `dovecot`, dll.); belum ada di `/etc/passwd`                                                        |
 | Domain                        | Huruf kecil, punycode, maks 253 karakter, setiap label `^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`, minimal 2 label; bukan hostname server; tidak tumpang tindih dengan domain/subdomain milik akun lain |
 | Path                          | Dibersihkan, symlink diresolve, harus di bawah `/home/<user>/`; operasi dijalankan sebagai UID user                                                                                                 |
 | Nilai di config               | Tanpa newline, karakter kontrol, atau kutip; tipe & rentang dicek per kunci (contoh: `memory_limit` = angka + `M`/`G`, maksimal sesuai paket)                                                       |
@@ -83,13 +83,13 @@ Konvensi nama: `namespace.aksi`. "Sebagai user" = agent turun ke UID user sebelu
 
 | Aksi                            | Fungsi                                                                                                                                                                                                                                                                                                                                                                                                               | Fase |
 | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| `account.create`                | ✅ Buat user & grup Linux (penanda GECOS `nusapanel`), home `0710 <user>:nusa-access`, `domains`/`tmp`/`backups`/`.trash`, masuk grup `nusa-sftp` (SFTP saja); quota & slice systemd menyusul                                                                                                                                                                                                                        | P1   |
+| `account.create`                | ✅ Buat user & grup Linux (penanda GECOS `rayxo`), home `0710 <user>:rayxo-access`, `domains`/`tmp`/`backups`/`.trash`, masuk grup `rayxo-sftp` (SFTP saja); quota & slice systemd menyusul                                                                                                                                                                                                                          | P1   |
 | `account.set_quota`             | ✅ `{username, disk_mb, inodes}` (0 = tanpa batas): kuota user filesystem lewat `setquota` (soft = hard). `{applied: false}` kalau kuota server belum aktif. `account.delete` membersihkan kuota UID-nya                                                                                                                                                                                                             | P1   |
-| `quota.report`                  | ✅ Pemakaian & batas disk/inode semua akun nusapanel (`repquota`), dikumpulkan panel tiap 15 menit                                                                                                                                                                                                                                                                                                                   | P1   |
+| `quota.report`                  | ✅ Pemakaian & batas disk/inode semua akun rayxo (`repquota`), dikumpulkan panel tiap 15 menit                                                                                                                                                                                                                                                                                                                       | P1   |
 | `account.apply_limits`          | Batas CPU, RAM, proses, IO (cgroups)                                                                                                                                                                                                                                                                                                                                                                                 | P3   |
 | `account.suspend` / `unsuspend` | ✅ kunci password + akun kedaluwarsa (blok SSH-key/SFTP), semua website menampilkan halaman 503, PHP-FPM dihentikan (tetap mati setelah reboot), semua user MariaDB akun itu, termasuk user pemilik, dikunci (`ACCOUNT LOCK`); cron berhenti sendiri karena cron memeriksa akun lewat PAM dan akun kedaluwarsa ditolak (crontab tetap ada, jalan lagi setelah unsuspend). Mail & FTP otomatis ditolak lewat view SQL | P1   |
 | `account.delete`                | ✅ matikan & hapus pool PHP-FPM, hapus vhost & log domain, drop semua database & user MariaDB akun itu, termasuk user pemilik (kalau gagal, akun tidak dihapus supaya akun baru bernama sama tidak mewarisinya), hentikan proses, hapus crontab (userdel tidak menghapusnya), hapus home & user Linux (akun sistem ditolak); menyusul: mail, dst.                                                                    | P1   |
-| `account.set_password`          | ✅ `{username, password_hash}`: password Linux untuk SFTP menjadi hash SHA512-CRYPT itu (`chpasswd -e` lewat stdin), atau tanpa password (`!`) kalau hash kosong; akun masuk grup `nusa-sftp`. Akun yang di-suspend tetap kedaluwarsa, jadi tetap tidak bisa login                                                                                                                                                   | P1   |
+| `account.set_password`          | ✅ `{username, password_hash}`: password Linux untuk SFTP menjadi hash SHA512-CRYPT itu (`chpasswd -e` lewat stdin), atau tanpa password (`!`) kalau hash kosong; akun masuk grup `rayxo-sftp`. Akun yang di-suspend tetap kedaluwarsa, jadi tetap tidak bisa login                                                                                                                                                  | P1   |
 | `account.rename`                | Ganti username                                                                                                                                                                                                                                                                                                                                                                                                       | P6   |
 
 ### web
@@ -103,22 +103,22 @@ Konvensi nama: `namespace.aksi`. "Sebagai user" = agent turun ke UID user sebelu
 
 ### php
 
-| Aksi                                                           | Fungsi                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Fase |
-| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| `php.apply_pool`                                               | Pool PHP-FPM per website: satu master per user per versi (`nusa-php<versi>@<user>`), dengan satu section pool (dan socket) per website di `<user>.d/<domain>.conf`, berisi `php_value`/`php_flag` pengaturan website itu. Sekarang dibuat & dijalankan otomatis oleh `web.apply_domain` (dicek `php-fpm -t` dulu); section yang tidak dipakai vhost mana pun lagi dihapus di akhir `web.apply_domain` dan `web.remove_domain`, dan pool versi yang kosong dimatikan & dihapus. Pool lama satu-per-akun tetap dirender selama masih ada vhost yang memakainya, jadi upgrade tanpa jeda | P1   |
-| `php.remove_pool`                                              | ✅ `{username, php_version}`: matikan & hapus pool; dilewati kalau masih ada vhost akun itu yang memakainya                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | P1   |
-| `php.versions`                                                 | ✅ `{}` → `{versions}`: versi PHP yang `php-fpm<versi>`-nya terpasang, urut dari yang terlama. Hanya membaca, tanpa kunci akun; panel menyimpannya 10 menit                                                                                                                                                                                                                                                                                                                                                                                                                           | P1   |
-| `php.install_version` / `remove_version` / `install_extension` |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | P6   |
+| Aksi                                                           | Fungsi                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Fase |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| `php.apply_pool`                                               | Pool PHP-FPM per website: satu master per user per versi (`rayxo-php<versi>@<user>`), dengan satu section pool (dan socket) per website di `<user>.d/<domain>.conf`, berisi `php_value`/`php_flag` pengaturan website itu. Sekarang dibuat & dijalankan otomatis oleh `web.apply_domain` (dicek `php-fpm -t` dulu); section yang tidak dipakai vhost mana pun lagi dihapus di akhir `web.apply_domain` dan `web.remove_domain`, dan pool versi yang kosong dimatikan & dihapus. Pool lama satu-per-akun tetap dirender selama masih ada vhost yang memakainya, jadi upgrade tanpa jeda | P1   |
+| `php.remove_pool`                                              | ✅ `{username, php_version}`: matikan & hapus pool; dilewati kalau masih ada vhost akun itu yang memakainya                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | P1   |
+| `php.versions`                                                 | ✅ `{}` → `{versions}`: versi PHP yang `php-fpm<versi>`-nya terpasang, urut dari yang terlama. Hanya membaca, tanpa kunci akun; panel menyimpannya 10 menit                                                                                                                                                                                                                                                                                                                                                                                                                            | P1   |
+| `php.install_version` / `remove_version` / `install_extension` |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | P6   |
 
 ### ssl
 
-| Aksi                               | Fungsi                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Fase    |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
-| `ssl.issue`                        | ✅ `{username, domain}`: cek dulu domain (dan `www.`) benar-benar sampai ke server ini lewat HTTP (file uji di webroot ACME, jadi A record langsung maupun proxy Cloudflare lolos), lalu Let's Encrypt via certbot (HTTP-01). `www.` ikut hanya kalau juga sampai. DNS-01 untuk wildcard menyusul di P2                                                                                                                                                                                                                                                                                                  | P1 / P2 |
-| `ssl.install`                      | ✅ `{username, domain, certificate, private_key}` (PEM) → `{names, expires_at, issuer, trusted}`: cek sertifikat buatan customer (rantai PEM, sertifikat domain dulu), key tanpa password (RSA ≥ 2048 atau ECDSA P-256/384/521) yang cocok, mencakup domain (wildcard boleh), dan masih berlaku; disimpan ulang (hanya sertifikat, key sebagai PKCS #8) ke `/etc/nusapanel/ssl/domains/<domain>/`. `trusted` = berantai ke root yang dipercaya; sertifikat yang tidak dipercaya (Cloudflare Origin) tetap boleh. Tidak menyalakan HTTPS; `web.apply_domain` dengan `certificate: custom` yang memakainya | P1      |
-| `ssl.delete`                       | ✅ `{username, domain}`: hapus sertifikat Let's Encrypt (`certbot delete`) dan sertifikat customer domain itu; ditolak selama vhost masih memakai salah satunya. `web.remove_domain` dan `account.delete` juga menghapus sertifikat domainnya                                                                                                                                                                                                                                                                                                                                                            | P1      |
-| `ssl.issue_hostname`               | SSL untuk hostname server: panel, mail, FTP                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | P1      |
-| `ssl.generate_csr` / `self_signed` |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | P3      |
+| Aksi                               | Fungsi                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Fase    |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| `ssl.issue`                        | ✅ `{username, domain}`: cek dulu domain (dan `www.`) benar-benar sampai ke server ini lewat HTTP (file uji di webroot ACME, jadi A record langsung maupun proxy Cloudflare lolos), lalu Let's Encrypt via certbot (HTTP-01). `www.` ikut hanya kalau juga sampai. DNS-01 untuk wildcard menyusul di P2                                                                                                                                                                                                                                                                                              | P1 / P2 |
+| `ssl.install`                      | ✅ `{username, domain, certificate, private_key}` (PEM) → `{names, expires_at, issuer, trusted}`: cek sertifikat buatan customer (rantai PEM, sertifikat domain dulu), key tanpa password (RSA ≥ 2048 atau ECDSA P-256/384/521) yang cocok, mencakup domain (wildcard boleh), dan masih berlaku; disimpan ulang (hanya sertifikat, key sebagai PKCS #8) ke `/etc/rayxo/ssl/domains/<domain>/`. `trusted` = berantai ke root yang dipercaya; sertifikat yang tidak dipercaya (Cloudflare Origin) tetap boleh. Tidak menyalakan HTTPS; `web.apply_domain` dengan `certificate: custom` yang memakainya | P1      |
+| `ssl.delete`                       | ✅ `{username, domain}`: hapus sertifikat Let's Encrypt (`certbot delete`) dan sertifikat customer domain itu; ditolak selama vhost masih memakai salah satunya. `web.remove_domain` dan `account.delete` juga menghapus sertifikat domainnya                                                                                                                                                                                                                                                                                                                                                        | P1      |
+| `ssl.issue_hostname`               | SSL untuk hostname server: panel, mail, FTP                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | P1      |
+| `ssl.generate_csr` / `self_signed` |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | P3      |
 
 ### dns
 
@@ -140,7 +140,7 @@ Setiap akun juga punya **user pemilik** bernama persis `<username>` (tanpa akhir
 | `db.delete_database`               | ✅ `{username, database}`: cabut hak semua user atas database itu, lalu `DROP DATABASE IF EXISTS`                                                                                                            | P1   |
 | `db.apply_user`                    | ✅ `{username, user, password_hash, databases}`: buat/perbarui user dengan hash itu, cabut hak ke database yang tidak ada di daftar, beri `ALL PRIVILEGES` ke yang ada (`_` di-escape supaya bukan wildcard) | P1   |
 | `db.delete_user`                   | ✅ `{username, user}`: `DROP USER IF EXISTS`; database-nya tetap ada                                                                                                                                         | P1   |
-| `db.report`                        | ✅ Ukuran semua database akun nusapanel (`information_schema`), dikumpulkan panel tiap 15 menit                                                                                                              | P1   |
+| `db.report`                        | ✅ Ukuran semua database akun rayxo (`information_schema`), dikumpulkan panel tiap 15 menit                                                                                                                  | P1   |
 | `db.open_sso`                      | ✅ `{username, password_hash, databases}`: buat/perbarui user pemilik dengan hash itu dan akses ke tepat database yang diberikan (sinkron, dipanggil saat customer membuka phpMyAdmin)                       | P1   |
 | `db.close_sso`                     | ✅ `{username}`: user pemilik mendapat password acak yang tidak diketahui siapa pun, sehingga sesi phpMyAdmin berakhir; berhasil juga kalau user atau akunnya sudah tidak ada                                | P1   |
 | `db.remote_hosts_apply`            | Buat `user@host` sesuai daftar host                                                                                                                                                                          | P3   |
@@ -186,7 +186,7 @@ Setiap akun juga punya **user pemilik** bernama persis `<username>` (tanpa akhir
 | `backup.restore`                              | Restore penuh atau sebagian                                                            | P4   |
 | `backup.upload` / `download`                  | Ke/dari tujuan remote lewat rclone                                                     | P4   |
 | `backup.import_cpanel` / `import_directadmin` | Baca format panel lain, ubah ke state panel, lalu restore                              | P4   |
-| `backup.system`                               | Database panel + `/etc/nusapanel`                                                      | P4   |
+| `backup.system`                               | Database panel + `/etc/rayxo`                                                          | P4   |
 
 ### system
 
@@ -234,7 +234,7 @@ Setiap akun juga punya **user pemilik** bernama persis `<username>` (tanpa akhir
 ## 4.4 Layout folder server
 
 ```
-/home/<user>/                           0710  <user>:nusa-access
+/home/<user>/                           0710  <user>:rayxo-access
 ├── domains/<domain>/                    juga untuk subdomain: domains/blog.<domain>/
 │   ├── public_html/                    document root (pointer alias memakai milik domain induknya)
 │   ├── private_html -> public_html     kompatibel DirectAdmin
@@ -244,60 +244,60 @@ Setiap akun juga punya **user pemilik** bernama persis `<username>` (tanpa akhir
 ├── tmp/                                tmp & session PHP pribadi
 └── .trash/                             tempat sampah file manager
 
-/usr/local/nusapanel/                   milik root, tidak bisa ditulis panel
+/usr/local/rayxo/                   milik root, tidak bisa ditulis panel
 ├── releases/<versi>/                   satu folder per rilis (isi paket)
 │   ├── panel/                          aplikasi Laravel (vendor & aset sudah jadi)
-│   ├── phpmyadmin/                     phpMyAdmin (versi & SHA-256 dipatok di build-release.sh) + nusapanel-sso.php
-│   │   ├── .env -> /etc/nusapanel/panel.env
-│   │   └── storage -> /var/lib/nusapanel/storage
-│   ├── bin/nusad, bin/nusactl
+│   ├── phpmyadmin/                     phpMyAdmin (versi & SHA-256 dipatok di build-release.sh) + rayxo-sso.php
+│   │   ├── .env -> /etc/rayxo/panel.env
+│   │   └── storage -> /var/lib/rayxo/storage
+│   ├── bin/rayxod, bin/rayxo
 │   ├── systemd/, config/               unit systemd & template config panel
 │   └── VERSION
 ├── current -> releases/<versi>         rilis aktif; update = ganti symlink ini
 └── bin -> current/bin
 
-/usr/local/bin/nusactl -> /usr/local/nusapanel/bin/nusactl
+/usr/local/bin/rayxo -> /usr/local/rayxo/bin/rayxo
 
-/etc/nusapanel/                         0750 root:nusapanel
-├── panel.env                           0640 root:nusapanel (APP_KEY, password DB panel)
+/etc/rayxo/                         0750 root:rayxo
+├── panel.env                           0640 root:rayxo (APP_KEY, password DB panel)
 ├── ssl/panel.{crt,key}                 symlink ke sertifikat Let's Encrypt hostname (self-signed kalau gagal)
 ├── dns-records.txt                     rekaman DNS (A, PTR, SPF, DKIM, DMARC) + statusnya
 ├── installed, admin-created            penanda instalasi (dipakai setup.sh saat diulang)
 ├── templates/custom/                   override template (tidak tertimpa update)
 ├── php-fpm/<versi>/<user>.conf         master PHP-FPM per user per versi ([global] + include)
-├── php-fpm/<versi>/<user>.d/<domain>.conf  pool per website (socket /run/nusa-php/php<tag>-<user>-<hash>.sock)
+├── php-fpm/<versi>/<user>.d/<domain>.conf  pool per website (socket /run/rayxo-php/php<tag>-<user>-<hash>.sock)
 └── ssl/domains/<domain>/                 0700 root: sertifikat customer, fullchain.pem (0644) & privkey.pem (0600)
 
-/etc/nginx/nusapanel/<user>/<domain>.conf        vhost Nginx (port 80, plus 443 kalau SSL aktif), ditulis nusad
-/etc/nginx/nusapanel/<user>/suspended.inc        hanya ada selama akun di-suspend (halaman 503)
-/etc/nginx/conf.d/nusapanel-sites.conf           include semua vhost di atas
-/etc/nginx/sites-enabled/nusapanel-default.conf  default server: port 80 → 404, port 443 → handshake ditolak (host tak dikenal & IP)
-/etc/nginx/sites-enabled/nusapanel-phpmyadmin.conf  https://<hostname>/phpmyadmin/ (port 443; selain /phpmyadmin/ diarahkan ke panel)
-/etc/php/8.4/fpm/pool.d/nusapanel-phpmyadmin.conf  pool phpMyAdmin (user nusa-pma, socket /run/php/nusapanel-phpmyadmin.sock)
-/etc/nusa-pma/                          0750 root:nusa-pma: config.inc.php, blowfish.key, sso.key (= PHPMYADMIN_SSO_KEY panel)
-/etc/pure-ftpd/db/mysql.conf            0600 root: koneksi Pure-FTPd ke view v_ftp_users (user nusapanel-ftp, password diganti tiap setup.sh)
+/etc/nginx/rayxo/<user>/<domain>.conf        vhost Nginx (port 80, plus 443 kalau SSL aktif), ditulis rayxod
+/etc/nginx/rayxo/<user>/suspended.inc        hanya ada selama akun di-suspend (halaman 503)
+/etc/nginx/conf.d/rayxo-sites.conf           include semua vhost di atas
+/etc/nginx/sites-enabled/rayxo-default.conf  default server: port 80 → 404, port 443 → handshake ditolak (host tak dikenal & IP)
+/etc/nginx/sites-enabled/rayxo-phpmyadmin.conf  https://<hostname>/phpmyadmin/ (port 443; selain /phpmyadmin/ diarahkan ke panel)
+/etc/php/8.4/fpm/pool.d/rayxo-phpmyadmin.conf  pool phpMyAdmin (user rayxo-pma, socket /run/php/rayxo-phpmyadmin.sock)
+/etc/rayxo-pma/                          0750 root:rayxo-pma: config.inc.php, blowfish.key, sso.key (= PHPMYADMIN_SSO_KEY panel)
+/etc/pure-ftpd/db/mysql.conf            0600 root: koneksi Pure-FTPd ke view v_ftp_users (user rayxo-ftp, password diganti tiap setup.sh)
 /etc/pure-ftpd/conf/, auth/30mysql      opsi Pure-FTPd (wrapper Debian); hanya backend MySQL, PAM & akun sistem dimatikan
 /etc/ssl/private/pure-ftpd.pem          0600 root: kunci + sertifikat hostname untuk FTPS (diperbarui hook perpanjangan Let's Encrypt)
-/etc/ssh/sshd_config.d/nusapanel-sftp.conf  `Match Group nusa-sftp`: ForceCommand internal-sftp -u 022, tanpa forwarding/TTY/tunnel; root & user lain tidak berubah
-/var/lib/nusa-pma/{tmp,sessions,log}/   milik nusa-pma: file sementara, sesi (berisi password sesi) & log PHP phpMyAdmin
-/etc/apache2/nusapanel/<user>/<domain>.conf      vhost Apache (127.0.0.1:8080), ditulis nusad
-/etc/apache2/conf-available/nusapanel.conf       mod_remoteip, HTTPS dari proxy, aturan /home
-/etc/systemd/system/nusa-php<versi>@.service     unit template pool PHP-FPM, ditulis nusad
-/run/nusa-php/php<versi>-<user>.sock             socket pool PHP-FPM (0660 <user>:www-data)
+/etc/ssh/sshd_config.d/rayxo-sftp.conf  `Match Group rayxo-sftp`: ForceCommand internal-sftp -u 022, tanpa forwarding/TTY/tunnel; root & user lain tidak berubah
+/var/lib/rayxo-pma/{tmp,sessions,log}/   milik rayxo-pma: file sementara, sesi (berisi password sesi) & log PHP phpMyAdmin
+/etc/apache2/rayxo/<user>/<domain>.conf      vhost Apache (127.0.0.1:8080), ditulis rayxod
+/etc/apache2/conf-available/rayxo.conf       mod_remoteip, HTTPS dari proxy, aturan /home
+/etc/systemd/system/rayxo-php<versi>@.service     unit template pool PHP-FPM, ditulis rayxod
+/run/rayxo-php/php<versi>-<user>.sock             socket pool PHP-FPM (0660 <user>:www-data)
 
-/var/log/nusapanel/                     log nginx panel (access/error)
-/var/log/nusapanel/domains/<domain>.{access,error,apache-error}.log
-/var/log/nusapanel-install.log          log setup.sh (0600, tanpa password)
+/var/log/rayxo/                     log nginx panel (access/error)
+/var/log/rayxo/domains/<domain>.{access,error,apache-error}.log
+/var/log/rayxo-install.log          log setup.sh (0600, tanpa password)
 /etc/letsencrypt/live/<hostname>/       sertifikat Let's Encrypt hostname (certbot)
 /etc/letsencrypt/live/<domain>/         sertifikat Let's Encrypt domain customer (certbot, nama sertifikat = domain)
-/var/www/nusapanel-acme/                webroot verifikasi Let's Encrypt (port 80), dipakai hostname dan semua domain
+/var/www/rayxo-acme/                webroot verifikasi Let's Encrypt (port 80), dipakai hostname dan semua domain
 /aquota.user                            data kuota user (journaled, vfsv1); fstab filesystem /home mendapat usrjquota=aquota.user,jqfmt=vfsv1
-/etc/fstab.nusapanel-<waktu>            cadangan fstab sebelum setup.sh mengaktifkan kuota
+/etc/fstab.rayxo-<waktu>            cadangan fstab sebelum setup.sh mengaktifkan kuota
 /etc/opendkim/keys/<hostname>/          kunci DKIM email panel (0600 opendkim)
 /var/lib/mysql/<user>_<nama>/           database MariaDB customer (data dir bawaan, MariaDB hanya di 127.0.0.1:3306)
-/var/lib/nusapanel/                     home user nusapanel; state agent, backup admin
-/var/lib/nusapanel/storage/             storage Laravel (log, cache view), dipakai semua rilis
-/run/nusapanel/agent.sock
+/var/lib/rayxo/                     home user rayxo; state agent, backup admin
+/var/lib/rayxo/storage/             storage Laravel (log, cache view), dipakai semua rilis
+/run/rayxo/agent.sock
 ```
 
 ## 4.5 Port
@@ -321,12 +321,12 @@ Setiap akun juga punya **user pemilik** bernama persis `<username>` (tanpa akhir
 
 ## 4.6 Service systemd milik panel
 
-| Unit                               | Fungsi                                                                                                                                   |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `nusad.service`                    | Agent                                                                                                                                    |
-| `nusapanel-queue.service`          | Queue worker Laravel                                                                                                                     |
-| `nusapanel-scheduler.timer`        | Menjalankan `schedule:run` Laravel tiap menit (ukur pemakaian tiap 15 menit, akhiri sesi phpMyAdmin tiap 5 menit)                        |
-| `pure-ftpd-mysql.service`          | FTP untuk akun hosting: login dari view `v_ftp_users`, chroot ke folder login, berjalan sebagai uid akun, wajib TLS, passive 35000–35999 |
-| `php8.4-fpm.service`               | Pool PHP-FPM panel (`nusapanel`) dan phpMyAdmin (`nusapanel-phpmyadmin`, user `nusa-pma`)                                                |
-| `nusa-php<versi>@<user>.service`   | PHP-FPM per user (contoh: `nusa-php84@budi.service`)                                                                                     |
-| `nusa.slice` → `nusa-<user>.slice` | Batas resource per user                                                                                                                  |
+| Unit                                 | Fungsi                                                                                                                                   |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `rayxod.service`                     | Agent                                                                                                                                    |
+| `rayxo-queue.service`                | Queue worker Laravel                                                                                                                     |
+| `rayxo-scheduler.timer`              | Menjalankan `schedule:run` Laravel tiap menit (ukur pemakaian tiap 15 menit, akhiri sesi phpMyAdmin tiap 5 menit)                        |
+| `pure-ftpd-mysql.service`            | FTP untuk akun hosting: login dari view `v_ftp_users`, chroot ke folder login, berjalan sebagai uid akun, wajib TLS, passive 35000–35999 |
+| `php8.4-fpm.service`                 | Pool PHP-FPM panel (`rayxo`) dan phpMyAdmin (`rayxo-phpmyadmin`, user `rayxo-pma`)                                                       |
+| `rayxo-php<versi>@<user>.service`    | PHP-FPM per user (contoh: `rayxo-php84@budi.service`)                                                                                    |
+| `rayxo.slice` → `rayxo-<user>.slice` | Batas resource per user                                                                                                                  |

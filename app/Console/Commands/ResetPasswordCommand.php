@@ -15,7 +15,7 @@ class ResetPasswordCommand extends Command
     /**
      * @var string
      */
-    protected $signature = 'nusapanel:reset-password
+    protected $signature = 'rayxo:reset-password
         {username : Account whose password to reset}
         {--password= : New password; a strong one is generated when omitted}';
 

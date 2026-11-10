@@ -33,7 +33,7 @@ class PhpMyAdminService
      * The cookie, for phpMyAdmin's folder, that binds a ticket to the browser
      * that asked for it.
      */
-    public const BINDING_COOKIE = 'nusa_pma_binding';
+    public const BINDING_COOKIE = 'rayxo_pma_binding';
 
     /**
      * Seconds a ticket can be used.
@@ -131,7 +131,7 @@ class PhpMyAdminService
         $binding = bin2hex(random_bytes(32));
 
         return [
-            'url' => $url.'nusapanel-sso.php',
+            'url' => $url.'rayxo-sso.php',
             'ticket' => $this->seal($key, [
                 'user' => $account->username,
                 'password' => $password,

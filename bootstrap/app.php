@@ -18,9 +18,9 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        // nusa_pma_binding is read by phpMyAdmin's sign-on script, which
+        // rayxo_pma_binding is read by phpMyAdmin's sign-on script, which
         // cannot decrypt Laravel cookies.
-        $middleware->encryptCookies(except: ['appearance', 'sidebar_state', 'nusa_pma_binding']);
+        $middleware->encryptCookies(except: ['appearance', 'sidebar_state', 'rayxo_pma_binding']);
 
         $middleware->web(append: [
             HandleAppearance::class,

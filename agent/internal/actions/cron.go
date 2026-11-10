@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 
-	"nusapanel/agent/internal/cron"
-	"nusapanel/agent/internal/rpc"
-	"nusapanel/agent/internal/validate"
+	"rayxo/agent/internal/cron"
+	"rayxo/agent/internal/rpc"
+	"rayxo/agent/internal/validate"
 )
 
 // cronParams are the params of cron.apply: every cron job of the account.

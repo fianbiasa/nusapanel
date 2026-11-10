@@ -48,7 +48,7 @@ class DashboardTest extends TestCase
                 ->component('dashboard')
                 ->missing('systemInfo')
                 ->loadDeferredProps(fn (Assert $reload) => $reload
-                    ->where('systemInfo.data.hostname', 'server.nusapanel.test')
+                    ->where('systemInfo.data.hostname', 'server.rayxo.test')
                     ->where('systemInfo.error', null)));
     }
 

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"nusapanel/agent/internal/rpc"
-	"nusapanel/agent/internal/sysuser"
+	"rayxo/agent/internal/rpc"
+	"rayxo/agent/internal/sysuser"
 )
 
 // quotaReportOutput is what `repquota -u -v -n -O csv /` prints with quota
@@ -22,7 +22,7 @@ const quotaReportOutput = `User,BlockStatus,FileStatus,BlockUsed,BlockSoftLimit,
 `
 
 // newQuotaSystem has the accounts budi, sari and tono, plus users that
-// nusapanel does not manage.
+// rayxo does not manage.
 func newQuotaSystem() *fakeSystem {
 	system := newFakeSystem()
 	system.addAccount("budi", 1001)
@@ -30,8 +30,8 @@ func newQuotaSystem() *fakeSystem {
 	system.addAccount("tono", 1003)
 	system.users["root"] = sysuser.User{Name: "root", UID: 0, GID: 0, Comment: "root", Home: "/root", Shell: "/bin/bash"}
 	system.users["ubuntu"] = sysuser.User{Name: "ubuntu", UID: 1000, GID: 1000, Comment: "Ubuntu", Home: "/home/ubuntu", Shell: "/bin/bash"}
-	system.users["svc"] = sysuser.User{Name: "svc", UID: 999, GID: 999, Comment: "nusapanel", Home: "/home/svc", Shell: "/bin/sh"}
-	system.users["moved"] = sysuser.User{Name: "moved", UID: 1004, GID: 1004, Comment: "nusapanel", Home: "/srv/moved", Shell: "/usr/sbin/nologin"}
+	system.users["svc"] = sysuser.User{Name: "svc", UID: 999, GID: 999, Comment: "rayxo", Home: "/home/svc", Shell: "/bin/sh"}
+	system.users["moved"] = sysuser.User{Name: "moved", UID: 1004, GID: 1004, Comment: "rayxo", Home: "/srv/moved", Shell: "/usr/sbin/nologin"}
 	system.repquota = quotaReportOutput
 
 	return system
@@ -125,8 +125,8 @@ func TestSetQuotaNeedsAManagedAccount(t *testing.T) {
 
 	for _, user := range []sysuser.User{
 		{Name: "budi", UID: 1001, GID: 1001, Comment: "Budi Santoso", Home: "/home/budi"},
-		{Name: "budi", UID: 999, GID: 999, Comment: "nusapanel", Home: "/home/budi"},
-		{Name: "budi", UID: 1001, GID: 1001, Comment: "nusapanel", Home: "/var/www"},
+		{Name: "budi", UID: 999, GID: 999, Comment: "rayxo", Home: "/home/budi"},
+		{Name: "budi", UID: 1001, GID: 1001, Comment: "rayxo", Home: "/var/www"},
 	} {
 		system := newFakeSystem()
 		system.users["budi"] = user

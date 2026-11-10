@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 #
-# Build nusapanel release packages for servers.
+# Build rayxo release packages for servers.
 #
 #   installer/build-release.sh [version]
 #
 # Output in dist/:
-#   nusapanel-<version>-linux-amd64.tar.gz (+ .sha256)
-#   nusapanel-<version>-linux-arm64.tar.gz (+ .sha256)
+#   rayxo-<version>-linux-amd64.tar.gz (+ .sha256)
+#   rayxo-<version>-linux-arm64.tar.gz (+ .sha256)
 #   setup.sh
 #
 # The package contains everything a server needs to run the panel: Laravel
@@ -30,7 +30,7 @@ ARCHES="amd64 arm64"
 PMA_VERSION="5.2.3"
 PMA_SHA256="12ba1c425fa4071abbd4e7668c9ebdeac0b0755a467a6d6d5026122bb47c102b"
 PMA_NAME="phpMyAdmin-$PMA_VERSION-all-languages"
-PMA_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/nusapanel"
+PMA_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/rayxo"
 
 if [[ ! "$VERSION" =~ ^[0-9A-Za-z][0-9A-Za-z._-]*$ ]]; then
     echo "Invalid version: $VERSION" >&2
@@ -65,7 +65,7 @@ make_tarball() {
     fi
 }
 
-echo "==> nusapanel $VERSION"
+echo "==> rayxo $VERSION"
 
 echo "==> Copying the working tree (without Git-ignored files)"
 SRC="$WORK/src"
@@ -125,16 +125,16 @@ rm -rf "$PMA/setup" "$PMA/examples" "$PMA/config.sample.inc.php" "$PMA/show_conf
     "$PMA/composer.json" "$PMA/composer.lock" "$PMA/package.json" "$PMA/yarn.lock" \
     "$PMA/babel.config.json" "$PMA/CONTRIBUTING.md"
 # setup.sh writes the real configuration outside the release.
-printf '%s\n' '<?php' '' '// nusapanel: setup.sh writes the configuration there.' \
-    "require '/etc/nusa-pma/config.inc.php';" >"$PMA/config.inc.php"
-cp "$SRC/installer/files/phpmyadmin-sso.php" "$PMA/nusapanel-sso.php"
+printf '%s\n' '<?php' '' '// rayxo: setup.sh writes the configuration there.' \
+    "require '/etc/rayxo-pma/config.inc.php';" >"$PMA/config.inc.php"
+cp "$SRC/installer/files/phpmyadmin-sso.php" "$PMA/rayxo-sso.php"
 
 # The published setup.sh installs exactly this version by default.
 stamp_setup() {
-    sed -e "s/^NUSAPANEL_VERSION=\"\"\$/NUSAPANEL_VERSION=\"$VERSION\"/" "$SRC/installer/setup.sh" >"$1"
+    sed -e "s/^RAYXO_VERSION=\"\"\$/RAYXO_VERSION=\"$VERSION\"/" "$SRC/installer/setup.sh" >"$1"
     chmod 0755 "$1"
 
-    if ! grep -q "^NUSAPANEL_VERSION=\"$VERSION\"\$" "$1"; then
+    if ! grep -q "^RAYXO_VERSION=\"$VERSION\"\$" "$1"; then
         echo "Could not stamp the version into setup.sh" >&2
         exit 1
     fi
@@ -144,7 +144,7 @@ mkdir -p "$DIST"
 stamp_setup "$DIST/setup.sh"
 
 for arch in $ARCHES; do
-    name="nusapanel-$VERSION-linux-$arch"
+    name="rayxo-$VERSION-linux-$arch"
     stage="$WORK/$name"
     echo "==> Packaging $name"
 
@@ -162,11 +162,11 @@ for arch in $ARCHES; do
     rm -f "$stage/panel/public/hot"
 
     cp -R "$PMA" "$stage/phpmyadmin"
-    cp "$SRC/agent/bin/linux-$arch/nusad" "$SRC/agent/bin/linux-$arch/nusactl" "$stage/bin/"
-    cp "$SRC/agent/packaging/nusad.service" "$stage/systemd/"
+    cp "$SRC/agent/bin/linux-$arch/rayxod" "$SRC/agent/bin/linux-$arch/rayxo" "$stage/bin/"
+    cp "$SRC/agent/packaging/rayxod.service" "$stage/systemd/"
     cp "$SRC"/installer/files/*.service "$SRC"/installer/files/*.timer "$stage/systemd/"
     cp "$SRC/installer/files/nginx-panel.conf" "$SRC/installer/files/nginx-hostname.conf" \
-        "$SRC/installer/files/nginx-default.conf" "$SRC/installer/files/apache-nusapanel.conf" \
+        "$SRC/installer/files/nginx-default.conf" "$SRC/installer/files/apache-rayxo.conf" \
         "$SRC/installer/files/php-fpm-panel.conf" "$SRC/installer/files/php-fpm-phpmyadmin.conf" \
         "$SRC/installer/files/nginx-phpmyadmin.conf" "$SRC/installer/files/phpmyadmin-config.inc.php" \
         "$SRC/installer/files/pure-ftpd-mysql.conf" "$SRC/installer/files/sshd-sftp.conf" \

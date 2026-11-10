@@ -7,7 +7,7 @@ return [
     | Agent driver
     |--------------------------------------------------------------------------
     |
-    | "socket" talks to the nusad agent over its Unix socket (servers).
+    | "socket" talks to the rayxod agent over its Unix socket (servers).
     | "fake" simulates the agent so the panel can be developed on macOS
     | with Herd, where the Linux-only agent cannot run.
     |
@@ -15,7 +15,7 @@ return [
 
     'driver' => env('AGENT_DRIVER', 'socket'),
 
-    'socket' => env('AGENT_SOCKET', '/run/nusapanel/agent.sock'),
+    'socket' => env('AGENT_SOCKET', '/run/rayxo/agent.sock'),
 
     /*
     |--------------------------------------------------------------------------

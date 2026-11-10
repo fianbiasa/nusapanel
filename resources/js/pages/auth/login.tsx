@@ -85,7 +85,7 @@ export default function Login({ status, canResetPassword }: Props) {
 
                             <Button
                                 type="submit"
-                                className="mt-2 h-11 w-full rounded-xl nusa-brand-gradient text-[15px] font-semibold shadow-brand"
+                                className="mt-2 h-11 w-full rounded-xl rayxo-brand-gradient text-[15px] font-semibold shadow-brand"
                                 tabIndex={4}
                                 disabled={processing}
                                 data-test="login-button"

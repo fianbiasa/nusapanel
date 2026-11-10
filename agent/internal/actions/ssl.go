@@ -6,7 +6,7 @@ import (
 	"errors"
 	"time"
 
-	"nusapanel/agent/internal/validate"
+	"rayxo/agent/internal/validate"
 )
 
 // certificateInfo is the result of ssl.issue.

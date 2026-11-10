@@ -194,7 +194,7 @@ export default function AccountsIndex({ accounts, packages, filters }: Props) {
                                     >
                                         <td className={tableStyles.td}>
                                             <div className="flex items-center gap-3">
-                                                <span className="flex size-9 shrink-0 items-center justify-center rounded-full nusa-brand-gradient text-xs font-semibold text-white">
+                                                <span className="flex size-9 shrink-0 items-center justify-center rounded-full rayxo-brand-gradient text-xs font-semibold text-white">
                                                     {getInitials(account.name)}
                                                 </span>
                                                 <div className="min-w-0">

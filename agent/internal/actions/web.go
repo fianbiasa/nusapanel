@@ -6,10 +6,10 @@ import (
 	"errors"
 	"fmt"
 
-	"nusapanel/agent/internal/rpc"
-	"nusapanel/agent/internal/sysuser"
-	"nusapanel/agent/internal/validate"
-	"nusapanel/agent/internal/webserver"
+	"rayxo/agent/internal/rpc"
+	"rayxo/agent/internal/sysuser"
+	"rayxo/agent/internal/validate"
+	"rayxo/agent/internal/webserver"
 )
 
 // webServer is what the web.*, php.* and ssl.* actions need.
@@ -295,7 +295,7 @@ func (w webActions) phpVersions(_ context.Context, raw json.RawMessage) (any, er
 	return phpVersionsInfo{Versions: versions}, nil
 }
 
-// checkDomain refuses the server's own hostname and returns the nusapanel
+// checkDomain refuses the server's own hostname and returns the rayxo
 // account username names.
 func (w webActions) checkDomain(ctx context.Context, username, domain string) (sysuser.User, error) {
 	if w.web.IsHostname(domain) {
@@ -305,8 +305,8 @@ func (w webActions) checkDomain(ctx context.Context, username, domain string) (s
 	return w.existingAccount(ctx, username)
 }
 
-// existingAccount returns the nusapanel account username names, failing
-// when it does not exist or is not managed by nusapanel.
+// existingAccount returns the rayxo account username names, failing
+// when it does not exist or is not managed by rayxo.
 func (w webActions) existingAccount(ctx context.Context, username string) (sysuser.User, error) {
 	user, found, err := w.accounts.findAccount(ctx, username)
 	if err == nil && !found {

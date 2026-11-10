@@ -70,7 +70,7 @@ export default function ResetPassword({ token, email, passwordRules }: Props) {
 
                         <Button
                             type="submit"
-                            className="mt-2 h-11 w-full rounded-xl nusa-brand-gradient text-[15px] font-semibold shadow-brand"
+                            className="mt-2 h-11 w-full rounded-xl rayxo-brand-gradient text-[15px] font-semibold shadow-brand"
                             disabled={processing}
                             data-test="reset-password-button"
                         >

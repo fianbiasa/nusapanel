@@ -2,7 +2,7 @@ name: release
 
 # Push a tag like v0.2.0 to build the server packages and publish them as a
 # GitHub release. Servers then install with:
-#   wget https://github.com/fianbiasa/nusapanel/releases/latest/download/setup.sh
+#   wget https://github.com/fianbiasa/rayxo/releases/latest/download/setup.sh
 #   bash setup.sh --admin-email you@example.com
 
 on:
@@ -53,5 +53,5 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" dist/* \
             --verify-tag \
-            --title "nusapanel $GITHUB_REF_NAME" \
+            --title "rayxo $GITHUB_REF_NAME" \
             --generate-notes

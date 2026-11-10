@@ -1,4 +1,4 @@
-// Package client calls nusad over its Unix socket. It is used by nusactl and
+// Package client calls rayxod over its Unix socket. It is used by rayxo and
 // by tests; the panel has its own PHP client speaking the same protocol.
 package client
 
@@ -14,7 +14,7 @@ import (
 	"net"
 	"strconv"
 
-	"nusapanel/agent/internal/rpc"
+	"rayxo/agent/internal/rpc"
 )
 
 // Call sends one request and returns the raw JSON result. Failures reported

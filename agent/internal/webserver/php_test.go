@@ -73,7 +73,7 @@ func TestMovingWebsitesToAnotherPHPRemovesThePoolNothingUses(t *testing.T) {
 		t.Fatal("the 8.3 pool was removed")
 	}
 
-	if !slices.Contains(env.runner.calls, "systemctl disable --now nusa-php84@budi.service") {
+	if !slices.Contains(env.runner.calls, "systemctl disable --now rayxo-php84@budi.service") {
 		t.Fatalf("the 8.4 pool was not stopped: %v", env.runner.calls)
 	}
 }
@@ -179,11 +179,11 @@ func TestPoolsOfAnAccountFromBeforePoolsPerWebsiteMoveWithoutDowntime(t *testing
 	env.mustApply(budiSite)
 	env.mustApply(other)
 
-	// Both websites as an older nusad left them: one pool for the account,
+	// Both websites as an older rayxod left them: one pool for the account,
 	// which both Apache vhosts use.
 	legacy := strings.Replace(env.read(env.poolSection("budi", "8.4", "example.com")), "[example.com]", "[budi]", 1)
 	legacy = strings.ReplaceAll(legacy, "php84-budi-a379a6f6eeaf.sock", "php84-budi.sock")
-	env.write(env.poolFile("budi", "8.4"), "[global]\npid = /run/nusa-php/php84-budi.pid\n"+legacy)
+	env.write(env.poolFile("budi", "8.4"), "[global]\npid = /run/rayxo-php/php84-budi.pid\n"+legacy)
 
 	for _, domain := range []string{"example.com", "budi.id"} {
 		vhost := env.read(env.apacheVhost("budi", domain))
@@ -197,7 +197,7 @@ func TestPoolsOfAnAccountFromBeforePoolsPerWebsiteMoveWithoutDowntime(t *testing
 	env.mustApply(budiSite)
 
 	main := env.read(env.poolFile("budi", "8.4"))
-	assertContains(t, "main pool", main, "include = ", "\n[budi]\n", "listen = /run/nusa-php/php84-budi.sock\n")
+	assertContains(t, "main pool", main, "include = ", "\n[budi]\n", "listen = /run/rayxo-php/php84-budi.sock\n")
 	assertContains(t, "apache vhost", env.read(env.apacheVhost("budi", "example.com")), "php84-budi-a379a6f6eeaf.sock")
 
 	// The last website moves too: the old pool goes.
@@ -209,7 +209,7 @@ func TestPoolsOfAnAccountFromBeforePoolsPerWebsiteMoveWithoutDowntime(t *testing
 	env.read(env.poolSection("budi", "8.4", "example.com"))
 	env.read(env.poolSection("budi", "8.4", "budi.id"))
 
-	if !slices.Contains(env.runner.calls, "systemctl reload-or-restart nusa-php84@budi.service") {
+	if !slices.Contains(env.runner.calls, "systemctl reload-or-restart rayxo-php84@budi.service") {
 		t.Fatalf("PHP-FPM was not reloaded without the old pool: %v", env.runner.calls)
 	}
 }

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"nusapanel/agent/internal/runner"
+	"rayxo/agent/internal/runner"
 )
 
 // fakeClient records the SQL sent to the mariadb client and answers
@@ -145,12 +145,12 @@ func TestApplyUserRefusesWhatIsNotTheAccounts(t *testing.T) {
 		func() error { return manager.ApplyUser(ctx, "budi", "budi_wp", hash, []string{"mysql"}) },
 		func() error { return manager.ApplyUser(ctx, "budi", "budi_wp", "plain password", nil) },
 		func() error { return manager.ApplyUser(ctx, "budi", "budi_wp' OR 1=1 --", hash, nil) },
-		func() error { return manager.CreateDatabase(ctx, "budi", "nusapanel") },
+		func() error { return manager.CreateDatabase(ctx, "budi", "rayxo") },
 		func() error { return manager.DeleteDatabase(ctx, "budi", "sari_shop") },
 		func() error { return manager.DeleteUser(ctx, "budi", "root") },
 		func() error { return manager.RemoveAccount(ctx, "root") },
 		func() error { return manager.ApplyOwner(ctx, "root", hash, nil) },
-		func() error { return manager.ApplyOwner(ctx, "nusapanel", hash, nil) },
+		func() error { return manager.ApplyOwner(ctx, "rayxo", hash, nil) },
 		func() error { return manager.ApplyOwner(ctx, "budi", hash, []string{"sari_shop"}) },
 		func() error { return manager.ApplyOwner(ctx, "budi", "plain password", nil) },
 		func() error { return manager.CloseOwner(ctx, "root") },
@@ -270,7 +270,7 @@ func TestLockAccountLocksAndUnlocksItsUsers(t *testing.T) {
 
 func TestReportListsOnlyAccountDatabases(t *testing.T) {
 	manager, client := newTestManager()
-	client.answers["information_schema.TABLES"] = "budi_blog\t0\nbudi_shop\t1048576\ninformation_schema\t0\nmysql\t2785280\nnusapanel\t655360\nsari_wp\t98304\n"
+	client.answers["information_schema.TABLES"] = "budi_blog\t0\nbudi_shop\t1048576\ninformation_schema\t0\nmysql\t2785280\nrayxo\t655360\nsari_wp\t98304\n"
 
 	sizes, err := manager.Report(context.Background())
 	if err != nil {

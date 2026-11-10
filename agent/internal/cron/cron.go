@@ -181,7 +181,7 @@ func Validate(jobs []Job) error {
 func Render(jobs []Job) []byte {
 	var crontab strings.Builder
 
-	crontab.WriteString("# Written by nusapanel from the Cron Jobs page of the panel; changes made here are replaced.\n")
+	crontab.WriteString("# Written by rayxo from the Cron Jobs page of the panel; changes made here are replaced.\n")
 	crontab.WriteString("SHELL=/bin/bash\n")
 	crontab.WriteString("PATH=/usr/local/bin:/usr/bin:/bin\n")
 	crontab.WriteString("MAILTO=\"\"\n")

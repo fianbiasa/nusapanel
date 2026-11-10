@@ -6,9 +6,9 @@ import (
 	"errors"
 	"log/slog"
 
-	"nusapanel/agent/internal/database"
-	"nusapanel/agent/internal/rpc"
-	"nusapanel/agent/internal/validate"
+	"rayxo/agent/internal/database"
+	"rayxo/agent/internal/rpc"
+	"rayxo/agent/internal/validate"
 )
 
 // databaseServer is what the db.* actions need. *database.Manager

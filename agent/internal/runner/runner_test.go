@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"nusapanel/agent/internal/runner"
+	"rayxo/agent/internal/runner"
 )
 
 func TestRunReturnsTheOutput(t *testing.T) {
@@ -58,7 +58,7 @@ func TestFailuresCarryTheExitCodeAndOutput(t *testing.T) {
 }
 
 func TestProgramsThatCannotStartAreReported(t *testing.T) {
-	_, err := runner.Run(context.Background(), "/nonexistent/nusapanel-program")
+	_, err := runner.Run(context.Background(), "/nonexistent/rayxo-program")
 
 	runErr := assertRunError(t, err)
 	if runErr.ExitCode != -1 {
@@ -94,14 +94,14 @@ func TestProgramsAreKilledWhenTheDeadlinePasses(t *testing.T) {
 }
 
 func TestProgramsGetAFixedEnvironment(t *testing.T) {
-	t.Setenv("NUSAPANEL_SECRET", "do-not-pass-on")
+	t.Setenv("RAYXO_SECRET", "do-not-pass-on")
 
 	output, err := runner.Run(context.Background(), "/usr/bin/env")
 	if err != nil {
 		t.Fatalf("run failed: %v", err)
 	}
 
-	if strings.Contains(string(output), "NUSAPANEL_SECRET") {
+	if strings.Contains(string(output), "RAYXO_SECRET") {
 		t.Fatalf("the agent environment leaked into the program: %q", output)
 	}
 

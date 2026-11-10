@@ -246,7 +246,7 @@ func phpVersionDir(name string) bool {
 
 // unitName returns the systemd unit of the pool of user for version.
 func unitName(version, user string) string {
-	return "nusa-php" + phpTag(version) + "@" + user + ".service"
+	return "rayxo-php" + phpTag(version) + "@" + user + ".service"
 }
 
 func (m *Manager) home(user string) string {
@@ -276,7 +276,7 @@ func (m *Manager) poolSectionFile(user, version, domain string) string {
 }
 
 func (m *Manager) unitTemplate(version string) string {
-	return m.cfg.UnitDir + "/nusa-php" + phpTag(version) + "@.service"
+	return m.cfg.UnitDir + "/rayxo-php" + phpTag(version) + "@.service"
 }
 
 func (m *Manager) nginxAccountDir(user string) string {

@@ -1,4 +1,4 @@
-// Command nusactl calls the nusapanel agent from a terminal, for emergencies,
+// Command rayxo calls the rayxo agent from a terminal, for emergencies,
 // scripts and the installer.
 package main
 
@@ -12,15 +12,15 @@ import (
 	"os"
 	"time"
 
-	"nusapanel/agent/internal/client"
-	"nusapanel/agent/internal/rpc"
-	"nusapanel/agent/internal/version"
+	"rayxo/agent/internal/client"
+	"rayxo/agent/internal/rpc"
+	"rayxo/agent/internal/version"
 )
 
 const usage = `Usage:
-  nusactl [flags] ping
-  nusactl [flags] call <method> [params-json]
-  nusactl version
+  rayxo [flags] ping
+  rayxo [flags] call <method> [params-json]
+  rayxo version
 
 Flags:
 `
@@ -30,8 +30,8 @@ func main() {
 }
 
 func run() int {
-	flags := flag.NewFlagSet("nusactl", flag.ContinueOnError)
-	socketPath := flags.String("socket", "/run/nusapanel/agent.sock", "agent socket")
+	flags := flag.NewFlagSet("rayxo", flag.ContinueOnError)
+	socketPath := flags.String("socket", "/run/rayxo/agent.sock", "agent socket")
 	timeout := flags.Duration("timeout", 30*time.Second, "how long to wait for the agent")
 	flags.Usage = func() {
 		fmt.Fprint(os.Stderr, usage)

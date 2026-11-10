@@ -31,7 +31,7 @@ export function AppDock() {
                                     className={cn(
                                         'flex size-12 items-center justify-center rounded-2xl transition-all group-hover:-translate-y-0.5',
                                         active
-                                            ? 'nusa-brand-gradient text-white shadow-brand'
+                                            ? 'rayxo-brand-gradient text-white shadow-brand'
                                             : 'group-hover:bg-accent group-hover:text-accent-foreground',
                                     )}
                                 >

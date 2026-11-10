@@ -1,4 +1,4 @@
-// Package rpc implements the JSON-RPC 2.0 protocol nusad speaks on its Unix
+// Package rpc implements the JSON-RPC 2.0 protocol rayxod speaks on its Unix
 // socket: one request and one response per connection, each a single line of
 // JSON terminated by "\n".
 package rpc

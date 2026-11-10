@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"nusapanel/agent/internal/sysuser"
+	"rayxo/agent/internal/sysuser"
 )
 
 func TestApplyAliasServesTheFolderOfItsParent(t *testing.T) {
@@ -43,7 +43,7 @@ func TestApplyAliasServesTheFolderOfItsParent(t *testing.T) {
 		"    ServerName example.net\n    ServerAlias www.example.net\n",
 		"    DocumentRoot /home/budi/domains/example.com/public_html\n",
 		// The alias has a pool of its own, in the account's PHP 8.4.
-		"proxy:unix:/run/nusa-php/php84-budi-3daab7cff979.sock|fcgi://php84-budi-3daab7cff979",
+		"proxy:unix:/run/rayxo-php/php84-budi-3daab7cff979.sock|fcgi://php84-budi-3daab7cff979",
 	)
 }
 
@@ -72,7 +72,7 @@ func TestApplyForwardRedirectsEveryRequestToItsParent(t *testing.T) {
 
 	// No folders and no PHP: only the web servers change, and the pool the
 	// alias used goes, since nothing else uses it.
-	env.assertCalls(append(reloadBoth, "systemctl disable --now nusa-php84@budi.service")...)
+	env.assertCalls(append(reloadBoth, "systemctl disable --now rayxo-php84@budi.service")...)
 	env.assertMissing(env.poolFile("budi", "8.4"))
 
 	if len(env.sites) != 0 {
@@ -137,15 +137,15 @@ func TestRenderedRedirects(t *testing.T) {
 			"    }",
 		"    # Redirect /blog and everything under it.\n" +
 			"    location ~ ^/blog(?:/.*)?$ {\n" +
-			"        if ($request_uri ~ \"^/blog(?:/(?<nusa_rest>[^?]*))?\") {\n" +
-			"            return 301 \"https://blog.example.com/$nusa_rest$is_args$args\";\n" +
+			"        if ($request_uri ~ \"^/blog(?:/(?<rayxo_rest>[^?]*))?\") {\n" +
+			"            return 301 \"https://blog.example.com/$rayxo_rest$is_args$args\";\n" +
 			"        }\n" +
 			"        return 301 \"https://blog.example.com/$is_args$args\";\n" +
 			"    }",
 		"    # Redirect / and everything under it.\n" +
 			"    location ~ ^(?:/.*)?$ {\n" +
-			"        if ($request_uri ~ \"^(?:/(?<nusa_rest>[^?]*))?\") {\n" +
-			"            return 302 \"https://new.example.org/$nusa_rest$is_args$args\";\n" +
+			"        if ($request_uri ~ \"^(?:/(?<rayxo_rest>[^?]*))?\") {\n" +
+			"            return 302 \"https://new.example.org/$rayxo_rest$is_args$args\";\n" +
 			"        }\n" +
 			"        return 302 \"https://new.example.org/$is_args$args\";\n" +
 			"    }",

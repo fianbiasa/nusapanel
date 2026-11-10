@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"nusapanel/agent/internal/runner"
-	"nusapanel/agent/internal/validate"
+	"rayxo/agent/internal/runner"
+	"rayxo/agent/internal/validate"
 )
 
 // Customer domains get Let's Encrypt certificates from certbot, through the

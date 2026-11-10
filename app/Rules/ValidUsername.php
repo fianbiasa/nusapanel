@@ -19,7 +19,7 @@ class ValidUsername implements ValidationRule
     public const RESERVED = [
         'adm', 'apache', 'backup', 'bin', 'clamav', 'daemon', 'dnsmasq', 'dovecot', 'dovenull',
         'ftp', 'games', 'gnats', 'irc', 'landscape', 'list', 'lp', 'lxd', 'mail', 'man',
-        'messagebus', 'mysql', 'news', 'nginx', 'nobody', 'nusad', 'nusapanel', 'operator',
+        'messagebus', 'mysql', 'news', 'nginx', 'nobody', 'rayxod', 'rayxo', 'operator',
         'pdns', 'polkitd', 'pollinate', 'postfix', 'proxy', 'pureftpd', 'redis', 'root',
         'rspamd', 'sshd', 'staff', 'sudo', 'sync', 'sys', 'syslog', 'systemd', 'tcpdump',
         'tss', 'ubuntu', 'users', 'uucp', 'uuidd', 'vmail',

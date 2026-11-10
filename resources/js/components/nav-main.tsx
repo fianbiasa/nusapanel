@@ -31,7 +31,7 @@ export function NavMain({ items, label }: { items: NavItem[]; label: string }) {
                                 asChild
                                 isActive={active}
                                 tooltip={{ children: item.title }}
-                                className="h-11 gap-3 rounded-xl px-3.5 text-[15px] font-medium text-sidebar-foreground/85 transition-colors group-data-[collapsible=icon]:size-11! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0! data-[active=true]:nusa-brand-gradient data-[active=true]:font-semibold data-[active=true]:text-white data-[active=true]:shadow-brand data-[active=true]:hover:text-white group-data-[collapsible=icon]:[&>span]:hidden [&>svg]:size-5"
+                                className="h-11 gap-3 rounded-xl px-3.5 text-[15px] font-medium text-sidebar-foreground/85 transition-colors group-data-[collapsible=icon]:size-11! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0! data-[active=true]:rayxo-brand-gradient data-[active=true]:font-semibold data-[active=true]:text-white data-[active=true]:shadow-brand data-[active=true]:hover:text-white group-data-[collapsible=icon]:[&>span]:hidden [&>svg]:size-5"
                             >
                                 <Link href={item.href} prefetch>
                                     {item.icon && (

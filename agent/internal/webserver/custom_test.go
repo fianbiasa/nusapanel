@@ -377,7 +377,7 @@ func TestSwitchingBetweenLetsEncryptAndACustomCertificate(t *testing.T) {
 
 	// The Let's Encrypt certificate it no longer uses is gone, so certbot
 	// stops renewing it.
-	env.assertCalls(append(append([]string{"systemctl is-active --quiet nusa-php84@budi.service"}, reloadBoth...), deleteCall("example.com"))...)
+	env.assertCalls(append(append([]string{"systemctl is-active --quiet rayxo-php84@budi.service"}, reloadBoth...), deleteCall("example.com"))...)
 
 	// And back: the custom certificate goes.
 	env.writeCertificate("example.com", "example.com", "www.example.com")

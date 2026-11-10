@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"nusapanel/agent/internal/peercred"
+	"rayxo/agent/internal/peercred"
 )
 
 // Server answers JSON-RPC requests on a Unix socket.

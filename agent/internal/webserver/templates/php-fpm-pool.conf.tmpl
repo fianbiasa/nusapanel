@@ -1,9 +1,9 @@
-; PHP {{.PHPVersion}} of account {{.User}}, run by nusa-php{{.PHPTag}}@{{.User}}.service, with
-; a pool per website in {{.SectionDir}}/. Written by nusad; changes are overwritten.
+; PHP {{.PHPVersion}} of account {{.User}}, run by rayxo-php{{.PHPTag}}@{{.User}}.service, with
+; a pool per website in {{.SectionDir}}/. Written by rayxod; changes are overwritten.
 [global]
 pid = {{.RunDir}}/{{.Name}}.pid
 error_log = syslog
-syslog.ident = nusa-{{.Name}}
+syslog.ident = rayxo-{{.Name}}
 daemonize = no
 {{- if .Include}}
 

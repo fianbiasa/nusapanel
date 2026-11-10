@@ -29,7 +29,7 @@ class ApplyQuotasCommandTest extends TestCase
         User::factory()->admin()->create();
         User::factory()->reseller()->create();
 
-        $this->artisan('nusapanel:apply-quotas')
+        $this->artisan('rayxo:apply-quotas')
             ->expectsOutputToContain('3 accounts queued')
             ->assertSuccessful();
 

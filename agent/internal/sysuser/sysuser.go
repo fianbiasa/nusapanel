@@ -1,7 +1,7 @@
 // Package sysuser manages local Linux users, groups and home directories for
 // the agent. It only carries out operations; deciding which accounts may be
 // touched is up to the caller. Outside Linux every operation fails with
-// errors.ErrUnsupported, so nusad still runs on a Mac during development.
+// errors.ErrUnsupported, so rayxod still runs on a Mac during development.
 package sysuser
 
 import (

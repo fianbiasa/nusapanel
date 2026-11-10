@@ -10,12 +10,12 @@ import (
 	"slices"
 	"strings"
 
-	"nusapanel/agent/internal/validate"
+	"rayxo/agent/internal/validate"
 )
 
 // unitTemplatePattern matches the template unit file of a PHP version,
-// nusa-php84@.service for PHP 8.4.
-var unitTemplatePattern = regexp.MustCompile(`^nusa-php([0-9])([0-9])@\.service$`)
+// rayxo-php84@.service for PHP 8.4.
+var unitTemplatePattern = regexp.MustCompile(`^rayxo-php([0-9])([0-9])@\.service$`)
 
 // phpFPMBinaryPattern matches the PHP-FPM binary of a PHP version in
 // PHPFPMDir, php-fpm8.4 for PHP 8.4.
