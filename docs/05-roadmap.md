@@ -91,7 +91,9 @@ Pekerjaan:
 
 - tes isolasi akun ✅: `agent/internal/isolation` membuktikan di server asli bahwa akun A tidak bisa membaca file akun B. Jalur yang diserang: user Linux (SFTP, cron, file manager), PHP website, symlink lewat Nginx dan Apache, `.htaccess`, socket PHP-FPM, dan file manager agent. Setiap jalur punya kontrol, dan tes memakai dua akun sementara yang dihapus lagi. Teruji di VPS.
 
-Sisa P1: pengaturan server (termasuk menerbitkan ulang SSL hostname dari panel) dan uji WordPress lengkap di VPS (HTTPS, database, FTP, file manager). SSL mail menyusul bersama email (P2).
+- uji WordPress ✅: WordPress dipasang di website asli lewat Cloudflare memakai alat panel. Database dibuat dari halaman Databases, file diunggah lewat FTPS dari internet, lalu diekstrak dan dipindah di File Manager. Wizard WordPress menulis `wp-config.php` sendiri, dan instalasi selesai. Yang terbukti jalan: HTTPS terdeteksi di belakang proxy (tanpa tautan `http://`), login wp-admin, permalink cantik (`.htaccess` lewat Apache), unggah media, dan pasang plugin dari wordpress.org tanpa diminta kredensial FTP. Semua file tetap milik akun. Setelah itu semuanya dihapus lagi lewat panel dan situs kembali persis seperti semula. Uji ini juga menemukan bahwa paket rilis belum menyertakan `lang/`, sehingga pesan dari server tampil dalam bahasa Inggris; sudah diperbaiki.
+
+Sisa P1: pengaturan server (termasuk menerbitkan ulang SSL hostname dari panel). SSL mail menyusul bersama email (P2).
 
 **Cakupan:**
 
@@ -106,7 +108,7 @@ Sisa P1: pengaturan server (termasuk menerbitkan ulang SSL hostname dari panel) 
 
 **Selesai kalau:**
 
-- WordPress bisa di-host dengan HTTPS, database, FTP, dan file manager;
+- WordPress bisa di-host dengan HTTPS, database, FTP, dan file manager; ✅ teruji di VPS (dashbot.web.id, lewat Cloudflare);
 - suspend, unsuspend, dan hapus akun bersih tanpa sisa; ✅ teruji di VPS: tidak ada sisa home, vhost, pool PHP, unit systemd, crontab, maupun user/database MariaDB dari 19 akun yang sudah dihapus;
 - `rayxo rebuild` menghasilkan config yang identik; ✅ teruji di VPS: dua kali berturut-turut, checksum config, crontab, kuota dan izin folder sama persis;
 - user A terbukti tidak bisa membaca file user B (diuji otomatis). ✅ `make isolation`, dijalankan di VPS: semua jalur ditolak.

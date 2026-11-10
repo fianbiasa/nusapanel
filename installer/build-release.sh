@@ -152,7 +152,7 @@ for arch in $ARCHES; do
 
     # Only what the panel needs at runtime: no tests, sources for the front
     # end, seeders, local .env, storage contents or development tooling.
-    for path in app artisan bootstrap composer.json composer.lock config routes vendor; do
+    for path in app artisan bootstrap composer.json composer.lock config lang routes vendor; do
         cp -R "$SRC/$path" "$stage/panel/"
     done
     mkdir -p "$stage/panel/database" "$stage/panel/resources"
