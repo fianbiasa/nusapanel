@@ -10,6 +10,7 @@ use App\Http\Requests\UpdatePhpSettingsRequest;
 use App\Models\Domain;
 use App\Services\DomainService;
 use App\Services\PhpVersionService;
+use App\Services\ServerSettingsService;
 use App\Support\AccountLimits;
 use App\Support\PhpSettings;
 use DateTimeZone;
@@ -25,6 +26,7 @@ class DomainController extends Controller
     public function __construct(
         private DomainService $domains,
         private PhpVersionService $phpVersions,
+        private ServerSettingsService $serverSettings,
     ) {}
 
     /**
@@ -36,6 +38,8 @@ class DomainController extends Controller
     public function index(Request $request): Response
     {
         $account = $request->user();
+        $phpDefaults = $this->serverSettings->phpDefaults();
+        $uploadLimit = $this->serverSettings->phpUploadLimit();
 
         $websites = $account->domains()->orderBy('name')->get();
         $childrenByParent = $websites->whereNotNull('parent_id')->groupBy('parent_id');
@@ -59,7 +63,7 @@ class DomainController extends Controller
                 'parent_display_name' => $domain->parent_id === null ? null : $websites->firstWhere('id', $domain->parent_id)?->display_name,
                 'children_count' => $childrenByParent->get($domain->id)?->count() ?? 0,
                 'php_version' => $domain->php_version,
-                'php_settings' => PhpSettings::effective($domain->php_settings),
+                'php_settings' => PhpSettings::effective($domain->php_settings, $phpDefaults, $uploadLimit),
                 'php_settings_changed' => $domain->php_settings !== null,
                 'is_primary' => $domain->is_primary,
                 'status' => $domain->status->value,
@@ -79,9 +83,9 @@ class DomainController extends Controller
             'php_versions' => $this->phpVersions->available(),
             'default_php_version' => $this->phpVersions->default(),
             'php_setting_options' => [
-                'defaults' => PhpSettings::DEFAULTS,
+                'defaults' => $phpDefaults,
                 'memory_limits' => PhpSettings::MEMORY_LIMITS,
-                'sizes' => PhpSettings::SIZES,
+                'sizes' => PhpSettings::sizesUpTo($uploadLimit),
                 'timezones' => DateTimeZone::listIdentifiers(),
             ],
             'limits' => AccountLimits::for($account)->toArray(),

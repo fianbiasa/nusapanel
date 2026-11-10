@@ -27,6 +27,9 @@ final class FakeAgentClient implements AgentClient
 
         return match ($method) {
             'system.info' => $this->systemInfo(),
+            'system.settings' => $this->serverSettings(),
+            'system.set_timezone' => ['timezone' => $params['timezone'] ?? 'UTC', 'simulated' => true],
+            'ssl.issue_hostname' => $this->serverSettings()['certificate'],
             'ssl.issue' => $this->issuedCertificate((string) ($params['domain'] ?? '')),
             'account.set_quota' => ['applied' => true, 'simulated' => true],
             'quota.report' => $this->quotaReport(),
@@ -291,6 +294,28 @@ final class FakeAgentClient implements AgentClient
             'enabled' => true,
             'filesystem' => '/',
             'accounts' => $accounts->values()->all(),
+            'simulated' => true,
+        ];
+    }
+
+    /**
+     * A server on Jakarta time whose panel serves its hostname's Let's
+     * Encrypt certificate.
+     *
+     * @return array<string, mixed>
+     */
+    private function serverSettings(): array
+    {
+        return [
+            'hostname' => 'server1.example.test',
+            'timezone' => 'Asia/Jakarta',
+            'certificate' => [
+                'hostname' => 'server1.example.test',
+                'names' => ['server1.example.test'],
+                'issuer' => "Let's Encrypt",
+                'expires_at' => now()->addDays(64)->startOfSecond()->toIso8601ZuluString(),
+                'lets_encrypt' => true,
+            ],
             'simulated' => true,
         ];
     }

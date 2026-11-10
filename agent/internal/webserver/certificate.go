@@ -3,8 +3,6 @@ package webserver
 import (
 	"bytes"
 	"context"
-	"crypto/x509"
-	"encoding/pem"
 	"errors"
 	"fmt"
 	"os"
@@ -345,19 +343,9 @@ func shortDetail(detail string) string {
 // certificateExpiry returns when the first certificate in the PEM file at
 // path expires, in UTC.
 func certificateExpiry(path string) (time.Time, error) {
-	content, err := os.ReadFile(path)
+	certificate, err := readFirstCertificate(path)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("read %s: %w", path, err)
-	}
-
-	block, _ := pem.Decode(content)
-	if block == nil || block.Type != "CERTIFICATE" {
-		return time.Time{}, fmt.Errorf("%s holds no certificate", path)
-	}
-
-	certificate, err := x509.ParseCertificate(block.Bytes)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("parse %s: %w", path, err)
+		return time.Time{}, err
 	}
 
 	return certificate.NotAfter.UTC(), nil

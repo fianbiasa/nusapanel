@@ -12,6 +12,7 @@ import {
     Package,
     ScrollText,
     Settings,
+    SlidersHorizontal,
     Users,
 } from 'lucide-react';
 import { dashboard } from '@/routes';
@@ -20,6 +21,7 @@ import { index as databasesIndex } from '@/routes/databases';
 import { index as accountsIndex } from '@/routes/admin/accounts';
 import { index as auditLogsIndex } from '@/routes/admin/audit-logs';
 import { index as packagesIndex } from '@/routes/admin/packages';
+import { index as serverSettingsIndex } from '@/routes/admin/server-settings';
 import { index as servicesIndex } from '@/routes/admin/services';
 import { index as tasksIndex } from '@/routes/admin/tasks';
 import { index as domainsIndex } from '@/routes/domains';
@@ -88,10 +90,18 @@ export function useNavigation(): {
             href: servicesIndex(),
             icon: Activity,
         };
+        const serverSettings: NavItem = {
+            title: 'Pengaturan Server',
+            href: serverSettingsIndex(),
+            icon: SlidersHorizontal,
+        };
 
         sections.push(
             { label: 'Menu', items: [dashboardItem, accounts, packages] },
-            { label: 'Server', items: [services, tasks, auditLog] },
+            {
+                label: 'Server',
+                items: [services, serverSettings, tasks, auditLog],
+            },
         );
         dockItems = [
             dashboardItem,

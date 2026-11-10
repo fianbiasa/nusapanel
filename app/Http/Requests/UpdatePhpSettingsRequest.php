@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\Domain;
+use App\Services\ServerSettingsService;
 use App\Support\PhpSettings;
 use Illuminate\Auth\Access\Response;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -34,10 +35,12 @@ class UpdatePhpSettingsRequest extends FormRequest
      */
     public function rules(): array
     {
+        $sizes = PhpSettings::sizesUpTo(app(ServerSettingsService::class)->phpUploadLimit());
+
         return [
             'memory_limit' => ['required', Rule::in(PhpSettings::MEMORY_LIMITS)],
-            'upload_max_filesize' => ['required', Rule::in(PhpSettings::SIZES)],
-            'post_max_size' => ['required', Rule::in(PhpSettings::SIZES)],
+            'upload_max_filesize' => ['required', Rule::in($sizes)],
+            'post_max_size' => ['required', Rule::in($sizes)],
             'max_execution_time' => ['required', 'integer', 'between:10,300'],
             'max_input_time' => ['required', 'integer', 'between:10,300'],
             'max_input_vars' => ['required', 'integer', 'between:1000,100000'],
@@ -69,7 +72,7 @@ class UpdatePhpSettingsRequest extends FormRequest
     }
 
     /**
-     * The validated settings in their php.ini form, without the defaults.
+     * The validated settings in their php.ini form, without the server's defaults.
      *
      * @return array<string, string>
      */
@@ -84,6 +87,6 @@ class UpdatePhpSettingsRequest extends FormRequest
             'max_input_vars' => $this->integer('max_input_vars'),
             'display_errors' => $this->boolean('display_errors'),
             'date_timezone' => $this->filled('date_timezone') ? $this->string('date_timezone')->toString() : null,
-        ]);
+        ], app(ServerSettingsService::class)->phpDefaults());
     }
 }

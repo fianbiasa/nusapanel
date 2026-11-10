@@ -224,5 +224,12 @@
     ":service is stopped and no longer starts at boot.": ":service dihentikan dan tidak lagi menyala otomatis saat boot.",
     ":service is reloading its configuration.": ":service sedang memuat ulang konfigurasinya.",
     ":service is being restarted.": ":service sedang di-restart.",
-    "Rewriting :websites websites, :quotas quotas, :crontabs crontabs and :ftp FTP folders. Follow them under Tasks.": "Menulis ulang :websites website, :quotas kuota, :crontabs crontab dan :ftp folder FTP. Pantau di menu Tasks."
+    "Rewriting :websites websites, :quotas quotas, :crontabs crontabs and :ftp FTP folders. Follow them under Tasks.": "Menulis ulang :websites website, :quotas kuota, :crontabs crontab dan :ftp folder FTP. Pantau di menu Tasks.",
+    "The server could not change its timezone: :detail": "Server tidak bisa mengganti zona waktunya: :detail",
+    "The server now runs on :timezone time.": "Server sekarang memakai waktu :timezone.",
+    "The certificate is already being requested.": "Sertifikat sedang diminta.",
+    "The hostname certificate is being requested. This takes up to a minute.": "Sertifikat hostname sedang diminta. Ini butuh waktu sampai semenit.",
+    "Nothing changed.": "Tidak ada yang berubah.",
+    "Upload sizes saved; :count websites are being updated.": "Ukuran upload disimpan; :count website sedang diperbarui.",
+    "The default size may not be larger than the limit.": "Ukuran bawaan tidak boleh lebih besar dari batasnya."
 }

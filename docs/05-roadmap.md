@@ -93,7 +93,9 @@ Pekerjaan:
 
 - uji WordPress ✅: WordPress dipasang di website asli lewat Cloudflare memakai alat panel. Database dibuat dari halaman Databases, file diunggah lewat FTPS dari internet, lalu diekstrak dan dipindah di File Manager. Wizard WordPress menulis `wp-config.php` sendiri, dan instalasi selesai. Yang terbukti jalan: HTTPS terdeteksi di belakang proxy (tanpa tautan `http://`), login wp-admin, permalink cantik (`.htaccess` lewat Apache), unggah media, dan pasang plugin dari wordpress.org tanpa diminta kredensial FTP. Semua file tetap milik akun. Setelah itu semuanya dihapus lagi lewat panel dan situs kembali persis seperti semula. Uji ini juga menemukan bahwa paket rilis belum menyertakan `lang/`, sehingga pesan dari server tampil dalam bahasa Inggris; sudah diperbaiki.
 
-Sisa P1: pengaturan server (termasuk menerbitkan ulang SSL hostname dari panel). SSL mail menyusul bersama email (P2).
+- pengaturan server tahap 1 ✅: halaman admin Pengaturan Server menampilkan hostname dan sertifikat panel (Let's Encrypt atau self-signed, masa berlakunya) dengan tombol terbitkan ulang SSL hostname (panel, phpMyAdmin dan FTP ikut memakainya), mengganti zona waktu server (cron ikut), dan mengatur batas upload PHP: ukuran maksimum yang boleh dipilih website dan ukuran bawaan untuk website yang belum memilih sendiri; menyimpan batas upload menerapkan ulang semua website. Bahasa default menyusul bersama UI dua bahasa.
+
+Sisa P1: pengaturan server tahap 2 (ganti hostname dari panel) dan tahap 3 (ganti port panel dengan jendela konfirmasi). SSL mail menyusul bersama email (P2).
 
 **Cakupan:**
 

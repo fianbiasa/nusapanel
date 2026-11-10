@@ -37,7 +37,11 @@ export type PhpSettingOptions = {
 const serverTimezone = 'server';
 
 /** Time zones of Indonesia first, then the rest. */
-const indonesianTimezones = ['Asia/Jakarta', 'Asia/Makassar', 'Asia/Jayapura'];
+export const indonesianTimezones = [
+    'Asia/Jakarta',
+    'Asia/Makassar',
+    'Asia/Jayapura',
+];
 
 function sizeLabel(size: string): string {
     return formatMegabytes(parseInt(size, 10));
@@ -259,7 +263,7 @@ export function PhpSettingsForm({
     );
 }
 
-function Field({
+export function Field({
     id,
     label,
     error,
@@ -279,7 +283,7 @@ function Field({
     );
 }
 
-function SizeField({
+export function SizeField({
     id,
     label,
     value,

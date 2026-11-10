@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"rayxo/agent/internal/clock"
 	"rayxo/agent/internal/database"
 	"rayxo/agent/internal/files"
 	"rayxo/agent/internal/quota"
@@ -42,6 +43,10 @@ func Register(registry *rpc.Registry, config Config) {
 	}
 
 	for name, method := range webMethods(sysuser.System{}, web) {
+		registry.Register(name, method)
+	}
+
+	for name, method := range systemMethods(web, clock.New(clock.DefaultConfig())) {
 		registry.Register(name, method)
 	}
 

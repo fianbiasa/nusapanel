@@ -88,6 +88,15 @@ type Config struct {
 	// readable by root only. Nothing else may live in it: a domain could be
 	// named like any other file there.
 	CustomCertificateDir string
+	// PanelCertificateDir holds the certificate the panel, phpMyAdmin and
+	// Nginx's default server use: panel.crt and panel.key, links to the
+	// hostname's Let's Encrypt certificate, or a self-signed pair setup.sh
+	// made when Let's Encrypt failed.
+	PanelCertificateDir string
+	// FTPCertificate is the file Pure-FTPd reads its key and certificate
+	// from; FTPUnit is its service, restarted when that file changes.
+	FTPCertificate string
+	FTPUnit        string
 	// CertificateRoots are the roots a custom certificate must chain up to
 	// to count as trusted; nil means the system's.
 	CertificateRoots *x509.CertPool
@@ -130,6 +139,9 @@ func DefaultConfig() Config {
 		// Root only, beside (not among) the panel's own certificate links
 		// in /etc/rayxo/ssl, so no domain name can clash with them.
 		CustomCertificateDir: "/etc/rayxo/ssl/domains",
+		PanelCertificateDir:  "/etc/rayxo/ssl",
+		FTPCertificate:       "/etc/ssl/private/pure-ftpd.pem",
+		FTPUnit:              "pure-ftpd-mysql.service",
 		Hostnames:            systemHostnames,
 		Run:                  runner.Run,
 		PrepareSite:          sysuser.System{}.PrepareSite,

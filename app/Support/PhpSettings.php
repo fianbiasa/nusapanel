@@ -41,13 +41,36 @@ final class PhpSettings
     public const SIZES = ['2M', '8M', '16M', '32M', '64M', '128M', '256M', '512M', '1024M'];
 
     /**
-     * The settings of the form fields, in their php.ini form, without
-     * those that equal the defaults.
+     * The defaults on a server whose websites upload uploadDefault when
+     * they did not choose their own size. DEFAULTS stays what the agent
+     * assumes for a setting it is not sent.
      *
-     * @param  array{memory_limit: string, upload_max_filesize: string, post_max_size: string, max_execution_time: int, max_input_time: int, max_input_vars: int, display_errors: bool, date_timezone: string|null}  $fields
      * @return array<string, string>
      */
-    public static function fromFields(array $fields): array
+    public static function defaults(string $uploadDefault): array
+    {
+        return [...self::DEFAULTS, 'upload_max_filesize' => $uploadDefault, 'post_max_size' => $uploadDefault];
+    }
+
+    /**
+     * The upload and POST sizes offered on a server that allows at most limit.
+     *
+     * @return list<string>
+     */
+    public static function sizesUpTo(string $limit): array
+    {
+        return array_values(array_filter(self::SIZES, fn (string $size): bool => self::megabytes($size) <= self::megabytes($limit)));
+    }
+
+    /**
+     * The settings of the form fields, in their php.ini form, without
+     * those that equal the server's defaults ({@see defaults()}).
+     *
+     * @param  array{memory_limit: string, upload_max_filesize: string, post_max_size: string, max_execution_time: int, max_input_time: int, max_input_vars: int, display_errors: bool, date_timezone: string|null}  $fields
+     * @param  array<string, string>  $defaults
+     * @return array<string, string>
+     */
+    public static function fromFields(array $fields, array $defaults): array
     {
         $settings = [
             'memory_limit' => $fields['memory_limit'],
@@ -59,7 +82,7 @@ final class PhpSettings
             'display_errors' => $fields['display_errors'] ? 'on' : 'off',
         ];
 
-        $settings = array_diff_assoc($settings, self::DEFAULTS);
+        $settings = array_diff_assoc($settings, $defaults);
 
         if ($fields['date_timezone'] !== null && $fields['date_timezone'] !== '') {
             $settings['date.timezone'] = $fields['date_timezone'];
@@ -71,14 +94,40 @@ final class PhpSettings
     }
 
     /**
-     * The settings a website runs with: the defaults with its own applied.
+     * The settings a website runs with: the server's defaults with its own
+     * applied, its upload and POST sizes no larger than the server allows.
      *
      * @param  array<string, string>|null  $settings
+     * @param  array<string, string>  $defaults
      * @return array<string, string>
      */
-    public static function effective(?array $settings): array
+    public static function effective(?array $settings, array $defaults, string $uploadLimit): array
     {
-        return [...self::DEFAULTS, ...($settings ?? [])];
+        $effective = [...$defaults, ...($settings ?? [])];
+
+        foreach (['upload_max_filesize', 'post_max_size'] as $key) {
+            if (self::megabytes($effective[$key]) > self::megabytes($uploadLimit)) {
+                $effective[$key] = $uploadLimit;
+            }
+        }
+
+        return $effective;
+    }
+
+    /**
+     * The settings to send the agent for a website: those it runs with
+     * that differ from what the agent assumes ({@see DEFAULTS}).
+     *
+     * @param  array<string, string>|null  $settings
+     * @param  array<string, string>  $defaults
+     * @return array<string, string>
+     */
+    public static function forAgent(?array $settings, array $defaults, string $uploadLimit): array
+    {
+        $settings = array_diff_assoc(self::effective($settings, $defaults, $uploadLimit), self::DEFAULTS);
+        ksort($settings);
+
+        return $settings;
     }
 
     /**

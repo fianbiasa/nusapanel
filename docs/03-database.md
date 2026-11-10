@@ -259,7 +259,7 @@ Akun, domain, atau mailbox yang di-suspend otomatis tersaring dari view, jadi su
 | `firewall_rules`        | action `allow`/`deny`, source (IP/CIDR, null), port, protocol, comment, expires_at                                                                                                                                        |
 | `bfm_events`            | ip, service, username, attempts, first_seen_at, last_seen_at                                                                                                                                                              |
 | `bfm_blocks`            | ip, reason, blocked_at, expires_at, unblocked_by                                                                                                                                                                          |
-| `settings`              | key (unique), value (json)                                                                                                                                                                                                |
+| `settings`              | ✅ key (unique), value (json). Dipakai pengaturan server: `php.upload_limit` (ukuran upload/POST maksimum yang boleh dipilih website) dan `php.upload_default` (ukuran website yang belum memilih sendiri)                |
 | `servers`               | hostname, address, role, agent_cert_fingerprint, status. P6 (multi-server)                                                                                                                                                |
 
 ---

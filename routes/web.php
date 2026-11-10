@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\AccountController;
 use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\PackageController;
+use App\Http\Controllers\Admin\ServerSettingController;
 use App\Http\Controllers\Admin\ServiceController;
 use App\Http\Controllers\Admin\TaskController;
 use App\Http\Controllers\CronJobController;
@@ -96,6 +97,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('tasks', [TaskController::class, 'index'])->name('tasks.index');
         Route::get('audit-logs', [AuditLogController::class, 'index'])->name('audit-logs.index');
         Route::get('services', [ServiceController::class, 'index'])->name('services.index');
+        Route::get('server-settings', [ServerSettingController::class, 'index'])->name('server-settings.index');
+        Route::put('server-settings/timezone', [ServerSettingController::class, 'updateTimezone'])
+            ->middleware('throttle:10,1')
+            ->name('server-settings.timezone');
+        Route::post('server-settings/hostname-certificate', [ServerSettingController::class, 'issueHostnameCertificate'])
+            ->middleware('throttle:5,1')
+            ->name('server-settings.hostname-certificate');
+        Route::put('server-settings/php-uploads', [ServerSettingController::class, 'updatePhpUploads'])
+            ->middleware('throttle:10,1')
+            ->name('server-settings.php-uploads');
         Route::post('services/rebuild', [ServiceController::class, 'rebuild'])
             ->middleware('throttle:6,1')
             ->name('services.rebuild');

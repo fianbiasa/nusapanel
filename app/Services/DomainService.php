@@ -38,6 +38,7 @@ class DomainService
     public function __construct(
         private TaskDispatcher $tasks,
         private AuditLogger $audit,
+        private ServerSettingsService $serverSettings,
     ) {}
 
     /**
@@ -752,15 +753,18 @@ class DomainService
         }
 
         // An alias shows (and runs) the website of its domain, with its
-        // settings; a redirecting pointer runs no PHP.
-        $phpSettings = match (true) {
-            $domain->pointer_mode === PointerMode::Redirect => null,
-            $domain->type === DomainType::Pointer => $domain->parent->php_settings ?? null,
-            default => $domain->php_settings,
-        };
+        // settings; a redirecting pointer runs no PHP. Upload sizes follow
+        // the server's default and limit.
+        if ($domain->pointer_mode !== PointerMode::Redirect) {
+            $phpSettings = PhpSettings::forAgent(
+                $domain->type === DomainType::Pointer ? ($domain->parent->php_settings ?? null) : $domain->php_settings,
+                $this->serverSettings->phpDefaults(),
+                $this->serverSettings->phpUploadLimit(),
+            );
 
-        if ($phpSettings !== null && $phpSettings !== []) {
-            $params['php_settings'] = $phpSettings;
+            if ($phpSettings !== []) {
+                $params['php_settings'] = $phpSettings;
+            }
         }
 
         if ($domain->canHaveRedirects()) {
