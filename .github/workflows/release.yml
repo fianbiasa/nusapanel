@@ -55,3 +55,21 @@ jobs:
             --verify-tag \
             --title "RAYXO $GITHUB_REF_NAME" \
             --generate-notes
+
+      # rayxopanel.com reads its changelog and "latest release" from GitHub at
+      # build time, so rebuild it once the release is out. The deploy hook URL
+      # comes from Cloudflare (Workers & Pages > rayxo-website > Settings >
+      # Builds > Deploy Hooks); without the secret this step does nothing. A
+      # failed rebuild only warns: the release itself is already published.
+      - name: Rebuild rayxopanel.com
+        env:
+          CLOUDFLARE_DEPLOY_HOOK: ${{ secrets.CLOUDFLARE_DEPLOY_HOOK }}
+        run: |
+          if [[ -z "$CLOUDFLARE_DEPLOY_HOOK" ]]; then
+            echo "CLOUDFLARE_DEPLOY_HOOK is not set; skipping the website rebuild."
+            exit 0
+          fi
+
+          curl --fail --silent --show-error --max-time 30 --retry 3 \
+            --request POST "$CLOUDFLARE_DEPLOY_HOOK" > /dev/null \
+            || echo "::warning::Could not trigger the rayxopanel.com rebuild."
