@@ -20,11 +20,12 @@ agent/
 │   ├── runner/         ✅ jalankan program tanpa shell; menyusul: opsi turun ke UID user
 │   ├── sysuser/        ✅ user/grup Linux, folder home & domain tanpa mengikuti symlink
 │   ├── webserver/      ✅ vhost Nginx & Apache, pool PHP-FPM: render template, tulis atomik, validasi, reload, rollback
+│   ├── isolation/      ✅ tes integrasi: akun tidak bisa membaca file akun lain (dijalankan sebagai root di server)
 │   ├── daemons/        brute force monitor, watchdog
 │   └── services/       wrapper postfix, API PowerDNS, MariaDB, ...
 ├── packaging/
 │   └── rayxod.service   ✅ unit systemd
-└── Makefile            ✅ build (Mac), linux (amd64/arm64 static), test, vet, check
+└── Makefile            ✅ build (Mac), linux (amd64/arm64 static), isolation (binary tes isolasi untuk server), test, vet, check
 ```
 
 Template config (vhost, pool PHP-FPM, unit systemd, halaman default & suspended) ada di `internal/webserver/templates/` dan ditanam di binary `rayxod`, jadi tidak bisa diubah tanpa root. Override template per server (`/etc/rayxo/templates/custom/`) menyusul di P3.

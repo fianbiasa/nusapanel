@@ -89,7 +89,9 @@ Pekerjaan:
 
 - CLI `rayxo` ✅: `rayxo ping`, `rayxo call <method> [params-json]` (memanggil aksi agent apa pun dari terminal server), `rayxo rebuild` dan `rayxo version`.
 
-Sisa P1: pengaturan server (termasuk menerbitkan ulang SSL hostname dari panel), tes otomatis bahwa akun A tidak bisa membaca file akun B, dan uji WordPress lengkap di VPS (HTTPS, database, FTP, file manager). SSL mail menyusul bersama email (P2).
+- tes isolasi akun ✅: `agent/internal/isolation` membuktikan di server asli bahwa akun A tidak bisa membaca file akun B. Jalur yang diserang: user Linux (SFTP, cron, file manager), PHP website, symlink lewat Nginx dan Apache, `.htaccess`, socket PHP-FPM, dan file manager agent. Setiap jalur punya kontrol, dan tes memakai dua akun sementara yang dihapus lagi. Teruji di VPS.
+
+Sisa P1: pengaturan server (termasuk menerbitkan ulang SSL hostname dari panel) dan uji WordPress lengkap di VPS (HTTPS, database, FTP, file manager). SSL mail menyusul bersama email (P2).
 
 **Cakupan:**
 
@@ -107,7 +109,7 @@ Sisa P1: pengaturan server (termasuk menerbitkan ulang SSL hostname dari panel),
 - WordPress bisa di-host dengan HTTPS, database, FTP, dan file manager;
 - suspend, unsuspend, dan hapus akun bersih tanpa sisa; ✅ teruji di VPS: tidak ada sisa home, vhost, pool PHP, unit systemd, crontab, maupun user/database MariaDB dari 19 akun yang sudah dihapus;
 - `rayxo rebuild` menghasilkan config yang identik; ✅ teruji di VPS: dua kali berturut-turut, checksum config, crontab, kuota dan izin folder sama persis;
-- user A terbukti tidak bisa membaca file user B (diuji otomatis).
+- user A terbukti tidak bisa membaca file user B (diuji otomatis). ✅ `make isolation`, dijalankan di VPS: semua jalur ditolak.
 
 ## P2 — DNS & email
 

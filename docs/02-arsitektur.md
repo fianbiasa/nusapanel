@@ -116,6 +116,17 @@ Mode lain (Nginx saja, OpenLiteSpeed) bisa ditambah di P6, karena semua config d
 | SFTP      | Hanya SFTP (`ForceCommand internal-sftp`, tanpa shell & forwarding) dengan password khusus SFTP; tanpa chroot, dibatasi oleh permission home `0710`                    |
 | SSH shell | Hanya kalau paket mengizinkan, dan jalan di dalam jail                                                                                                                 |
 
+Semua lapisan di atas yang menyangkut file diuji otomatis di server asli oleh `agent/internal/isolation` (`make isolation`, lalu `./isolation.test -test.v` sebagai root). Tes membuat dua akun sementara lalu mencoba membaca file akun kedua dari akun pertama lewat:
+
+- user Linux-nya (SFTP, cron, file manager), termasuk PHP CLI yang tidak memakai `open_basedir`;
+- PHP website-nya;
+- symlink yang disajikan Nginx dan Apache;
+- `.htaccess` (`FollowSymLinks`, `Indexes`, `SetHandler` ke pool PHP-FPM akun lain);
+- socket PHP-FPM akun lain;
+- file manager agent.
+
+Kontrol di tes yang sama membuktikan setiap jalur memang berfungsi, jadi penolakannya sungguhan. Setelah selesai, kedua akun dihapus lagi.
+
 ## 2.8 Panel (Laravel)
 
 - Satu aplikasi Laravel + Inertia + React. UI dibangun sendiri di atas starter kit resmi Laravel, jadi semua komponen (shadcn/ui) adalah kode kita, bukan framework admin siap pakai.
