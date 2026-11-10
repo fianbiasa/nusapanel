@@ -2,6 +2,7 @@ import { usePage } from '@inertiajs/react';
 import {
     Clock,
     Database,
+    FolderOpen,
     FolderUp,
     Globe,
     House,
@@ -20,6 +21,7 @@ import { index as auditLogsIndex } from '@/routes/admin/audit-logs';
 import { index as packagesIndex } from '@/routes/admin/packages';
 import { index as tasksIndex } from '@/routes/admin/tasks';
 import { index as domainsIndex } from '@/routes/domains';
+import { index as filesIndex } from '@/routes/files';
 import { index as ftpIndex } from '@/routes/ftp';
 import { edit as profileEdit } from '@/routes/profile';
 import { index as redirectsIndex } from '@/routes/redirects';
@@ -104,6 +106,11 @@ export function useNavigation(): {
             href: databasesIndex(),
             icon: Database,
         };
+        const files: NavItem = {
+            title: 'File Manager',
+            href: filesIndex(),
+            icon: FolderOpen,
+        };
         const ftp: NavItem = {
             title: 'FTP',
             href: ftpIndex(),
@@ -125,6 +132,7 @@ export function useNavigation(): {
             items: [
                 dashboardItem,
                 domains,
+                files,
                 databases,
                 ftp,
                 cronJobs,
@@ -134,9 +142,9 @@ export function useNavigation(): {
         dockItems = [
             dashboardItem,
             domains,
+            files,
             databases,
             ftp,
-            redirects,
             settingsItem,
         ];
     } else {

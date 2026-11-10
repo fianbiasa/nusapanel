@@ -36,7 +36,7 @@ func callCron(t *testing.T, system *fakeSystem, params any) error {
 
 func TestCronApplyIsRegistered(t *testing.T) {
 	registry := rpc.NewRegistry()
-	Register(registry)
+	Register(registry, Config{})
 
 	if !slices.Contains(registry.Names(), "cron.apply") {
 		t.Fatal("cron.apply is not registered")

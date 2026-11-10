@@ -99,7 +99,7 @@ func callDatabase(t *testing.T, system *fakeSystem, server *fakeDatabaseServer, 
 
 func TestDatabaseMethodsAreRegistered(t *testing.T) {
 	registry := rpc.NewRegistry()
-	Register(registry)
+	Register(registry, Config{})
 
 	for _, name := range []string{"db.create_database", "db.delete_database", "db.apply_user", "db.delete_user", "db.open_sso", "db.close_sso", "db.report"} {
 		if !slices.Contains(registry.Names(), name) {

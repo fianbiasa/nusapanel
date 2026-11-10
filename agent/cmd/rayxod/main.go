@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"rayxo/agent/internal/actions"
+	"rayxo/agent/internal/files"
 	"rayxo/agent/internal/rpc"
 	"rayxo/agent/internal/version"
 )
@@ -23,15 +24,23 @@ type config struct {
 	socketPath  string
 	allowUser   string
 	socketGroup string
+	transferDir string
 	callTimeout time.Duration
 }
 
 func main() {
+	// The file manager runs every operation in rayxod itself, started again
+	// as the account (see internal/files).
+	if len(os.Args) > 1 && os.Args[1] == files.HelperArg {
+		os.Exit(files.HelperMain(os.Args[2:]))
+	}
+
 	var cfg config
 
 	flag.StringVar(&cfg.socketPath, "socket", "/run/rayxo/agent.sock", "Unix socket to listen on")
 	flag.StringVar(&cfg.allowUser, "allow-user", "rayxo", "system user that may call the agent besides root")
 	flag.StringVar(&cfg.socketGroup, "socket-group", "rayxo", "group that owns the socket (empty keeps the current group)")
+	flag.StringVar(&cfg.transferDir, "transfer-dir", "/var/lib/rayxo/transfer", "folder, owned by root, that file manager uploads and downloads pass through")
 	flag.DurationVar(&cfg.callTimeout, "call-timeout", 10*time.Minute, "maximum time one call may run")
 	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
@@ -76,8 +85,17 @@ func run(logger *slog.Logger, cfg config) error {
 		}
 	}
 
+	executable, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("find the rayxod binary: %w", err)
+	}
+
 	registry := rpc.NewRegistry()
-	actions.Register(registry)
+	actions.Register(registry, actions.Config{Files: actions.FilesConfig{
+		Executable:  executable,
+		TransferDir: cfg.transferDir,
+		PanelUID:    int(allowedUID),
+	}})
 
 	listener, err := rpc.Listen(cfg.socketPath, 0o660, gid)
 	if err != nil {
@@ -91,6 +109,8 @@ func run(logger *slog.Logger, cfg config) error {
 		Registry:    registry,
 		Logger:      logger,
 		CallTimeout: cfg.callTimeout,
+		// Room for a file saved from the file manager's editor (2 MB).
+		MaxRequestBytes: 8 << 20,
 		Authorize: func(uid uint32) bool {
 			return uid == 0 || uint64(uid) == allowedUID
 		},

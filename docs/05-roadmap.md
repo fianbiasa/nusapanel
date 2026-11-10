@@ -71,7 +71,9 @@ Pekerjaan:
 
 - SFTP ✅: akun utama login SFTP (port 22) dengan username akunnya dan password khusus SFTP yang diatur di halaman FTP & SFTP (terpisah dari password panel; panel hanya mengirim hash SHA512-CRYPT ke server); sshd memberi akun hosting SFTP saja, tanpa shell, forwarding, atau tunnel, sementara root dan user lain tidak berubah; file yang diunggah milik akun itu (644/755); suspend memblokir login, termasuk dengan SSH key.
 
-Berikutnya: file manager. SSL mail menyusul bersama email (P2).
+- file manager tahap 1 ✅: halaman File Manager untuk menelusuri home, mengunggah (drag & drop, per bagian 8 MB, sampai 10 GB, dengan konfirmasi timpa), download, membuat file/folder, ganti nama, salin, pindah, mengatur izin (centang atau angka), hapus ke Trash lalu pulihkan atau hapus permanen, preview gambar (SVG dalam sandbox), dan editor kode (CodeMirror 6, highlight sesuai jenis file, Ctrl+S, menolak menimpa perubahan yang dibuat orang lain sejak file dibuka); semua dijalankan agent sebagai user Linux akun itu di dalam home-nya.
+
+Berikutnya: file manager tahap 2 (zip/unzip/tar, cari file, ukuran folder). SSL mail menyusul bersama email (P2).
 
 - Akun user & paket user, buat/suspend/hapus akun, quota disk & inode.
 - Domain, subdomain, pointer, redirect, www/HTTPS.

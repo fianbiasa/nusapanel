@@ -29,7 +29,7 @@ var accountMethodNames = []string{"account.create", "account.suspend", "account.
 
 func TestAccountMethodsAreRegistered(t *testing.T) {
 	registry := rpc.NewRegistry()
-	Register(registry)
+	Register(registry, Config{})
 
 	for _, name := range accountMethodNames {
 		if !slices.Contains(registry.Names(), name) {

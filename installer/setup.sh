@@ -604,6 +604,11 @@ create_layout() {
     install -d -m 0750 -o root -g "$PANEL_USER" "$DATA_DIR" "$DATA_DIR/storage" \
         "$DATA_DIR/storage/app" "$DATA_DIR/storage/framework" "$DATA_DIR/storage/framework/cache"
 
+    # File manager uploads and downloads pass through here: the panel user
+    # may add and remove files, but only root can replace the folder, and
+    # the agent opens nothing in it that the panel user could redirect.
+    install -d -m 0770 -o root -g "$PANEL_USER" "$DATA_DIR/transfer"
+
     local dir
     for dir in storage/app/private storage/app/public storage/framework/cache/data \
         storage/framework/sessions storage/framework/views storage/logs; do
@@ -900,6 +905,8 @@ write_env() {
         add_public_ip_env
         # Installs from before phpMyAdmin.
         add_phpmyadmin_env
+        # Installs from before the file manager.
+        add_env_value RAYXO_TRANSFER_DIR "$DATA_DIR/transfer"
         return
     fi
 
@@ -955,6 +962,7 @@ ENV
     chmod 0640 "$ENV_FILE"
     add_public_ip_env
     add_phpmyadmin_env
+    add_env_value RAYXO_TRANSFER_DIR "$DATA_DIR/transfer"
     info "Konfigurasi ditulis ke $ENV_FILE"
 }
 

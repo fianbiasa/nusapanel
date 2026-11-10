@@ -174,7 +174,7 @@ func applyParams(domain, version string) map[string]string {
 
 func TestWebMethodsAreRegistered(t *testing.T) {
 	registry := rpc.NewRegistry()
-	Register(registry)
+	Register(registry, Config{})
 
 	for _, name := range webMethodNames {
 		if !slices.Contains(registry.Names(), name) {

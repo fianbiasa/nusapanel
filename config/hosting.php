@@ -47,4 +47,22 @@ return [
         'session_minutes' => (int) env('PHPMYADMIN_SESSION_MINUTES', 60),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | File manager
+    |--------------------------------------------------------------------------
+    |
+    | Uploads and downloads pass through "transfer_dir": the panel writes an
+    | upload there in chunks of "chunk_bytes" and the agent reads it, or the
+    | agent writes a download there that the panel sends on. On a server it
+    | is /var/lib/rayxo/transfer (owned by root, written by the installer
+    | into the environment); the agent is started with the same folder.
+    |
+    */
+
+    'files' => [
+        'transfer_dir' => env('RAYXO_TRANSFER_DIR', storage_path('app/private/transfer')),
+        'chunk_bytes' => 8 * 1024 * 1024,
+    ],
+
 ];

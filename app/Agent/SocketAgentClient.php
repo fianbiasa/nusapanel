@@ -43,10 +43,12 @@ final class SocketAgentClient implements AgentClient
 
         if (isset($response['error'])) {
             $error = is_array($response['error']) ? $response['error'] : [];
+            $reason = is_array($error['data'] ?? null) ? ($error['data']['reason'] ?? null) : null;
 
             throw new AgentException(
                 (string) ($error['message'] ?? 'The agent reported an unknown error.'),
                 (int) ($error['code'] ?? 0),
+                reason: is_string($reason) ? $reason : null,
             );
         }
 

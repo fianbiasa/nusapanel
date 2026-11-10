@@ -46,10 +46,12 @@ type Response struct {
 }
 
 // Error is a JSON-RPC 2.0 error object. Handlers return *Error for failures
-// whose message the caller should see.
+// whose message the caller should see. Data, when set, tells the caller
+// more in a form it can act on, such as {"reason": "exists"}.
 type Error struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
+	Data    any    `json:"data,omitempty"`
 }
 
 func (e *Error) Error() string {

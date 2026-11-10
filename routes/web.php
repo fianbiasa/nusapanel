@@ -9,6 +9,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DatabaseController;
 use App\Http\Controllers\DatabaseUserController;
 use App\Http\Controllers\DomainController;
+use App\Http\Controllers\FileManagerController;
 use App\Http\Controllers\FtpAccountController;
 use App\Http\Controllers\PhpMyAdminController;
 use App\Http\Controllers\PointerController;
@@ -49,6 +50,23 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('ftp', [FtpAccountController::class, 'store'])->name('ftp.store');
         Route::put('ftp/{ftpAccount}', [FtpAccountController::class, 'update'])->name('ftp.update');
         Route::delete('ftp/{ftpAccount}', [FtpAccountController::class, 'destroy'])->name('ftp.destroy');
+
+        Route::prefix('files')->name('files.')->controller(FileManagerController::class)->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::get('edit', 'edit')->name('edit');
+            Route::put('content', 'save')->name('save');
+            Route::post('create', 'create')->name('create');
+            Route::post('rename', 'rename')->name('rename');
+            Route::post('transfer', 'transfer')->name('transfer');
+            Route::post('delete', 'delete')->name('delete');
+            Route::post('permissions', 'permissions')->name('permissions');
+            Route::post('upload', 'upload')->middleware('throttle:600,1')->name('upload');
+            Route::get('download', 'download')->name('download');
+            Route::get('preview', 'preview')->name('preview');
+            Route::get('trash', 'trash')->name('trash');
+            Route::post('trash/restore', 'restore')->name('restore');
+            Route::post('trash/purge', 'purge')->name('purge');
+        });
         Route::post('subdomains', [SubdomainController::class, 'store'])->name('subdomains.store');
         Route::post('pointers', [PointerController::class, 'store'])->name('pointers.store');
         Route::get('redirects', [UrlRedirectController::class, 'index'])->name('redirects.index');

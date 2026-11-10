@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 
 	"rayxo/agent/internal/database"
+	"rayxo/agent/internal/files"
 	"rayxo/agent/internal/quota"
 	"rayxo/agent/internal/rpc"
 	"rayxo/agent/internal/sysinfo"
@@ -15,8 +16,13 @@ import (
 	"rayxo/agent/internal/webserver"
 )
 
+// Config is the agent's setup that methods need.
+type Config struct {
+	Files FilesConfig
+}
+
 // Register adds all agent methods to registry.
-func Register(registry *rpc.Registry) {
+func Register(registry *rpc.Registry, config Config) {
 	registry.Register("agent.ping", rpc.Method{Handler: ping})
 	registry.Register("system.info", rpc.Method{Handler: systemInfo})
 
@@ -41,6 +47,13 @@ func Register(registry *rpc.Registry) {
 	}
 
 	for name, method := range cronMethods(sysuser.System{}) {
+		registry.Register(name, method)
+	}
+
+	helper := files.Runner{Executable: config.Files.Executable}
+	transfers := files.Transfers{Dir: config.Files.TransferDir, PanelUID: config.Files.PanelUID}
+
+	for name, method := range fileMethods(sysuser.System{}, helper, transfers) {
 		registry.Register(name, method)
 	}
 }

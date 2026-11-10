@@ -55,7 +55,7 @@ func callFTP(t *testing.T, system *fakeSystem, ftp *fakeFTPSystem, params any) (
 
 func TestFTPMethodsAreRegistered(t *testing.T) {
 	registry := rpc.NewRegistry()
-	Register(registry)
+	Register(registry, Config{})
 
 	if !slices.Contains(registry.Names(), "ftp.ensure_dir") {
 		t.Fatal("ftp.ensure_dir is not registered")

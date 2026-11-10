@@ -10,3 +10,4 @@ Artisan::command('inspire', function () {
 
 Schedule::command('rayxo:collect-usage')->everyFifteenMinutes()->withoutOverlapping();
 Schedule::command('rayxo:close-phpmyadmin-sessions')->everyFiveMinutes()->withoutOverlapping();
+Schedule::command('rayxo:clean-transfers')->hourly()->withoutOverlapping();

@@ -6,7 +6,9 @@ use App\Enums\AccountStatus;
 use App\Enums\DatabaseStatus;
 use App\Enums\Role;
 use App\Models\Database;
+use App\Models\Domain;
 use App\Models\User;
+use App\Services\FileManagerService;
 
 /**
  * Simulated agent for developing the panel on macOS (Herd), where the real
@@ -31,8 +33,90 @@ final class FakeAgentClient implements AgentClient
             'db.report' => $this->databaseReport(),
             'ftp.ensure_dir' => $this->ftpFolder((string) ($params['username'] ?? '')),
             'php.versions' => ['versions' => ['7.4', '8.0', '8.1', '8.2', '8.3', '8.4', '8.5'], 'simulated' => true],
+            'fs.list' => $this->fileListing((string) ($params['username'] ?? ''), (string) ($params['path'] ?? '')),
+            'fs.read' => ['content' => "<?php\n\necho 'Hello from RAYXO';\n", 'size' => 33, 'version' => 'simulated-1'],
+            'fs.write' => ['size' => strlen((string) ($params['content'] ?? '')), 'version' => 'simulated-'.now()->getTimestamp()],
+            'fs.copy', 'fs.move', 'fs.delete', 'fs.chmod' => ['done' => $params['paths'] ?? [], 'failed' => [], 'simulated' => true],
+            'fs.trash_restore', 'fs.trash_delete' => ['done' => $params['ids'] ?? [], 'failed' => [], 'simulated' => true],
+            'fs.trash_empty' => ['done' => [], 'failed' => [], 'simulated' => true],
+            'fs.trash_list' => ['items' => [], 'simulated' => true],
+            'fs.upload' => $this->fileEntry(basename((string) ($params['path'] ?? 'upload')), 'file', 0),
+            'fs.download' => $this->simulatedDownload((string) ($params['transfer'] ?? ''), (string) ($params['path'] ?? '')),
             default => ['simulated' => true],
         };
+    }
+
+    /**
+     * A home like the agent creates one: the account's websites under
+     * domains/, each with a public_html holding a few files.
+     *
+     * @return array<string, mixed>
+     */
+    private function fileListing(string $username, string $path): array
+    {
+        $domains = Domain::query()
+            ->whereHas('account', fn ($query) => $query->where('username', $username))
+            ->orderBy('name')
+            ->pluck('name')
+            ->all();
+
+        $segments = $path === '' ? [] : explode('/', $path);
+
+        $entries = match (true) {
+            $segments === [] => [
+                $this->fileEntry('domains', 'directory'),
+                $this->fileEntry('tmp', 'directory'),
+                $this->fileEntry('.bash_logout', 'file', 220),
+            ],
+            $segments === ['domains'] => array_map(fn (string $domain): array => $this->fileEntry($domain, 'directory'), $domains),
+            count($segments) === 2 && $segments[0] === 'domains' => [
+                $this->fileEntry('public_html', 'directory'),
+                [...$this->fileEntry('private_html', 'link'), 'target' => 'public_html', 'target_type' => 'directory'],
+            ],
+            count($segments) === 3 && $segments[2] === 'public_html' => [
+                $this->fileEntry('images', 'directory'),
+                $this->fileEntry('.htaccess', 'file', 120),
+                $this->fileEntry('index.html', 'file', 629),
+                $this->fileEntry('index.php', 'file', 33),
+                $this->fileEntry('logo.png', 'file', 18_342),
+            ],
+            default => [],
+        };
+
+        return ['path' => $path, 'entries' => $entries, 'truncated' => false, 'simulated' => true];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function fileEntry(string $name, string $type, int $size = 0): array
+    {
+        return [
+            'name' => $name,
+            'type' => $type,
+            'size' => $size,
+            'mode' => $type === 'directory' ? '0755' : '0644',
+            'modified' => now()->subDays(crc32($name) % 30)->getTimestamp(),
+        ];
+    }
+
+    /**
+     * Write a stand-in for the file where the panel expects the download.
+     *
+     * @return array<string, mixed>
+     */
+    private function simulatedDownload(string $transfer, string $path): array
+    {
+        $dir = FileManagerService::transferDir();
+
+        if (! is_dir($dir)) {
+            mkdir($dir, 0700, true);
+        }
+
+        $content = "Simulated content of {$path}\n";
+        file_put_contents($dir.'/'.$transfer.'.download', $content);
+
+        return [...$this->fileEntry(basename($path), 'file', strlen($content)), 'simulated' => true];
     }
 
     /**

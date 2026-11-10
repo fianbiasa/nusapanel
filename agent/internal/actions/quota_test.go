@@ -39,7 +39,7 @@ func newQuotaSystem() *fakeSystem {
 
 func TestQuotaMethodsAreRegistered(t *testing.T) {
 	registry := rpc.NewRegistry()
-	Register(registry)
+	Register(registry, Config{})
 
 	for _, name := range []string{"account.set_quota", "quota.report"} {
 		if !slices.Contains(registry.Names(), name) {
