@@ -1,22 +1,34 @@
 import { Form, Head } from '@inertiajs/react';
-import { LockKeyhole } from 'lucide-react';
+import { History, LockKeyhole } from 'lucide-react';
 import { useRef } from 'react';
 import SecurityController from '@/actions/App/Http/Controllers/Settings/SecurityController';
 import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
 import SettingsCard from '@/components/settings-card';
+import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import { formatDateTime, formatRelative } from '@/lib/format';
 import { edit } from '@/routes/security';
 import type { Props as ManagePasskeysProps } from '@/components/manage-passkeys';
 import ManagePasskeys from '@/components/manage-passkeys';
 import type { Props as ManageTwoFactorProps } from '@/components/manage-two-factor';
 import ManageTwoFactor from '@/components/manage-two-factor';
 
+type LoginEntry = {
+    id: number;
+    succeeded: boolean;
+    ip_address: string | null;
+    browser: string | null;
+    os: string | null;
+    created_at: string;
+};
+
 // oxfmt-ignore
 type Props = {
     passwordRules: string;
+    loginHistory: LoginEntry[];
 } & ManagePasskeysProps &
     ManageTwoFactorProps;
 
@@ -140,6 +152,51 @@ export default function Security(props: Props) {
                 canManagePasskeys={props.canManagePasskeys}
                 passkeys={props.passkeys}
             />
+
+            <SettingsCard
+                icon={History}
+                title="Riwayat login"
+                description="Login terakhir ke akun ini, termasuk yang gagal. Kalau ada yang tidak kamu kenal, ganti kata sandi dan aktifkan 2FA."
+            >
+                {props.loginHistory.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                        Belum ada login yang tercatat.
+                    </p>
+                ) : (
+                    <ul className="divide-y text-sm">
+                        {props.loginHistory.map((entry) => (
+                            <li
+                                key={entry.id}
+                                className="flex flex-wrap items-center gap-x-4 gap-y-1 py-3"
+                            >
+                                <StatusBadge
+                                    status={
+                                        entry.succeeded ? 'active' : 'failed'
+                                    }
+                                    label={
+                                        entry.succeeded ? 'Berhasil' : 'Gagal'
+                                    }
+                                />
+                                <span className="font-medium">
+                                    {[entry.browser, entry.os]
+                                        .filter(Boolean)
+                                        .join(' · ') ||
+                                        'Perangkat tidak dikenal'}
+                                </span>
+                                <span className="font-mono text-xs text-muted-foreground">
+                                    {entry.ip_address ?? '—'}
+                                </span>
+                                <span
+                                    className="ml-auto text-muted-foreground"
+                                    title={formatDateTime(entry.created_at)}
+                                >
+                                    {formatRelative(entry.created_at)}
+                                </span>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </SettingsCard>
         </>
     );
 }

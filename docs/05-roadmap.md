@@ -77,7 +77,9 @@ Pekerjaan:
 
 - service monitor + watchdog ✅: halaman admin Services menampilkan status service sistem (berjalan/berhenti/gagal, start saat boot, sejak kapan, memori), pool PHP website dan kejadian watchdog, dengan start/stop/restart/reload yang dikonfirmasi dulu; konfigurasi Nginx/Apache dites sebelum restart, service yang dibutuhkan panel tidak bisa dihentikan, dan watchdog di agent menyalakan lagi service yang mati tiap menit.
 
-Berikutnya: penutup P1 (pengaturan server, riwayat login, `rayxo rebuild`). SSL mail menyusul bersama email (P2).
+- riwayat login ✅: Settings > Security menampilkan 20 login terakhir akun itu, berhasil maupun gagal, dengan waktu, IP, browser dan sistem operasinya (dari audit log yang sudah mencatat setiap login).
+
+Berikutnya: penutup P1 (pengaturan server, `rayxo rebuild`). SSL mail menyusul bersama email (P2).
 
 - Akun user & paket user, buat/suspend/hapus akun, quota disk & inode.
 - Domain, subdomain, pointer, redirect, www/HTTPS.

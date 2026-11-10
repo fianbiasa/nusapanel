@@ -5,6 +5,9 @@ namespace App\Http\Controllers\Settings;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\PasswordUpdateRequest;
 use App\Http\Requests\Settings\TwoFactorAuthenticationRequest;
+use App\Models\AuditLog;
+use App\Models\User;
+use App\Support\UserAgent;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
@@ -38,6 +41,7 @@ class SecurityController extends Controller
                     ->all()
                 : [],
             'passwordRules' => Password::defaults()->toPasswordRulesString(),
+            'loginHistory' => $this->loginHistory($request->user()),
         ];
 
         if (Features::canManageTwoFactorAuthentication()) {
@@ -48,6 +52,41 @@ class SecurityController extends Controller
         }
 
         return Inertia::render('settings/security', $props);
+    }
+
+    /**
+     * The account's latest logins and failed attempts, newest first, as the
+     * audit log recorded them.
+     *
+     * @return list<array{id: int, succeeded: bool, ip_address: string|null, browser: string|null, os: string|null, created_at: string}>
+     */
+    private function loginHistory(User $user): array
+    {
+        $entries = AuditLog::query()
+            ->where('subject_type', $user->getMorphClass())
+            ->where('subject_id', $user->getKey())
+            ->whereIn('action', ['auth.login', 'auth.failed'])
+            ->latest('created_at')
+            ->latest('id')
+            ->limit(20)
+            ->get(['id', 'action', 'ip_address', 'user_agent', 'created_at']);
+
+        $history = [];
+
+        foreach ($entries as $entry) {
+            $device = UserAgent::describe($entry->user_agent);
+
+            $history[] = [
+                'id' => (int) $entry->id,
+                'succeeded' => $entry->action === 'auth.login',
+                'ip_address' => $entry->ip_address,
+                'browser' => $device['browser'],
+                'os' => $device['os'],
+                'created_at' => $entry->created_at->toIso8601String(),
+            ];
+        }
+
+        return $history;
     }
 
     /**
