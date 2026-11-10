@@ -1,5 +1,6 @@
 import { usePage } from '@inertiajs/react';
 import {
+    Activity,
     Clock,
     Database,
     FolderOpen,
@@ -19,6 +20,7 @@ import { index as databasesIndex } from '@/routes/databases';
 import { index as accountsIndex } from '@/routes/admin/accounts';
 import { index as auditLogsIndex } from '@/routes/admin/audit-logs';
 import { index as packagesIndex } from '@/routes/admin/packages';
+import { index as servicesIndex } from '@/routes/admin/services';
 import { index as tasksIndex } from '@/routes/admin/tasks';
 import { index as domainsIndex } from '@/routes/domains';
 import { index as filesIndex } from '@/routes/files';
@@ -81,10 +83,15 @@ export function useNavigation(): {
             href: auditLogsIndex(),
             icon: ScrollText,
         };
+        const services: NavItem = {
+            title: 'Services',
+            href: servicesIndex(),
+            icon: Activity,
+        };
 
         sections.push(
             { label: 'Menu', items: [dashboardItem, accounts, packages] },
-            { label: 'Server', items: [tasks, auditLog] },
+            { label: 'Server', items: [services, tasks, auditLog] },
         );
         dockItems = [
             dashboardItem,

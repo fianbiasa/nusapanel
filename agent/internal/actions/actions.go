@@ -10,6 +10,7 @@ import (
 	"rayxo/agent/internal/files"
 	"rayxo/agent/internal/quota"
 	"rayxo/agent/internal/rpc"
+	"rayxo/agent/internal/services"
 	"rayxo/agent/internal/sysinfo"
 	"rayxo/agent/internal/sysuser"
 	"rayxo/agent/internal/version"
@@ -19,6 +20,8 @@ import (
 // Config is the agent's setup that methods need.
 type Config struct {
 	Files FilesConfig
+	// Services also runs the watchdog; nil makes one for real systemd.
+	Services *services.Manager
 }
 
 // Register adds all agent methods to registry.
@@ -54,6 +57,15 @@ func Register(registry *rpc.Registry, config Config) {
 	transfers := files.Transfers{Dir: config.Files.TransferDir, PanelUID: config.Files.PanelUID}
 
 	for name, method := range fileMethods(sysuser.System{}, helper, transfers) {
+		registry.Register(name, method)
+	}
+
+	manager := config.Services
+	if manager == nil {
+		manager = services.New(services.DefaultConfig())
+	}
+
+	for name, method := range serviceMethods(manager) {
 		registry.Register(name, method)
 	}
 }

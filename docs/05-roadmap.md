@@ -75,7 +75,9 @@ Pekerjaan:
 
 - file manager tahap 2 ✅: kompres ke ZIP atau TAR.GZ, ekstrak ZIP/TAR/TAR.GZ/TAR.BZ2 ke folder ini atau folder baru (dengan atau tanpa menimpa; entri berbahaya ditolak), cari file berdasarkan nama di folder dan subfoldernya, dan hitung ukuran folder.
 
-Berikutnya: penutup P1 (service monitor + watchdog, pengaturan server, riwayat login, `rayxo rebuild`). SSL mail menyusul bersama email (P2).
+- service monitor + watchdog ✅: halaman admin Services menampilkan status service sistem (berjalan/berhenti/gagal, start saat boot, sejak kapan, memori), pool PHP website dan kejadian watchdog, dengan start/stop/restart/reload yang dikonfirmasi dulu; konfigurasi Nginx/Apache dites sebelum restart, service yang dibutuhkan panel tidak bisa dihentikan, dan watchdog di agent menyalakan lagi service yang mati tiap menit.
+
+Berikutnya: penutup P1 (pengaturan server, riwayat login, `rayxo rebuild`). SSL mail menyusul bersama email (P2).
 
 - Akun user & paket user, buat/suspend/hapus akun, quota disk & inode.
 - Domain, subdomain, pointer, redirect, www/HTTPS.

@@ -33,6 +33,8 @@ final class FakeAgentClient implements AgentClient
             'db.report' => $this->databaseReport(),
             'ftp.ensure_dir' => $this->ftpFolder((string) ($params['username'] ?? '')),
             'php.versions' => ['versions' => ['7.4', '8.0', '8.1', '8.2', '8.3', '8.4', '8.5'], 'simulated' => true],
+            'service.status' => $this->serviceReport(),
+            'service.action' => ['unit' => $params['unit'] ?? '', 'action' => $params['action'] ?? '', 'simulated' => true],
             'fs.list' => $this->fileListing((string) ($params['username'] ?? ''), (string) ($params['path'] ?? '')),
             'fs.read' => ['content' => "<?php\n\necho 'Hello from RAYXO';\n", 'size' => 33, 'version' => 'simulated-1'],
             'fs.write' => ['size' => strlen((string) ($params['content'] ?? '')), 'version' => 'simulated-'.now()->getTimestamp()],
@@ -52,6 +54,52 @@ final class FakeAgentClient implements AgentClient
             ],
             default => ['simulated' => true],
         };
+    }
+
+    /**
+     * The services of a healthy server, one of them stopped, with an event
+     * of the watchdog.
+     *
+     * @return array<string, mixed>
+     */
+    private function serviceReport(): array
+    {
+        $services = [
+            ['nginx.service', 'Nginx', false, true],
+            ['apache2.service', 'Apache', true, true],
+            ['php8.4-fpm.service', 'PHP-FPM (panel & phpMyAdmin)', false, true],
+            ['mariadb.service', 'MariaDB', false, true],
+            ['postfix.service', 'Postfix', true, true],
+            ['opendkim.service', 'OpenDKIM', true, true],
+            ['pure-ftpd-mysql.service', 'Pure-FTPd', true, true],
+            ['cron.service', 'Cron', true, true],
+            ['rayxo-queue.service', 'Queue worker panel', false, true],
+            ['rayxod.service', 'Agent rayxod', false, false],
+        ];
+
+        return [
+            'services' => array_map(fn (array $service): array => [
+                'unit' => $service[0],
+                'label' => $service[1],
+                'can_stop' => $service[2],
+                'can_control' => $service[3],
+                'active' => $service[0] === 'opendkim.service' ? 'inactive' : 'active',
+                'sub' => $service[0] === 'opendkim.service' ? 'dead' : 'running',
+                'enabled' => $service[0] !== 'opendkim.service',
+                'since' => now()->subDays(3)->getTimestamp(),
+                'memory' => 20_000_000 + crc32($service[0]) % 200_000_000,
+                'main_pid' => 1000 + crc32($service[0]) % 30_000,
+            ], $services),
+            'pools' => ['total' => 3, 'running' => 3, 'failed' => []],
+            'events' => [[
+                'time' => now()->subHours(5)->toRfc3339String(),
+                'unit' => 'pure-ftpd-mysql.service',
+                'label' => 'Pure-FTPd',
+                'outcome' => 'restarted',
+                'message' => 'was not running; started again',
+            ]],
+            'simulated' => true,
+        ];
     }
 
     /**

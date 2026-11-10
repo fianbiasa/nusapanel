@@ -204,16 +204,16 @@ Setiap aksi dijalankan oleh proses pembantu (`rayxod files-helper`) yang berjala
 
 ### system
 
-| Aksi                                | Fungsi                                                      | Fase  |
-| ----------------------------------- | ----------------------------------------------------------- | ----- |
-| `agent.ping`                        | Cek agent hidup + versi (dipakai installer & monitoring)    | P0 ✅ |
-| `system.info`                       | CPU, RAM, disk, load, uptime, versi                         | P0 ✅ |
-| `service.list` / `service.action`   | start/stop/restart/reload; nama dari daftar putih           | P1    |
-| `system.set_hostname`               |                                                             | P1    |
-| `system.processes` / `process_kill` |                                                             | P3    |
-| `system.file_read` / `file_write`   | Hanya file di daftar putih; backup otomatis sebelum ditulis | P3    |
-| `system.ip_add` / `ip_remove`       |                                                             | P3    |
-| `system.update`                     | Update panel & agent                                        | P5    |
+| Aksi                                | Fungsi                                                                                                                                                                                                                                                                                                                                                                                                                                                        | Fase  |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| `agent.ping`                        | Cek agent hidup + versi (dipakai installer & monitoring)                                                                                                                                                                                                                                                                                                                                                                                                      | P0 ✅ |
+| `system.info`                       | CPU, RAM, disk, load, uptime, versi                                                                                                                                                                                                                                                                                                                                                                                                                           | P0 ✅ |
+| `service.status` / `service.action` | ✅ status, start saat boot, sejak kapan, memori, ringkasan pool PHP akun dan kejadian watchdog; start/stop/restart/reload hanya untuk service di katalog (Nginx, Apache, PHP-FPM panel, MariaDB, Postfix, OpenDKIM, Pure-FTPd, Cron, queue panel; rayxod hanya status). Restart/reload Nginx dan Apache didahului tes konfigurasi; stop juga mematikan start saat boot (start menyalakannya lagi); Nginx, PHP-FPM panel, MariaDB dan queue tidak bisa di-stop | P1    |
+| `system.set_hostname`               |                                                                                                                                                                                                                                                                                                                                                                                                                                                               | P1    |
+| `system.processes` / `process_kill` |                                                                                                                                                                                                                                                                                                                                                                                                                                                               | P3    |
+| `system.file_read` / `file_write`   | Hanya file di daftar putih; backup otomatis sebelum ditulis                                                                                                                                                                                                                                                                                                                                                                                                   | P3    |
+| `system.ip_add` / `ip_remove`       |                                                                                                                                                                                                                                                                                                                                                                                                                                                               | P3    |
+| `system.update`                     | Update panel & agent                                                                                                                                                                                                                                                                                                                                                                                                                                          | P5    |
 
 ### security
 
@@ -238,10 +238,10 @@ Setiap aksi dijalankan oleh proses pembantu (`rayxod files-helper`) yang berjala
 
 ### Daemon di dalam agent
 
-| Daemon   | Fungsi                                                                                        | Fase |
-| -------- | --------------------------------------------------------------------------------------------- | ---- |
-| watchdog | Cek service tiap menit, restart kalau mati, lapor ke panel                                    | P1   |
-| bfm      | Baca log SSH, Dovecot, Postfix, Pure-FTPd, panel; blokir IP lewat nftables kalau lewat ambang | P5   |
+| Daemon   | Fungsi                                                                                                                                                                                                                                          | Fase |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| watchdog | ✅ Tiap menit menyalakan lagi service katalog dan pool PHP akun yang mati padahal menyala saat boot (pool akun yang di-suspend dilewati); paling banyak 3 kali per 15 menit per service, lalu dibiarkan; kejadiannya tampil di halaman Services | P1   |
+| bfm      | Baca log SSH, Dovecot, Postfix, Pure-FTPd, panel; blokir IP lewat nftables kalau lewat ambang                                                                                                                                                   | P5   |
 
 ---
 

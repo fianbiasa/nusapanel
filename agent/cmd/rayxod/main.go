@@ -17,6 +17,7 @@ import (
 	"rayxo/agent/internal/actions"
 	"rayxo/agent/internal/files"
 	"rayxo/agent/internal/rpc"
+	"rayxo/agent/internal/services"
 	"rayxo/agent/internal/version"
 )
 
@@ -26,6 +27,7 @@ type config struct {
 	socketGroup string
 	transferDir string
 	callTimeout time.Duration
+	watchdog    time.Duration
 }
 
 func main() {
@@ -42,6 +44,7 @@ func main() {
 	flag.StringVar(&cfg.socketGroup, "socket-group", "rayxo", "group that owns the socket (empty keeps the current group)")
 	flag.StringVar(&cfg.transferDir, "transfer-dir", "/var/lib/rayxo/transfer", "folder, owned by root, that file manager uploads and downloads pass through")
 	flag.DurationVar(&cfg.callTimeout, "call-timeout", 10*time.Minute, "maximum time one call may run")
+	flag.DurationVar(&cfg.watchdog, "watchdog-interval", time.Minute, "how often the watchdog starts services that should run again (0 turns it off)")
 	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
 
@@ -90,12 +93,17 @@ func run(logger *slog.Logger, cfg config) error {
 		return fmt.Errorf("find the rayxod binary: %w", err)
 	}
 
+	manager := services.New(services.DefaultConfig())
+
 	registry := rpc.NewRegistry()
-	actions.Register(registry, actions.Config{Files: actions.FilesConfig{
-		Executable:  executable,
-		TransferDir: cfg.transferDir,
-		PanelUID:    int(allowedUID),
-	}})
+	actions.Register(registry, actions.Config{
+		Files: actions.FilesConfig{
+			Executable:  executable,
+			TransferDir: cfg.transferDir,
+			PanelUID:    int(allowedUID),
+		},
+		Services: manager,
+	})
 
 	listener, err := rpc.Listen(cfg.socketPath, 0o660, gid)
 	if err != nil {
@@ -104,6 +112,10 @@ func run(logger *slog.Logger, cfg config) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
 	defer stop()
+
+	if cfg.watchdog > 0 {
+		go manager.Watch(ctx, cfg.watchdog)
+	}
 
 	server := &rpc.Server{
 		Registry:    registry,

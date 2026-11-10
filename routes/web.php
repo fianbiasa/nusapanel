@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\AccountController;
 use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\PackageController;
+use App\Http\Controllers\Admin\ServiceController;
 use App\Http\Controllers\Admin\TaskController;
 use App\Http\Controllers\CronJobController;
 use App\Http\Controllers\DashboardController;
@@ -94,6 +95,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::delete('packages/{package}', [PackageController::class, 'destroy'])->name('packages.destroy');
         Route::get('tasks', [TaskController::class, 'index'])->name('tasks.index');
         Route::get('audit-logs', [AuditLogController::class, 'index'])->name('audit-logs.index');
+        Route::get('services', [ServiceController::class, 'index'])->name('services.index');
+        Route::post('services/{unit}/{action}', [ServiceController::class, 'act'])
+            ->where('unit', '[a-z0-9][a-z0-9@._-]{0,99}\.service')
+            ->whereIn('action', ['start', 'stop', 'restart', 'reload'])
+            ->middleware('throttle:30,1')
+            ->name('services.act');
     });
 });
 

@@ -214,5 +214,14 @@
     "Archive :name created.": "Arsip :name dibuat.",
     ":files files and :folders folders extracted.": ":files file dan :folders folder diekstrak.",
     ":count already existed and were left as they are.": ":count sudah ada dan dibiarkan apa adanya.",
-    ":count were refused because they would land outside the folder.": ":count ditolak karena akan keluar dari folder tujuan."
+    ":count were refused because they would land outside the folder.": ":count ditolak karena akan keluar dari folder tujuan.",
+    "The agent did not answer. Check that rayxod is running: systemctl status rayxod": "Agent tidak menjawab. Pastikan rayxod berjalan: systemctl status rayxod",
+    "This action is not allowed for :service.": "Aksi ini tidak diizinkan untuk :service.",
+    "The configuration has an error, so :service was left as it is: :detail": "Konfigurasinya ada yang salah, jadi :service dibiarkan apa adanya: :detail",
+    "Unknown service.": "Service tidak dikenal.",
+    ":service could not be changed. Try again in a moment.": ":service tidak bisa diubah. Coba lagi sebentar lagi.",
+    ":service is being started.": ":service sedang dinyalakan.",
+    ":service is stopped and no longer starts at boot.": ":service dihentikan dan tidak lagi menyala otomatis saat boot.",
+    ":service is reloading its configuration.": ":service sedang memuat ulang konfigurasinya.",
+    ":service is being restarted.": ":service sedang di-restart."
 }
