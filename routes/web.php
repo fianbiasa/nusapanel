@@ -60,6 +60,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('transfer', 'transfer')->name('transfer');
             Route::post('delete', 'delete')->name('delete');
             Route::post('permissions', 'permissions')->name('permissions');
+            Route::post('compress', 'compress')->name('compress');
+            Route::post('extract', 'extract')->name('extract');
+            Route::get('search', 'search')->middleware('throttle:60,1')->name('search');
+            Route::post('size', 'size')->middleware('throttle:60,1')->name('size');
             Route::post('upload', 'upload')->middleware('throttle:600,1')->name('upload');
             Route::get('download', 'download')->name('download');
             Route::get('preview', 'preview')->name('preview');

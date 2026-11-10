@@ -210,5 +210,9 @@
     ":path: :message": ":path: :message",
     "(and :count more)|(and :count more)": "(dan :count lainnya)",
     "The :attribute may not be empty, \".\" or \"..\", and may not contain a slash or control characters.": ":Attribute tidak boleh kosong, \".\" atau \"..\", dan tidak boleh berisi garis miring atau karakter kontrol.",
-    "The :attribute is not a valid path in the home folder.": ":Attribute bukan path yang valid di folder home."
+    "The :attribute is not a valid path in the home folder.": ":Attribute bukan path yang valid di folder home.",
+    "Archive :name created.": "Arsip :name dibuat.",
+    ":files files and :folders folders extracted.": ":files file dan :folders folder diekstrak.",
+    ":count already existed and were left as they are.": ":count sudah ada dan dibiarkan apa adanya.",
+    ":count were refused because they would land outside the folder.": ":count ditolak karena akan keluar dari folder tujuan."
 }

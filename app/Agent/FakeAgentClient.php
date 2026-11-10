@@ -42,6 +42,14 @@ final class FakeAgentClient implements AgentClient
             'fs.trash_list' => ['items' => [], 'simulated' => true],
             'fs.upload' => $this->fileEntry(basename((string) ($params['path'] ?? 'upload')), 'file', 0),
             'fs.download' => $this->simulatedDownload((string) ($params['transfer'] ?? ''), (string) ($params['path'] ?? '')),
+            'fs.compress' => $this->fileEntry(basename((string) ($params['destination'] ?? 'archive.zip')), 'file', 48_213),
+            'fs.extract' => ['destination' => $params['destination'] ?? '', 'files' => 12, 'folders' => 3, 'links' => 0, 'skipped' => 0, 'refused' => 0, 'simulated' => true],
+            'fs.search' => $this->searchHits((string) ($params['path'] ?? ''), (string) ($params['query'] ?? '')),
+            'fs.disk_usage' => [
+                'usage' => array_map(fn (string $path): array => ['path' => $path, 'size' => 1_048_576 + crc32($path) % 50_000_000, 'files' => 42, 'folders' => 7, 'truncated' => false], (array) ($params['paths'] ?? [])),
+                'failed' => [],
+                'simulated' => true,
+            ],
             default => ['simulated' => true],
         };
     }
@@ -84,6 +92,26 @@ final class FakeAgentClient implements AgentClient
         };
 
         return ['path' => $path, 'entries' => $entries, 'truncated' => false, 'simulated' => true];
+    }
+
+    /**
+     * Names of the sample home that contain the query.
+     *
+     * @return array<string, mixed>
+     */
+    private function searchHits(string $path, string $query): array
+    {
+        $names = ['index.html', 'index.php', '.htaccess', 'logo.png', 'images'];
+        $base = $path === '' ? 'domains/example.test/public_html' : $path;
+        $hits = [];
+
+        foreach ($names as $name) {
+            if (str_contains(strtolower($name), strtolower($query))) {
+                $hits[] = ['path' => $base.'/'.$name, 'type' => $name === 'images' ? 'directory' : 'file', 'size' => 629, 'modified' => now()->getTimestamp()];
+            }
+        }
+
+        return ['path' => $path, 'query' => $query, 'hits' => $hits, 'truncated' => false, 'simulated' => true];
     }
 
     /**

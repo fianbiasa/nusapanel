@@ -217,6 +217,89 @@ class FileManagerController extends Controller
     }
 
     /**
+     * Pack files and folders of the current folder into an archive there.
+     *
+     * @throws ValidationException
+     */
+    public function compress(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            ...$this->pathsRules(),
+            'directory' => ['present', 'nullable', 'string', new FilePath],
+            'name' => ['required', 'string', new FilePath(nameOnly: true)],
+            'format' => ['required', Rule::in(['zip', 'tar.gz'])],
+        ]);
+
+        $this->files->compress(
+            $request->user(),
+            $data['paths'],
+            FileManagerService::join((string) $data['directory'], $data['name']),
+            $data['format'],
+        );
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Archive :name created.', ['name' => $data['name']])]);
+
+        return back();
+    }
+
+    /**
+     * Unpack an archive into a folder.
+     *
+     * @throws ValidationException
+     */
+    public function extract(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'path' => ['required', 'string', new FilePath],
+            'target' => ['present', 'nullable', 'string', new FilePath],
+            'overwrite' => ['required', 'boolean'],
+        ]);
+
+        $result = $this->files->extract($request->user(), $data['path'], (string) $data['target'], (bool) $data['overwrite']);
+
+        $message = __(':files files and :folders folders extracted.', ['files' => $result['files'], 'folders' => $result['folders']]);
+
+        if ($result['skipped'] > 0) {
+            $message .= ' '.__(':count already existed and were left as they are.', ['count' => $result['skipped']]);
+        }
+
+        if ($result['refused'] > 0) {
+            $message .= ' '.__(':count were refused because they would land outside the folder.', ['count' => $result['refused']]);
+        }
+
+        Inertia::flash('toast', ['type' => $result['refused'] > 0 ? 'warning' : 'success', 'message' => $message]);
+
+        return back();
+    }
+
+    /**
+     * Find files and folders by name, under a folder.
+     *
+     * @throws ValidationException
+     */
+    public function search(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'path' => ['present', 'nullable', 'string', new FilePath],
+            'query' => ['required', 'string', 'max:100', 'not_regex:/[\/\x00]/'],
+        ]);
+
+        return response()->json($this->files->search($request->user(), (string) $data['path'], $data['query']));
+    }
+
+    /**
+     * How much files and folders hold.
+     *
+     * @throws ValidationException
+     */
+    public function size(Request $request): JsonResponse
+    {
+        $data = $request->validate($this->pathsRules());
+
+        return response()->json($this->files->diskUsage($request->user(), $data['paths']));
+    }
+
+    /**
      * One chunk of an upload. The answer says whether the file is stored.
      *
      * @throws ValidationException

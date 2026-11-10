@@ -73,7 +73,7 @@ func TestFileMethodsAreRegistered(t *testing.T) {
 	registry := rpc.NewRegistry()
 	Register(registry, Config{})
 
-	for _, name := range []string{"fs.list", "fs.read", "fs.write", "fs.upload", "fs.download", "fs.delete", "fs.trash_restore", "fs.trash_empty"} {
+	for _, name := range []string{"fs.list", "fs.read", "fs.write", "fs.upload", "fs.download", "fs.delete", "fs.trash_restore", "fs.trash_empty", "fs.compress", "fs.extract", "fs.search", "fs.disk_usage"} {
 		if !slices.Contains(registry.Names(), name) {
 			t.Errorf("%s is not registered", name)
 		}
@@ -102,12 +102,15 @@ func TestFileMethodsRefuseBadParamsBeforeTheHelper(t *testing.T) {
 	helper := &fakeHelper{result: `{}`}
 
 	for method, params := range map[string]map[string]any{
-		"fs.list":   {"username": "budi", "path": "../sari"},
-		"fs.rename": {"username": "budi", "path": "a", "name": "b/c"},
-		"fs.chmod":  {"username": "budi", "paths": []string{"a"}, "mode": 0o4755},
-		"fs.delete": {"username": "budi", "paths": []string{}},
-		"fs.read":   {"username": "Budi", "path": "a"},
-		"fs.mkdir":  {"username": "budi", "path": "a", "extra": true},
+		"fs.list":     {"username": "budi", "path": "../sari"},
+		"fs.rename":   {"username": "budi", "path": "a", "name": "b/c"},
+		"fs.chmod":    {"username": "budi", "paths": []string{"a"}, "mode": 0o4755},
+		"fs.delete":   {"username": "budi", "paths": []string{}},
+		"fs.read":     {"username": "Budi", "path": "a"},
+		"fs.mkdir":    {"username": "budi", "path": "a", "extra": true},
+		"fs.compress": {"username": "budi", "paths": []string{"a"}, "destination": "a.rar", "format": "rar"},
+		"fs.extract":  {"username": "budi", "path": "", "destination": "x"},
+		"fs.search":   {"username": "budi", "path": "", "query": "../etc"},
 	} {
 		_, err := callFiles(t, system, helper, nil, method, params)
 		assertCode(t, err, rpc.CodeInvalidParams)

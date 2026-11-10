@@ -329,6 +329,65 @@ class FileManagerTest extends TestCase
         $this->assertSame(['username' => 'budi', 'ids' => [$id]], $agent->calls()[1]['params']);
     }
 
+    public function test_compressing_writes_the_archive_into_the_folder()
+    {
+        $agent = $this->app->instance(AgentClient::class, new FakeAgentClient);
+        $account = User::factory()->create(['username' => 'budi']);
+
+        $this->actingAs($account)
+            ->post(route('files.compress'), ['paths' => ['site/a.php', 'site/css'], 'directory' => 'site', 'name' => 'site.tar.gz', 'format' => 'tar.gz'])
+            ->assertSessionHasNoErrors()
+            ->assertInertiaFlash('toast.message', 'Archive site.tar.gz created.');
+
+        $this->assertSame(
+            ['username' => 'budi', 'paths' => ['site/a.php', 'site/css'], 'destination' => 'site/site.tar.gz', 'format' => 'tar.gz'],
+            $agent->calls()[0]['params'],
+        );
+        $this->assertDatabaseHas(AuditLog::class, ['action' => 'file.compressed', 'actor_id' => $account->id]);
+
+        $this->actingAs($account)
+            ->post(route('files.compress'), ['paths' => ['site/a.php'], 'directory' => 'site', 'name' => 'a.rar', 'format' => 'rar'])
+            ->assertSessionHasErrors('format');
+    }
+
+    public function test_extracting_reports_what_was_left_out()
+    {
+        $this->mock(AgentClient::class, fn (MockInterface $mock) => $mock
+            ->shouldReceive('call')->once()
+            ->with('fs.extract', ['username' => 'budi', 'path' => 'site/wp.zip', 'destination' => 'site/wp', 'overwrite' => false], 600)
+            ->andReturn(['destination' => 'site/wp', 'files' => 10, 'folders' => 2, 'links' => 0, 'skipped' => 3, 'refused' => 1]));
+
+        $this->actingAs(User::factory()->create(['username' => 'budi']))
+            ->post(route('files.extract'), ['path' => 'site/wp.zip', 'target' => 'site/wp', 'overwrite' => false])
+            ->assertInertiaFlash('toast.type', 'warning')
+            ->assertInertiaFlash('toast.message', '10 files and 2 folders extracted. 3 already existed and were left as they are. 1 were refused because they would land outside the folder.');
+    }
+
+    public function test_searching_and_counting_answer_with_json()
+    {
+        $agent = $this->app->instance(AgentClient::class, new FakeAgentClient);
+        $account = User::factory()->create(['username' => 'budi']);
+
+        $this->actingAs($account)
+            ->getJson(route('files.search', ['path' => 'site', 'query' => 'index']))
+            ->assertOk()
+            ->assertJsonPath('hits.0.path', 'site/index.html')
+            ->assertJsonPath('truncated', false);
+
+        $this->actingAs($account)
+            ->postJson(route('files.size'), ['paths' => ['site']])
+            ->assertOk()
+            ->assertJsonPath('usage.0.path', 'site')
+            ->assertJsonPath('usage.0.files', 42);
+
+        $this->assertSame(['username' => 'budi', 'path' => 'site', 'query' => 'index'], $agent->calls()[0]['params']);
+
+        $this->actingAs($account)
+            ->getJson(route('files.search', ['path' => '', 'query' => '../etc']))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('query');
+    }
+
     public function test_abandoned_transfers_are_cleaned_up()
     {
         File::ensureDirectoryExists($this->transferDir);

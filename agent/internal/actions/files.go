@@ -125,6 +125,33 @@ func (p fsTrash) account() string { return p.Username }
 func (p fsTrash) validate() error { return checkFS(p.Username, p.TrashParams) }
 func (p fsTrash) payload() any    { return p.TrashParams }
 
+type fsCompress struct {
+	Username string `json:"username"`
+	files.CompressParams
+}
+
+func (p fsCompress) account() string { return p.Username }
+func (p fsCompress) validate() error { return checkFS(p.Username, p.CompressParams) }
+func (p fsCompress) payload() any    { return p.CompressParams }
+
+type fsExtract struct {
+	Username string `json:"username"`
+	files.ExtractParams
+}
+
+func (p fsExtract) account() string { return p.Username }
+func (p fsExtract) validate() error { return checkFS(p.Username, p.ExtractParams) }
+func (p fsExtract) payload() any    { return p.ExtractParams }
+
+type fsSearch struct {
+	Username string `json:"username"`
+	files.SearchParams
+}
+
+func (p fsSearch) account() string { return p.Username }
+func (p fsSearch) validate() error { return checkFS(p.Username, p.SearchParams) }
+func (p fsSearch) payload() any    { return p.SearchParams }
+
 type fsHome struct {
 	Username string `json:"username"`
 }
@@ -190,6 +217,10 @@ func fileMethods(accounts accountSystem, helper fileHelper, transfers fileTransf
 		"fs.trash_restore": fsMethod[fsTrash](f, files.OpRestore),
 		"fs.trash_delete":  fsMethod[fsTrash](f, files.OpPurge),
 		"fs.trash_empty":   fsMethod[fsHome](f, files.OpEmptyTrash),
+		"fs.compress":      fsMethod[fsCompress](f, files.OpCompress),
+		"fs.extract":       fsMethod[fsExtract](f, files.OpExtract),
+		"fs.search":        fsMethod[fsSearch](f, files.OpSearch),
+		"fs.disk_usage":    fsMethod[fsPaths](f, files.OpDiskUsage),
 		"fs.upload":        {Handler: f.upload},
 		"fs.download":      {Handler: f.download},
 	}

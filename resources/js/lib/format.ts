@@ -50,6 +50,8 @@ export const auditActionLabels: Record<string, string> = {
     'file.permissions_changed': 'Izin file diubah',
     'file.uploaded': 'File diunggah',
     'file.saved': 'File disimpan dari editor',
+    'file.compressed': 'Arsip dibuat',
+    'file.extracted': 'Arsip diekstrak',
     'cron_job.created': 'Cron job dibuat',
     'cron_job.updated': 'Cron job diubah',
     'cron_job.deleted': 'Cron job dihapus',

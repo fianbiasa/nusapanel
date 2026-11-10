@@ -35,6 +35,10 @@ const (
 	OpRestore    = "restore"
 	OpPurge      = "purge"
 	OpEmptyTrash = "empty_trash"
+	OpCompress   = "compress"
+	OpExtract    = "extract"
+	OpSearch     = "search"
+	OpDiskUsage  = "disk_usage"
 )
 
 // Request is what the agent sends the helper on stdin.
@@ -163,6 +167,66 @@ func (p TrashParams) Check() error {
 	return nil
 }
 
+// CompressParams pack paths into a new archive at Destination, in Format
+// (zip or tar.gz).
+type CompressParams struct {
+	Paths       []string `json:"paths"`
+	Destination string   `json:"destination"`
+	Format      string   `json:"format"`
+}
+
+// Check checks the paths, the archive and its format.
+func (p CompressParams) Check() error {
+	if p.Format != FormatZip && p.Format != FormatTarGz {
+		return errorf(ReasonInvalid, "format must be %s or %s", FormatZip, FormatTarGz)
+	}
+
+	if p.Destination == "" {
+		return errorf(ReasonInvalid, "name the archive")
+	}
+
+	if err := checkPaths(p.Paths); err != nil {
+		return err
+	}
+
+	return CheckPath(p.Destination)
+}
+
+// ExtractParams unpack the archive Path into folder Destination.
+type ExtractParams struct {
+	Path        string `json:"path"`
+	Destination string `json:"destination"`
+	Overwrite   bool   `json:"overwrite"`
+}
+
+// Check checks the archive and the folder.
+func (p ExtractParams) Check() error {
+	if p.Path == "" {
+		return errorf(ReasonInvalid, "name the archive")
+	}
+
+	if err := CheckPath(p.Path); err != nil {
+		return err
+	}
+
+	return CheckPath(p.Destination)
+}
+
+// SearchParams look for Query in the names under folder Path.
+type SearchParams struct {
+	Path  string `json:"path"`
+	Query string `json:"query"`
+}
+
+// Check checks the folder and the text.
+func (p SearchParams) Check() error {
+	if err := CheckQuery(p.Query); err != nil {
+		return err
+	}
+
+	return CheckPath(p.Path)
+}
+
 // NoParams are the params of operations on the whole trash.
 type NoParams struct{}
 
@@ -248,6 +312,14 @@ func Execute(home, op string, raw json.RawMessage, data *os.File) (any, error) {
 		return run(raw, func(p TrashParams) (any, error) { return h.Purge(p.IDs), nil })
 	case OpEmptyTrash:
 		return run(raw, func(NoParams) (any, error) { return h.EmptyTrash(), nil })
+	case OpCompress:
+		return run(raw, func(p CompressParams) (any, error) { return h.Compress(p.Paths, p.Destination, p.Format) })
+	case OpExtract:
+		return run(raw, func(p ExtractParams) (any, error) { return h.Extract(p.Path, p.Destination, p.Overwrite) })
+	case OpSearch:
+		return run(raw, func(p SearchParams) (any, error) { return h.Search(p.Path, p.Query) })
+	case OpDiskUsage:
+		return run(raw, func(p PathsParams) (any, error) { return h.DiskUsage(p.Paths), nil })
 	}
 
 	return nil, errorf(ReasonInvalid, "unknown operation %q", op)

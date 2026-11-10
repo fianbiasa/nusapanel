@@ -218,6 +218,88 @@ class FileManagerService
     }
 
     /**
+     * Pack files and folders into a new zip or tar.gz archive at
+     * $destination.
+     *
+     * @param  list<string>  $paths
+     * @return array<string, mixed>
+     *
+     * @throws ValidationException
+     */
+    public function compress(User $account, array $paths, string $destination, string $format): array
+    {
+        $entry = $this->call($account, 'fs.compress', [
+            'paths' => $paths,
+            'destination' => $destination,
+            'format' => $format,
+        ], 'name', self::LONG_TIMEOUT);
+
+        $this->audit->record('file.compressed', $account, ['paths' => $paths, 'archive' => $destination], $account);
+
+        return $entry;
+    }
+
+    /**
+     * Unpack an archive into a folder, which is created when needed.
+     *
+     * @return array{destination: string, files: int, folders: int, links: int, skipped: int, refused: int}
+     *
+     * @throws ValidationException
+     */
+    public function extract(User $account, string $path, string $destination, bool $overwrite): array
+    {
+        $result = $this->call($account, 'fs.extract', [
+            'path' => $path,
+            'destination' => $destination,
+            'overwrite' => $overwrite,
+        ], 'target', self::LONG_TIMEOUT);
+
+        $this->audit->record('file.extracted', $account, [
+            'archive' => $path,
+            'destination' => $destination,
+            'overwrite' => $overwrite,
+        ], $account);
+
+        /** @var array{destination: string, files: int, folders: int, links: int, skipped: int, refused: int} */
+        return $result;
+    }
+
+    /**
+     * The files and folders under $path whose name contains $query.
+     *
+     * @return array{hits: list<array{path: string, type: string, size: int, modified: int}>, truncated: bool}
+     *
+     * @throws ValidationException
+     */
+    public function search(User $account, string $path, string $query): array
+    {
+        $result = $this->call($account, 'fs.search', ['path' => $path, 'query' => $query], 'query', self::LONG_TIMEOUT);
+
+        /** @var list<array{path: string, type: string, size: int, modified: int}> $hits */
+        $hits = $result['hits'] ?? [];
+
+        return ['hits' => $hits, 'truncated' => (bool) ($result['truncated'] ?? false)];
+    }
+
+    /**
+     * How much each file or folder holds.
+     *
+     * @param  list<string>  $paths
+     * @return array{usage: list<array{path: string, size: int, files: int, folders: int, truncated: bool}>, failed: list<array{path: string, message: string}>}
+     *
+     * @throws ValidationException
+     */
+    public function diskUsage(User $account, array $paths): array
+    {
+        $result = $this->call($account, 'fs.disk_usage', ['paths' => $paths], 'paths', self::LONG_TIMEOUT);
+
+        /** @var list<array{path: string, size: int, files: int, folders: int, truncated: bool}> $usage */
+        $usage = $result['usage'] ?? [];
+
+        return ['usage' => $usage, 'failed' => $this->outcome(['failed' => $result['failed'] ?? []])['failed']];
+    }
+
+    /**
      * Take one chunk of an upload. Chunks come in order; once the last one
      * is in, the agent stores the file as $path and its entry is returned.
      *

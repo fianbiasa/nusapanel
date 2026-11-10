@@ -109,6 +109,11 @@ const textExtensions = new Set([
     'editorconfig',
 ]);
 
+/** Archives the agent can extract. */
+export function isArchive(name: string): boolean {
+    return /\.(zip|tar|tar\.gz|tgz|tar\.bz2|tbz2|tbz)$/i.test(name);
+}
+
 /** Images the preview can show. */
 export function isImage(name: string): boolean {
     return imageExtensions.has(extension(name));
@@ -197,6 +202,24 @@ export async function sendJson<T>(
             'X-XSRF-TOKEN': xsrfToken(),
         },
         body: JSON.stringify(data),
+    });
+    const body = await response.text();
+
+    if (!response.ok) {
+        throw new Error(failureMessage(response.status, body));
+    }
+
+    return JSON.parse(body) as T;
+}
+
+/** GET JSON from the panel, or throw its message. */
+export async function getJson<T>(url: string): Promise<T> {
+    const response = await fetch(url, {
+        credentials: 'same-origin',
+        headers: {
+            Accept: 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+        },
     });
     const body = await response.text();
 

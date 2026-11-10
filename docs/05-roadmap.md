@@ -73,7 +73,9 @@ Pekerjaan:
 
 - file manager tahap 1 ✅: halaman File Manager untuk menelusuri home, mengunggah (drag & drop, per bagian 8 MB, sampai 10 GB, dengan konfirmasi timpa), download, membuat file/folder, ganti nama, salin, pindah, mengatur izin (centang atau angka), hapus ke Trash lalu pulihkan atau hapus permanen, preview gambar (SVG dalam sandbox), dan editor kode (CodeMirror 6, highlight sesuai jenis file, Ctrl+S, menolak menimpa perubahan yang dibuat orang lain sejak file dibuka); semua dijalankan agent sebagai user Linux akun itu di dalam home-nya.
 
-Berikutnya: file manager tahap 2 (zip/unzip/tar, cari file, ukuran folder). SSL mail menyusul bersama email (P2).
+- file manager tahap 2 ✅: kompres ke ZIP atau TAR.GZ, ekstrak ZIP/TAR/TAR.GZ/TAR.BZ2 ke folder ini atau folder baru (dengan atau tanpa menimpa; entri berbahaya ditolak), cari file berdasarkan nama di folder dan subfoldernya, dan hitung ukuran folder.
+
+Berikutnya: penutup P1 (service monitor + watchdog, pengaturan server, riwayat login, `rayxo rebuild`). SSL mail menyusul bersama email (P2).
 
 - Akun user & paket user, buat/suspend/hapus akun, quota disk & inode.
 - Domain, subdomain, pointer, redirect, www/HTTPS.
