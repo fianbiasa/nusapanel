@@ -131,3 +131,9 @@ git tag v0.2.0 && git push origin v0.2.0
 Workflow menjalankan `installer/build-release.sh`, lalu menerbitkan `setup.sh`, `rayxo-<versi>-linux-{amd64,arm64}.tar.gz`, dan file `.sha256`-nya di [Releases](https://github.com/fianbiasa/rayxo/releases). Server tidak butuh Composer, Node.js, atau Go.
 
 Untuk uji tanpa rilis: jalankan `installer/build-release.sh 0.2.0-dev` di Mac, salin isi `dist/` ke server, lalu `bash setup.sh --package rayxo-0.2.0-dev-linux-amd64.tar.gz`.
+
+## Lisensi
+
+Copyright (C) 2026 Zulfianto
+
+RAYXO adalah perangkat lunak bebas di bawah [GNU Affero General Public License versi 3](LICENSE) (AGPL-3.0). Kamu boleh memakai, menyebarkan, dan mengubahnya. Kalau kamu memodifikasi RAYXO lalu menyediakannya untuk orang lain lewat jaringan, misalnya sebagai panel untuk pelanggan hosting, kode sumber versi modifikasimu juga wajib tersedia untuk mereka.

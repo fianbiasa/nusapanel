@@ -173,6 +173,8 @@ for arch in $ARCHES; do
         "$SRC/installer/files/logrotate.conf" "$stage/config/"
     stamp_setup "$stage/setup.sh"
     printf '%s\n' "$VERSION" >"$stage/VERSION"
+    # AGPL-3.0 asks that the license text travel with every copy.
+    cp "$SRC/LICENSE" "$stage/LICENSE"
 
     make_tarball "$WORK" "$name" "$DIST/$name.tar.gz"
     printf '%s  %s\n' "$(sha256 "$DIST/$name.tar.gz")" "$name.tar.gz" >"$DIST/$name.tar.gz.sha256"
