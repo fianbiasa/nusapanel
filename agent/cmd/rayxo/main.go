@@ -10,6 +10,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
+	"syscall"
 	"time"
 
 	"rayxo/agent/internal/client"
@@ -20,10 +22,20 @@ import (
 const usage = `Usage:
   rayxo [flags] ping
   rayxo [flags] call <method> [params-json]
+  rayxo rebuild
   rayxo version
 
 Flags:
 `
+
+// How "rayxo rebuild" reaches the panel: its artisan, run as the panel's
+// own user, as the installer does.
+const (
+	runuserPath = "/usr/sbin/runuser"
+	panelUser   = "rayxo"
+	phpPath     = "/usr/bin/php8.4"
+	panelDir    = "/usr/local/rayxo/current/panel"
+)
 
 func main() {
 	os.Exit(run())
@@ -59,6 +71,14 @@ func run() int {
 		fmt.Println(version.Version)
 
 		return 0
+	case "rebuild":
+		if len(args) != 1 {
+			flags.Usage()
+
+			return 2
+		}
+
+		return rebuild()
 	case "ping":
 		method = "agent.ping"
 	case "call":
@@ -108,6 +128,41 @@ func run() int {
 	}
 
 	fmt.Println(pretty.String())
+
+	return 0
+}
+
+// rebuild writes the server's configuration again from the panel's
+// database: the panel's rayxo:rebuild queues every website, disk quota,
+// crontab and FTP folder, and the queue worker and the agent apply them.
+// Like DirectAdmin's rewrite_confs, for configs that were deleted or edited
+// by hand.
+func rebuild() int {
+	if os.Geteuid() != 0 {
+		fmt.Fprintln(os.Stderr, "rayxo rebuild must run as root")
+
+		return 1
+	}
+
+	cmd := exec.Command(runuserPath, "-u", panelUser, "--", phpPath, "artisan", "rayxo:rebuild", "--no-interaction")
+	cmd.Dir = panelDir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	// As the installer: files the panel writes (its log) stay away from
+	// other local users.
+	syscall.Umask(0o027)
+
+	if err := cmd.Run(); err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			return exitErr.ExitCode()
+		}
+
+		fmt.Fprintln(os.Stderr, err)
+
+		return 1
+	}
 
 	return 0
 }

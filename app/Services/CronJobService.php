@@ -122,9 +122,32 @@ class CronJobService
     }
 
     /**
+     * Queue the crontab of every active or suspended hosting account again,
+     * from its jobs in the panel (an account without jobs gets none). Used
+     * by rayxo:rebuild.
+     *
+     * @return int The number of accounts queued.
+     */
+    public function reapplyAll(?User $actor = null): int
+    {
+        $queued = 0;
+
+        User::query()
+            ->where('role', Role::User)
+            ->whereIn('status', [AccountStatus::Active, AccountStatus::Suspended])
+            ->orderBy('id')
+            ->each(function (User $account) use ($actor, &$queued): void {
+                $this->apply($account, $actor);
+                $queued++;
+            });
+
+        return $queued;
+    }
+
+    /**
      * Queue the account's enabled jobs as its crontab.
      */
-    private function apply(User $account, User $actor): void
+    private function apply(User $account, ?User $actor): void
     {
         $jobs = $account->cronJobs()
             ->where('enabled', true)

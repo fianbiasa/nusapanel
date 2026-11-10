@@ -1,5 +1,12 @@
 import { Head, router, usePoll } from '@inertiajs/react';
-import { Play, RefreshCw, RotateCw, ShieldAlert, Square } from 'lucide-react';
+import {
+    FileCog,
+    Play,
+    RefreshCw,
+    RotateCw,
+    ShieldAlert,
+    Square,
+} from 'lucide-react';
 import { useState } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { Panel, tableStyles } from '@/components/panel';
@@ -17,7 +24,7 @@ import {
 } from '@/components/ui/dialog';
 import { Spinner } from '@/components/ui/spinner';
 import { formatBytes, formatDateTime, formatRelative } from '@/lib/format';
-import { act } from '@/routes/admin/services';
+import { act, rebuild } from '@/routes/admin/services';
 
 type ServiceAction = 'start' | 'stop' | 'restart' | 'reload';
 
@@ -113,8 +120,23 @@ export default function ServicesIndex({ report, error }: Props) {
     const [pending, setPending] = useState<Pending | null>(null);
     const [processing, setProcessing] = useState(false);
     const [actionError, setActionError] = useState<string | null>(null);
+    const [confirmingRebuild, setConfirmingRebuild] = useState(false);
+    const [rebuilding, setRebuilding] = useState(false);
 
     usePoll(10_000, { only: ['report', 'error'] });
+
+    const runRebuild = () => {
+        setRebuilding(true);
+        router.post(
+            rebuild().url,
+            {},
+            {
+                preserveScroll: true,
+                onSuccess: () => setConfirmingRebuild(false),
+                onFinish: () => setRebuilding(false),
+            },
+        );
+    };
 
     const run = () => {
         if (!pending) {
@@ -143,6 +165,15 @@ export default function ServicesIndex({ report, error }: Props) {
             <PageHeader
                 title="Services"
                 description="Service sistem yang dipakai server ini. Watchdog agent menyalakan lagi otomatis service yang mati, tiap menit."
+                actions={
+                    <Button
+                        variant="secondary"
+                        onClick={() => setConfirmingRebuild(true)}
+                    >
+                        <FileCog />
+                        Tulis ulang konfigurasi
+                    </Button>
+                }
             />
 
             {error !== null && (
@@ -324,6 +355,37 @@ export default function ServicesIndex({ report, error }: Props) {
                             </DialogFooter>
                         </>
                     )}
+                </DialogContent>
+            </Dialog>
+
+            <Dialog
+                open={confirmingRebuild}
+                onOpenChange={setConfirmingRebuild}
+            >
+                <DialogContent className="rounded-2xl">
+                    <DialogHeader>
+                        <DialogTitle>
+                            Tulis ulang konfigurasi server?
+                        </DialogTitle>
+                        <DialogDescription>
+                            Konfigurasi Nginx, Apache dan PHP setiap website,
+                            kuota disk, crontab dan folder FTP setiap akun
+                            ditulis ulang dari database panel. Pakai ini kalau
+                            ada file konfigurasi yang terhapus atau diubah
+                            manual. Website tetap jalan selama prosesnya.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter className="gap-2">
+                        <DialogClose asChild>
+                            <Button type="button" variant="secondary">
+                                Batal
+                            </Button>
+                        </DialogClose>
+                        <Button disabled={rebuilding} onClick={runRebuild}>
+                            {rebuilding && <Spinner />}
+                            Tulis ulang
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </>

@@ -6,8 +6,11 @@ use App\Agent\AgentClient;
 use App\Agent\AgentException;
 use App\Agent\FakeAgentClient;
 use App\Models\AuditLog;
+use App\Models\Domain;
+use App\Models\Task;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Inertia\Testing\AssertableInertia as Assert;
 use Mockery\MockInterface;
 use Tests\TestCase;
@@ -94,5 +97,34 @@ class ServiceManagementTest extends TestCase
         $this->actingAs($admin)
             ->post('/admin/services/..%2Fetc%2Fpasswd/restart')
             ->assertNotFound();
+    }
+
+    public function test_hosting_accounts_cannot_rebuild_the_server()
+    {
+        Queue::fake();
+
+        $this->actingAs(User::factory()->create())
+            ->post(route('admin.services.rebuild'))
+            ->assertForbidden();
+
+        $this->assertDatabaseCount('tasks', 0);
+    }
+
+    public function test_an_admin_can_rebuild_the_server_and_it_is_audited()
+    {
+        Queue::fake();
+        $admin = User::factory()->admin()->create();
+        Domain::factory()->for(User::factory()->create(), 'account')->create();
+
+        $this->actingAs($admin)
+            ->post(route('admin.services.rebuild'))
+            ->assertSessionHasNoErrors()
+            ->assertInertiaFlash('toast.message', 'Rewriting 1 websites, 1 quotas, 1 crontabs and 0 FTP folders. Follow them under Tasks.');
+
+        $this->assertSame(3, Task::query()->where('actor_id', $admin->id)->count());
+        $this->assertSame(
+            ['websites' => 1, 'quotas' => 1, 'crontabs' => 1, 'ftp_folders' => 0],
+            AuditLog::query()->where('action', 'server.rebuilt')->where('actor_id', $admin->id)->sole()->changes,
+        );
     }
 }

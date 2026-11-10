@@ -96,6 +96,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('tasks', [TaskController::class, 'index'])->name('tasks.index');
         Route::get('audit-logs', [AuditLogController::class, 'index'])->name('audit-logs.index');
         Route::get('services', [ServiceController::class, 'index'])->name('services.index');
+        Route::post('services/rebuild', [ServiceController::class, 'rebuild'])
+            ->middleware('throttle:6,1')
+            ->name('services.rebuild');
         Route::post('services/{unit}/{action}', [ServiceController::class, 'act'])
             ->where('unit', '[a-z0-9][a-z0-9@._-]{0,99}\.service')
             ->whereIn('action', ['start', 'stop', 'restart', 'reload'])

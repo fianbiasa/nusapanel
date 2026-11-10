@@ -223,5 +223,6 @@
     ":service is being started.": ":service sedang dinyalakan.",
     ":service is stopped and no longer starts at boot.": ":service dihentikan dan tidak lagi menyala otomatis saat boot.",
     ":service is reloading its configuration.": ":service sedang memuat ulang konfigurasinya.",
-    ":service is being restarted.": ":service sedang di-restart."
+    ":service is being restarted.": ":service sedang di-restart.",
+    "Rewriting :websites websites, :quotas quotas, :crontabs crontabs and :ftp FTP folders. Follow them under Tasks.": "Menulis ulang :websites website, :quotas kuota, :crontabs crontab dan :ftp folder FTP. Pantau di menu Tasks."
 }

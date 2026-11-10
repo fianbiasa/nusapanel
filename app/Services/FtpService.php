@@ -152,7 +152,29 @@ class FtpService
             ->all());
     }
 
-    private function prepareFolder(FtpAccount $ftpAccount, User $account, User $actor): void
+    /**
+     * Queue the folder of every FTP login of an active or suspended account
+     * again. Used by rayxo:rebuild.
+     *
+     * @return int The number of logins queued.
+     */
+    public function reapplyAll(?User $actor = null): int
+    {
+        $queued = 0;
+
+        FtpAccount::query()
+            ->with('account')
+            ->whereHas('account', fn ($query) => $query->whereIn('status', [AccountStatus::Active, AccountStatus::Suspended]))
+            ->orderBy('id')
+            ->each(function (FtpAccount $ftpAccount) use ($actor, &$queued): void {
+                $this->prepareFolder($ftpAccount, $ftpAccount->account, $actor);
+                $queued++;
+            });
+
+        return $queued;
+    }
+
+    private function prepareFolder(FtpAccount $ftpAccount, User $account, ?User $actor): void
     {
         $this->tasks->dispatch('ftp.ensure_dir', [
             'username' => $account->username,

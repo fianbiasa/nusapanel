@@ -6,7 +6,9 @@ use App\Agent\AgentClient;
 use App\Agent\AgentException;
 use App\Http\Controllers\Controller;
 use App\Services\AuditLogger;
+use App\Services\RebuildService;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -78,6 +80,26 @@ class ServiceController extends Controller
             'reload' => __(':service is reloading its configuration.', ['service' => $unit]),
             default => __(':service is being restarted.', ['service' => $unit]),
         }]);
+
+        return back();
+    }
+
+    /**
+     * Write every website, quota, crontab and FTP folder again from the
+     * database, as "rayxo rebuild" does on the server.
+     */
+    public function rebuild(Request $request, RebuildService $rebuild): RedirectResponse
+    {
+        $queued = $rebuild->queueAll($request->user());
+
+        $this->audit->record('server.rebuilt', null, $queued);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Rewriting :websites websites, :quotas quotas, :crontabs crontabs and :ftp FTP folders. Follow them under Tasks.', [
+            'websites' => $queued['websites'],
+            'quotas' => $queued['quotas'],
+            'crontabs' => $queued['crontabs'],
+            'ftp' => $queued['ftp_folders'],
+        ])]);
 
         return back();
     }

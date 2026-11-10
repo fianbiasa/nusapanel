@@ -55,6 +55,7 @@ export const auditActionLabels: Record<string, string> = {
     'service.stop': 'Service dihentikan',
     'service.restart': 'Service di-restart',
     'service.reload': 'Service di-reload',
+    'server.rebuilt': 'Konfigurasi server ditulis ulang',
     'file.extracted': 'Arsip diekstrak',
     'cron_job.created': 'Cron job dibuat',
     'cron_job.updated': 'Cron job diubah',

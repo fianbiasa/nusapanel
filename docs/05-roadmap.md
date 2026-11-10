@@ -79,7 +79,9 @@ Pekerjaan:
 
 - riwayat login ✅: Settings > Security menampilkan 20 login terakhir akun itu, berhasil maupun gagal, dengan waktu, IP, browser dan sistem operasinya (dari audit log yang sudah mencatat setiap login).
 
-Berikutnya: penutup P1 (pengaturan server, `rayxo rebuild`). SSL mail menyusul bersama email (P2).
+- `rayxo rebuild` ✅: menulis ulang semua konfigurasi dari database panel (Nginx, Apache dan pool PHP setiap website, kuota disk dan crontab setiap akun, folder setiap login FTP), lewat `rayxo rebuild` di server, `php artisan rayxo:rebuild`, atau tombol "Tulis ulang konfigurasi" di halaman Services; aman diulang karena setiap tugas menulis keadaan lengkapnya.
+
+Berikutnya: penutup P1 (pengaturan server). SSL mail menyusul bersama email (P2).
 
 - Akun user & paket user, buat/suspend/hapus akun, quota disk & inode.
 - Domain, subdomain, pointer, redirect, www/HTTPS.
