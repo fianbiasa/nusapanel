@@ -107,6 +107,18 @@ class ServerSettingsService
     }
 
     /**
+     * Have the server take a new hostname: the agent runs setup.sh again in
+     * the background, which first checks the name's A record and PTR and
+     * changes nothing when they are wrong.
+     */
+    public function changeHostname(string $hostname, User $actor): void
+    {
+        $this->agent->call('system.change_hostname', ['hostname' => $hostname], 30);
+
+        $this->audit->record('server.hostname_change_started', null, ['hostname' => $hostname], $actor);
+    }
+
+    /**
      * Queue getting the hostname's Let's Encrypt certificate again for the
      * panel, phpMyAdmin and FTP.
      */

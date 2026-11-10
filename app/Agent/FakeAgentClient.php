@@ -30,6 +30,7 @@ final class FakeAgentClient implements AgentClient
             'system.settings' => $this->serverSettings(),
             'system.set_timezone' => ['timezone' => $params['timezone'] ?? 'UTC', 'simulated' => true],
             'ssl.issue_hostname' => $this->serverSettings()['certificate'],
+            'system.change_hostname' => ['hostname' => $params['hostname'] ?? '', 'simulated' => true],
             'ssl.issue' => $this->issuedCertificate((string) ($params['domain'] ?? '')),
             'account.set_quota' => ['applied' => true, 'simulated' => true],
             'quota.report' => $this->quotaReport(),
@@ -316,6 +317,7 @@ final class FakeAgentClient implements AgentClient
                 'expires_at' => now()->addDays(64)->startOfSecond()->toIso8601ZuluString(),
                 'lets_encrypt' => true,
             ],
+            'reconfigure' => null,
             'simulated' => true,
         ];
     }

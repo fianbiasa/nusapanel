@@ -95,7 +95,9 @@ Pekerjaan:
 
 - pengaturan server tahap 1 ✅: halaman admin Pengaturan Server menampilkan hostname dan sertifikat panel (Let's Encrypt atau self-signed, masa berlakunya) dengan tombol terbitkan ulang SSL hostname (panel, phpMyAdmin dan FTP ikut memakainya), mengganti zona waktu server (cron ikut), dan mengatur batas upload PHP: ukuran maksimum yang boleh dipilih website dan ukuran bawaan untuk website yang belum memilih sendiri; menyimpan batas upload menerapkan ulang semua website. Bahasa default menyusul bersama UI dua bahasa.
 
-Sisa P1: pengaturan server tahap 2 (ganti hostname dari panel) dan tahap 3 (ganti port panel dengan jendela konfirmasi). SSL mail menyusul bersama email (P2).
+- pengaturan server tahap 2 ✅: hostname bisa diganti dari Pengaturan Server. Agent menjalankan ulang `setup.sh --reconfigure --hostname <baru>` (rilis yang terpasang, tanpa unduh paket atau apt) di unit systemd sendiri; setup.sh mengecek A record & PTR dulu dan tidak mengubah apa pun kalau belum benar, lalu mengganti hostname sistem, `/etc/hosts`, cloud-init, SSL, Postfix, DKIM, phpMyAdmin dan alamat panel, dan menghapus sertifikat hostname lama; halaman menampilkan proses, hasil dan log-nya.
+
+Sisa P1: pengaturan server tahap 3 (ganti port panel dengan jendela konfirmasi). SSL mail menyusul bersama email (P2).
 
 **Cakupan:**
 

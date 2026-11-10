@@ -231,5 +231,9 @@
     "The hostname certificate is being requested. This takes up to a minute.": "Sertifikat hostname sedang diminta. Ini butuh waktu sampai semenit.",
     "Nothing changed.": "Tidak ada yang berubah.",
     "Upload sizes saved; :count websites are being updated.": "Ukuran upload disimpan; :count website sedang diperbarui.",
-    "The default size may not be larger than the limit.": "Ukuran bawaan tidak boleh lebih besar dari batasnya."
+    "The default size may not be larger than the limit.": "Ukuran bawaan tidak boleh lebih besar dari batasnya.",
+    "The hostname must be a fully qualified name, such as server1.example.com.": "Hostname harus berupa nama lengkap, misalnya server1.domainmu.com.",
+    "The hostname is already being changed.": "Hostname sedang diganti.",
+    "The hostname cannot be changed: :detail": "Hostname tidak bisa diganti: :detail",
+    "Changing the hostname to :hostname. This takes a few minutes; follow it on this page.": "Mengganti hostname ke :hostname. Ini butuh beberapa menit; pantau di halaman ini."
 }

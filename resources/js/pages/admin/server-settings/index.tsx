@@ -1,5 +1,12 @@
 import { Form, Head, router, usePoll } from '@inertiajs/react';
-import { Clock, ShieldAlert, ShieldCheck, Upload } from 'lucide-react';
+import {
+    CheckCircle2,
+    Clock,
+    PencilLine,
+    ShieldAlert,
+    ShieldCheck,
+    Upload,
+} from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { PageHeader } from '@/components/page-header';
@@ -28,9 +35,11 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
 import { Spinner } from '@/components/ui/spinner';
 import { formatDateTime, formatRelative } from '@/lib/format';
 import {
+    hostname as updateHostname,
     hostnameCertificate,
     phpUploads,
     timezone as updateTimezone,
@@ -46,11 +55,22 @@ type HostnameCertificate = {
 
 type CertificateRequest = { pending: boolean; error: string | null };
 
+/** The latest hostname change: setup.sh running again in the background. */
+type Reconfigure = {
+    hostname: string;
+    started_at: string;
+    running: boolean;
+    exit_code: number | null;
+    error: string;
+    log: string[];
+} | null;
+
 type Props = {
     server: {
         hostname: string;
         timezone: string;
         certificate: HostnameCertificate | null;
+        reconfigure: Reconfigure;
     } | null;
     error: string | null;
     certificate_request: CertificateRequest;
@@ -71,14 +91,17 @@ export default function ServerSettings({
         { autoStart: false },
     );
 
-    // Follow a certificate request until it finishes.
+    const busy =
+        certificate_request.pending || server?.reconfigure?.running === true;
+
+    // Follow a certificate request or a hostname change until it finishes.
     useEffect(() => {
-        if (certificate_request.pending) {
+        if (busy) {
             start();
         } else {
             stop();
         }
-    }, [certificate_request.pending, start, stop]);
+    }, [busy, start, stop]);
 
     return (
         <>
@@ -101,6 +124,13 @@ export default function ServerSettings({
                     hostname={server.hostname}
                     certificate={server.certificate}
                     request={certificate_request}
+                />
+            )}
+
+            {server !== null && (
+                <HostnameChangePanel
+                    current={server.hostname}
+                    change={server.reconfigure}
                 />
             )}
 
@@ -240,6 +270,154 @@ function HostnamePanel({
                             Terbitkan ulang
                         </Button>
                     </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        </Panel>
+    );
+}
+
+function HostnameChangePanel({
+    current,
+    change,
+}: {
+    current: string;
+    change: Reconfigure;
+}) {
+    const [open, setOpen] = useState(false);
+    const port = typeof window === 'undefined' ? '' : window.location.port;
+    const panelUrl = (name: string) =>
+        `https://${name}${port ? `:${port}` : ''}`;
+
+    return (
+        <Panel
+            title="Ganti hostname"
+            description="Semua yang memakai hostname ikut diganti: SSL panel, phpMyAdmin, FTP, email panel (Postfix & DKIM) dan alamat panel."
+            action={
+                <Button
+                    variant="secondary"
+                    disabled={change?.running === true}
+                    onClick={() => setOpen(true)}
+                >
+                    <PencilLine />
+                    Ganti hostname
+                </Button>
+            }
+        >
+            {change === null ? (
+                <p className="text-sm text-muted-foreground">
+                    Syaratnya sama seperti saat instalasi: A record hostname
+                    baru mengarah ke IP server ini, dan PTR (reverse DNS) IP
+                    server mengarah ke hostname baru, diatur lewat provider VPS.
+                    Kalau belum benar, tidak ada yang diubah.
+                </p>
+            ) : change.running ? (
+                <Alert>
+                    <Spinner />
+                    <AlertDescription>
+                        Mengganti hostname ke{' '}
+                        <span className="font-mono">{change.hostname}</span>…
+                        Panel sempat tidak menjawab sebentar saat layanannya
+                        dijalankan ulang; halaman ini diperbarui sendiri.
+                    </AlertDescription>
+                </Alert>
+            ) : change.exit_code === 0 ? (
+                <Alert>
+                    <CheckCircle2 />
+                    <AlertDescription>
+                        Hostname sekarang{' '}
+                        <span className="font-mono">{change.hostname}</span>.
+                        Buka panel di{' '}
+                        <a
+                            className="font-medium underline"
+                            href={panelUrl(change.hostname)}
+                        >
+                            {panelUrl(change.hostname)}
+                        </a>
+                        , lalu perbarui rekaman SPF, DKIM dan DMARC di DNS
+                        sesuai /etc/rayxo/dns-records.txt.
+                    </AlertDescription>
+                </Alert>
+            ) : (
+                <Alert variant="destructive">
+                    <ShieldAlert />
+                    <AlertDescription className="break-words">
+                        Hostname tidak diganti ke{' '}
+                        <span className="font-mono">{change.hostname}</span>:{' '}
+                        {change.error ||
+                            'proses berhenti sebelum selesai; lihat log di bawah.'}
+                    </AlertDescription>
+                </Alert>
+            )}
+
+            {change !== null && change.log.length > 0 && (
+                <details className="mt-4 text-sm" open={change.running}>
+                    <summary className="cursor-pointer text-muted-foreground">
+                        Log proses
+                    </summary>
+                    <pre className="mt-2 max-h-72 overflow-auto rounded-xl bg-muted p-3 text-xs leading-relaxed whitespace-pre-wrap">
+                        {change.log.join('\n')}
+                    </pre>
+                </details>
+            )}
+
+            <Dialog open={open} onOpenChange={setOpen}>
+                <DialogContent className="rounded-2xl">
+                    <Form
+                        {...updateHostname.form()}
+                        options={{ preserveScroll: true }}
+                        onSuccess={() => setOpen(false)}
+                        className="grid gap-5"
+                    >
+                        {({ processing, errors }) => (
+                            <>
+                                <DialogHeader>
+                                    <DialogTitle>
+                                        Ganti hostname server
+                                    </DialogTitle>
+                                    <DialogDescription>
+                                        Sekarang{' '}
+                                        <span className="font-mono">
+                                            {current}
+                                        </span>
+                                        . Sebelum lanjut, arahkan A record
+                                        hostname baru ke server ini dan minta
+                                        provider VPS mengatur PTR ke hostname
+                                        baru. Prosesnya beberapa menit; setelah
+                                        selesai panel dibuka lewat hostname
+                                        baru.
+                                    </DialogDescription>
+                                </DialogHeader>
+                                <Field
+                                    id="hostname"
+                                    label="Hostname baru"
+                                    error={errors.hostname}
+                                >
+                                    <Input
+                                        id="hostname"
+                                        name="hostname"
+                                        placeholder="server2.domainmu.com"
+                                        autoComplete="off"
+                                        className="rounded-xl font-mono"
+                                        required
+                                    />
+                                </Field>
+                                <DialogFooter className="gap-2">
+                                    <DialogClose asChild>
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                        >
+                                            Batal
+                                        </Button>
+                                    </DialogClose>
+                                    <Button type="submit" disabled={processing}>
+                                        {processing && <Spinner />}
+                                        Ganti hostname
+                                    </Button>
+                                </DialogFooter>
+                            </>
+                        )}
+                    </Form>
                 </DialogContent>
             </Dialog>
         </Panel>

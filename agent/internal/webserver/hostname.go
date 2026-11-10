@@ -58,6 +58,12 @@ func (m *Manager) ServerHostname() (string, error) {
 	return hostname, nil
 }
 
+// HasWebsite reports whether an account has a website for domain, which
+// the server's hostname may then not become.
+func (m *Manager) HasWebsite(domain string) (bool, error) {
+	return m.hasVhost(domain)
+}
+
 // HostnameCertificateStatus reads the certificate the panel serves.
 func (m *Manager) HostnameCertificateStatus() (HostnameCertificate, error) {
 	hostname, err := m.ServerHostname()

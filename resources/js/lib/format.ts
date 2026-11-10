@@ -59,6 +59,7 @@ export const auditActionLabels: Record<string, string> = {
     'server.timezone_changed': 'Zona waktu server diubah',
     'server.php_uploads_changed': 'Batas upload PHP diubah',
     'server.hostname_ssl_requested': 'SSL hostname diminta',
+    'server.hostname_change_started': 'Penggantian hostname dimulai',
     'file.extracted': 'Arsip diekstrak',
     'cron_job.created': 'Cron job dibuat',
     'cron_job.updated': 'Cron job diubah',

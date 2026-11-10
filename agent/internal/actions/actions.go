@@ -10,6 +10,7 @@ import (
 	"rayxo/agent/internal/database"
 	"rayxo/agent/internal/files"
 	"rayxo/agent/internal/quota"
+	"rayxo/agent/internal/reconfigure"
 	"rayxo/agent/internal/rpc"
 	"rayxo/agent/internal/services"
 	"rayxo/agent/internal/sysinfo"
@@ -46,7 +47,7 @@ func Register(registry *rpc.Registry, config Config) {
 		registry.Register(name, method)
 	}
 
-	for name, method := range systemMethods(web, clock.New(clock.DefaultConfig())) {
+	for name, method := range systemMethods(web, clock.New(clock.DefaultConfig()), reconfigure.New(reconfigure.DefaultConfig())) {
 		registry.Register(name, method)
 	}
 

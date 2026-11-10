@@ -11,17 +11,40 @@ import (
 	"time"
 
 	"rayxo/agent/internal/clock"
+	"rayxo/agent/internal/reconfigure"
 	"rayxo/agent/internal/rpc"
 	"rayxo/agent/internal/webserver"
 )
 
-// fakeHostname plays the server's certificate and clock.
+// fakeHostname plays the server's certificate, clock and setup.sh.
 type fakeHostname struct {
 	issueErr  error
 	statusErr error
 	timezone  string
 	setErr    error
 	issued    int
+	websites  []string
+	startErr  error
+	started   []string
+	state     *reconfigure.State
+}
+
+func (f *fakeHostname) HasWebsite(domain string) (bool, error) {
+	return slices.Contains(f.websites, domain), nil
+}
+
+func (f *fakeHostname) Start(_ context.Context, hostname string) error {
+	if f.startErr != nil {
+		return f.startErr
+	}
+
+	f.started = append(f.started, hostname)
+
+	return nil
+}
+
+func (f *fakeHostname) Status(context.Context) (*reconfigure.State, error) {
+	return f.state, nil
 }
 
 func (f *fakeHostname) ServerHostname() (string, error) {
@@ -62,7 +85,7 @@ func callSystem(t *testing.T, fake *fakeHostname, method string, params any) (ma
 
 	raw, _ := json.Marshal(params)
 
-	result, err := systemMethods(fake, fake)[method].Handler(context.Background(), raw)
+	result, err := systemMethods(fake, fake, fake)[method].Handler(context.Background(), raw)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +104,7 @@ func TestSystemMethodsAreRegistered(t *testing.T) {
 	registry := rpc.NewRegistry()
 	Register(registry, Config{})
 
-	for _, name := range []string{"system.settings", "system.set_timezone", "ssl.issue_hostname"} {
+	for _, name := range []string{"system.settings", "system.set_timezone", "ssl.issue_hostname", "system.change_hostname"} {
 		if !slices.Contains(registry.Names(), name) {
 			t.Errorf("%s is not registered", name)
 		}
@@ -150,5 +173,59 @@ func TestIssueHostnameCertificateExplainsFailures(t *testing.T) {
 	result, err := callSystem(t, &fakeHostname{}, "ssl.issue_hostname", map[string]any{})
 	if err != nil || result["lets_encrypt"] != true {
 		t.Fatalf("result = %v, %v", result, err)
+	}
+}
+
+func TestChangeHostnameStartsSetupForAFreeName(t *testing.T) {
+	fake := &fakeHostname{websites: []string{"shop.example.com"}}
+
+	for _, tc := range []struct {
+		hostname string
+		code     int
+		want     string
+	}{
+		{"not a hostname", rpc.CodeInvalidParams, "invalid params"},
+		{"Server2.Example.net", rpc.CodeInvalidParams, "invalid params"},
+		{"server1.example.net", rpc.CodeActionFailed, "already the hostname"},
+		{"shop.example.com", rpc.CodeActionFailed, "is the domain of a website"},
+	} {
+		_, err := callSystem(t, fake, "system.change_hostname", map[string]any{"hostname": tc.hostname})
+
+		var rpcErr *rpc.Error
+		if !errors.As(err, &rpcErr) || rpcErr.Code != tc.code || !strings.Contains(rpcErr.Message, tc.want) {
+			t.Errorf("%q: err = %v, want code %d containing %q", tc.hostname, err, tc.code, tc.want)
+		}
+	}
+
+	if len(fake.started) != 0 {
+		t.Fatalf("setup.sh started for a refused name: %q", fake.started)
+	}
+
+	result, err := callSystem(t, fake, "system.change_hostname", map[string]any{"hostname": "server2.example.net"})
+	if err != nil || result["hostname"] != "server2.example.net" || !slices.Equal(fake.started, []string{"server2.example.net"}) {
+		t.Fatalf("result = %v, %v; started %q", result, err, fake.started)
+	}
+
+	fake.startErr = reconfigure.ErrRunning
+	_, err = callSystem(t, fake, "system.change_hostname", map[string]any{"hostname": "server3.example.net"})
+
+	var rpcErr *rpc.Error
+	if !errors.As(err, &rpcErr) || rpcErr.Data == nil || rpcErr.Data.(map[string]string)["reason"] != "busy" {
+		t.Fatalf("err = %v, want reason busy", err)
+	}
+}
+
+func TestSystemSettingsReportTheLatestHostnameChange(t *testing.T) {
+	code := 1
+	fake := &fakeHostname{timezone: "UTC", state: &reconfigure.State{Hostname: "server2.example.net", ExitCode: &code, Error: "A record belum ada", Log: []string{"GAGAL: A record belum ada"}}}
+
+	settings, err := callSystem(t, fake, "system.settings", map[string]any{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	change, _ := settings["reconfigure"].(map[string]any)
+	if change["hostname"] != "server2.example.net" || change["exit_code"] != float64(1) || change["error"] != "A record belum ada" {
+		t.Fatalf("reconfigure = %v", settings["reconfigure"])
 	}
 }

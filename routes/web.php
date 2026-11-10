@@ -98,6 +98,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('audit-logs', [AuditLogController::class, 'index'])->name('audit-logs.index');
         Route::get('services', [ServiceController::class, 'index'])->name('services.index');
         Route::get('server-settings', [ServerSettingController::class, 'index'])->name('server-settings.index');
+        Route::put('server-settings/hostname', [ServerSettingController::class, 'updateHostname'])
+            ->middleware('throttle:5,1')
+            ->name('server-settings.hostname');
         Route::put('server-settings/timezone', [ServerSettingController::class, 'updateTimezone'])
             ->middleware('throttle:10,1')
             ->name('server-settings.timezone');

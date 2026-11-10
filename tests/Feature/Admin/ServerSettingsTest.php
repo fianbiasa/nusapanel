@@ -34,6 +34,7 @@ class ServerSettingsTest extends TestCase
         $account = User::factory()->create();
 
         $this->actingAs($account)->get(route('admin.server-settings.index'))->assertForbidden();
+        $this->actingAs($account)->put(route('admin.server-settings.hostname'), ['hostname' => 'server2.example.com'])->assertForbidden();
         $this->actingAs($account)->put(route('admin.server-settings.timezone'), ['timezone' => 'UTC'])->assertForbidden();
         $this->actingAs($account)->post(route('admin.server-settings.hostname-certificate'))->assertForbidden();
         $this->actingAs($account)->put(route('admin.server-settings.php-uploads'), ['limit' => '64M', 'default' => '8M'])->assertForbidden();
@@ -71,6 +72,53 @@ class ServerSettingsTest extends TestCase
                 ->where('server', null)
                 ->where('error', 'The agent did not answer. Check that rayxod is running: systemctl status rayxod')
                 ->where('php_uploads.limit', '1024M'));
+    }
+
+    public function test_changing_the_hostname_hands_it_to_the_agent_and_is_audited()
+    {
+        $agent = $this->app->instance(AgentClient::class, new FakeAgentClient);
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($admin)
+            ->put(route('admin.server-settings.hostname'), ['hostname' => ' Server2.Example.COM. '])
+            ->assertSessionHasNoErrors()
+            ->assertInertiaFlash('toast.message', 'Changing the hostname to server2.example.com. This takes a few minutes; follow it on this page.');
+
+        $this->assertSame([['method' => 'system.change_hostname', 'params' => ['hostname' => 'server2.example.com']]], $agent->calls());
+        $this->assertDatabaseHas(AuditLog::class, ['action' => 'server.hostname_change_started', 'actor_id' => $admin->id]);
+    }
+
+    public function test_a_hostname_that_is_not_a_full_name_never_reaches_the_agent()
+    {
+        $this->mock(AgentClient::class, fn (MockInterface $mock) => $mock->shouldNotReceive('call'));
+        $admin = User::factory()->admin()->create();
+
+        foreach (['server2', 'server 2.example.com', '-bad.example.com', 'example.123'] as $hostname) {
+            $this->actingAs($admin)
+                ->put(route('admin.server-settings.hostname'), ['hostname' => $hostname])
+                ->assertSessionHasErrors(['hostname' => 'The hostname must be a fully qualified name, such as server1.example.com.']);
+        }
+    }
+
+    public function test_what_the_agent_refuses_about_a_hostname_is_explained()
+    {
+        $this->mock(AgentClient::class, fn (MockInterface $mock) => $mock
+            ->shouldReceive('call')->twice()
+            ->andThrowExceptions([
+                new AgentException('the hostname is already being changed', -32000, reason: 'busy'),
+                new AgentException('shop.example.com is the domain of a website; choose a hostname no account uses', -32000),
+            ]));
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($admin)
+            ->put(route('admin.server-settings.hostname'), ['hostname' => 'server2.example.com'])
+            ->assertSessionHasErrors(['hostname' => 'The hostname is already being changed.']);
+
+        $this->actingAs($admin)
+            ->put(route('admin.server-settings.hostname'), ['hostname' => 'shop.example.com'])
+            ->assertSessionHasErrors(['hostname' => 'The hostname cannot be changed: shop.example.com is the domain of a website; choose a hostname no account uses']);
+
+        $this->assertDatabaseMissing(AuditLog::class, ['action' => 'server.hostname_change_started']);
     }
 
     public function test_changing_the_timezone_asks_the_agent_and_is_audited()

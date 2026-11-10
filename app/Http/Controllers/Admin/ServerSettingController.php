@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Agent\AgentException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\UpdatePhpUploadLimitsRequest;
+use App\Http\Requests\Admin\UpdateServerHostnameRequest;
 use App\Http\Requests\Admin\UpdateServerTimezoneRequest;
 use App\Services\DomainService;
 use App\Services\ServerSettingsService;
@@ -17,9 +18,9 @@ use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * The server's own settings: its hostname and the certificate the panel,
- * phpMyAdmin and FTP serve, its timezone, and the upload sizes websites
- * may use.
+ * The server's own settings: its hostname (which can be changed) and the
+ * certificate the panel, phpMyAdmin and FTP serve, its timezone, and the
+ * upload sizes websites may use.
  */
 class ServerSettingController extends Controller
 {
@@ -71,6 +72,32 @@ class ServerSettingController extends Controller
         }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('The server now runs on :timezone time.', ['timezone' => $timezone])]);
+
+        return back();
+    }
+
+    /**
+     * Give the server a new hostname, in the background.
+     *
+     * @throws ValidationException
+     */
+    public function updateHostname(UpdateServerHostnameRequest $request): RedirectResponse
+    {
+        $hostname = $request->string('hostname')->toString();
+
+        try {
+            $this->settings->changeHostname($hostname, $request->user());
+        } catch (AgentException $exception) {
+            if ($exception->reason === null) {
+                report($exception);
+            }
+
+            throw ValidationException::withMessages(['hostname' => $exception->reason === 'busy'
+                ? __('The hostname is already being changed.')
+                : __('The hostname cannot be changed: :detail', ['detail' => $exception->getMessage()])]);
+        }
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Changing the hostname to :hostname. This takes a few minutes; follow it on this page.', ['hostname' => $hostname])]);
 
         return back();
     }

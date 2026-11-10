@@ -82,6 +82,7 @@ public_ip_given=0
 skip_dns_check=0
 requested_version=""
 requested_php_versions=""
+reconfigure=0
 
 # Filled in while installing.
 arch=""
@@ -92,6 +93,7 @@ version=""
 db_password=""
 admin_password=""
 stale_release=""
+previous_hostname=""
 ssl_status=""
 dkim_public_key=""
 dns_report_lines=()
@@ -145,6 +147,9 @@ Lainnya:
   --php-versions LIST   versi PHP untuk website, misalnya "8.2 8.3 8.4" (default saat instal
                         pertama: 7.4 8.0 8.1 8.2 8.3 8.4 8.5); 8.4 selalu ikut, dan versi yang
                         sudah terpasang tidak dihapus
+  --reconfigure         jalankan ulang semua langkah konfigurasi dengan rilis yang sudah
+                        terpasang, tanpa mengunduh paket atau memasang paket sistem;
+                        dipakai panel untuk mengganti hostname (bersama --hostname)
   --yes                 jangan minta konfirmasi
   --force               lewati pengecekan "server harus bersih" (tidak disarankan)
   -h, --help            tampilkan bantuan ini
@@ -166,6 +171,7 @@ parse_args() {
             --admin-user) need_value "$1" "${2:-}"; admin_user="$2"; shift 2 ;;
             --hostname) need_value "$1" "${2:-}"; server_hostname="$2"; shift 2 ;;
             -y | --yes) assume_yes=1; shift ;;
+            --reconfigure) reconfigure=1; shift ;;
             --force) force=1; shift ;;
             --public-ip) need_value "$1" "${2:-}"; public_ip="$2"; public_ip_given=1; shift 2 ;;
             --skip-dns-check) skip_dns_check=1; shift ;;
@@ -247,6 +253,14 @@ add_env_value() {
 env_value() {
     if [[ -f "$ENV_FILE" ]]; then
         sed -n "/^$1=/{s/^$1=//p;q;}" "$ENV_FILE"
+    fi
+}
+
+# Replace KEY's value when it is still the one setup.sh wrote for the
+# previous hostname; a value someone changed by hand is kept.
+follow_hostname() {
+    if [[ "$(env_value "$1")" == "$2" ]]; then
+        set_env_value "$1" "$3"
     fi
 }
 
@@ -437,6 +451,10 @@ preflight() {
         done
     fi
 
+    # The hostname everything was configured for last time, to follow a
+    # change of hostname (--hostname).
+    previous_hostname="$(head -n 1 /etc/mailname 2>/dev/null || true)"
+
     if [[ -z "$server_hostname" ]]; then
         server_hostname="$(hostname -f 2>/dev/null || hostname)"
     fi
@@ -467,6 +485,14 @@ preflight() {
     local email_re='^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$'
     if [[ ! -f "$CONFIG_DIR/admin-created" && ! "$admin_email" =~ $email_re ]]; then
         die "email admin tidak valid: $admin_email"
+    fi
+
+    if ((reconfigure)); then
+        [[ -f "$CONFIG_DIR/installed" && -L "$INSTALL_DIR/current" ]] ||
+            die "--reconfigure hanya untuk server yang RAYXO-nya sudah terpasang"
+        [[ -z "$package_file$release_url$requested_version" ]] ||
+            die "--reconfigure memakai rilis yang terpasang; jangan digabung dengan --package, --release-url atau --version"
+        return
     fi
 
     if [[ -n "$package_file" && -n "$release_url" ]]; then
@@ -575,6 +601,52 @@ confirm() {
 
     read -r -p "Lanjutkan instalasi? [y/N] " answer </dev/tty
     [[ "$answer" == y || "$answer" == Y ]] || die "dibatalkan"
+}
+
+# Give the server the hostname everything is configured for, when another
+# one was asked for (--hostname): the kernel hostname, its names in
+# /etc/hosts, and, on cloud servers, cloud-init, which would put the old
+# name back at the next boot.
+apply_hostname() {
+    local current
+    current="$(hostname -f 2>/dev/null || hostname)"
+
+    if [[ "$current" == "$server_hostname" ]]; then
+        return
+    fi
+
+    step "Mengganti hostname server menjadi $server_hostname"
+    quietly hostnamectl set-hostname "$server_hostname"
+
+    local old
+    for old in "$current" "$previous_hostname"; do
+        if [[ -n "$old" && "$old" != "$server_hostname" ]]; then
+            rename_in_hosts "$old" "$server_hostname"
+            if [[ "${old%%.*}" != "$old" && "${old%%.*}" != "${server_hostname%%.*}" ]]; then
+                rename_in_hosts "${old%%.*}" "${server_hostname%%.*}"
+            fi
+        fi
+    done
+
+    if [[ -d /etc/cloud/cloud.cfg.d ]]; then
+        printf '%s\n' "# Managed by rayxo setup.sh: the panel sets the hostname." \
+            "preserve_hostname: true" "manage_etc_hosts: false" >/etc/cloud/cloud.cfg.d/99-rayxo-hostname.cfg
+    fi
+
+    info "Hostname $current -> $server_hostname"
+}
+
+# Replace the whole name $1 with $2 in /etc/hosts. Both are validated
+# hostnames: only letters, digits, dots and hyphens.
+rename_in_hosts() {
+    sed -i -E "s/(^|[[:space:]])${1//./\\.}([[:space:]]|$)/\1$2\2/g" /etc/hosts
+}
+
+# --reconfigure: the release that is installed is the one to configure.
+use_installed_release() {
+    release_dir="$(readlink -f "$INSTALL_DIR/current")"
+    version="$(head -n 1 "$release_dir/VERSION")"
+    info "Memakai rilis yang terpasang: $version"
 }
 
 create_layout() {
@@ -907,6 +979,12 @@ write_env() {
         add_phpmyadmin_env
         # Installs from before the file manager.
         add_env_value RAYXO_TRANSFER_DIR "$DATA_DIR/transfer"
+        # The panel's own addresses follow a new hostname.
+        if [[ -n "$previous_hostname" && "$previous_hostname" != "$server_hostname" ]]; then
+            follow_hostname APP_URL "https://$previous_hostname:$PANEL_PORT" "https://$server_hostname:$PANEL_PORT"
+            follow_hostname PHPMYADMIN_URL "https://$previous_hostname/phpmyadmin/" "https://$server_hostname/phpmyadmin/"
+            follow_hostname MAIL_FROM_ADDRESS "rayxo@$previous_hostname" "rayxo@$server_hostname"
+        fi
         return
     fi
 
@@ -1177,6 +1255,17 @@ configure_ssl() {
 
         ssl_status="letsencrypt"
         info "Sertifikat Let's Encrypt aktif sampai $(cert_expiry "$live/fullchain.pem"), diperpanjang otomatis"
+
+        # certbot.timer would keep renewing the old hostname's certificate,
+        # and fail once its DNS is gone.
+        if [[ -n "$previous_hostname" && "$previous_hostname" != "$server_hostname" &&
+            -d "/etc/letsencrypt/live/$previous_hostname" ]]; then
+            if certbot delete --cert-name "$previous_hostname" --non-interactive >>"$INSTALL_LOG" 2>&1; then
+                info "Sertifikat hostname lama ($previous_hostname) dihapus"
+            else
+                warn "sertifikat lama $previous_hostname tidak bisa dihapus; hapus dengan: certbot delete --cert-name $previous_hostname"
+            fi
+        fi
         return
     fi
 
@@ -1971,10 +2060,15 @@ main() {
     resolve_php_versions
     check_dns
     confirm
+    apply_hostname
     create_layout
-    install_packages
-    install_site_php
-    fetch_release
+    if ((reconfigure)); then
+        use_installed_release
+    else
+        install_packages
+        install_site_php
+        fetch_release
+    fi
     setup_database
     write_env
     configure_dkim
