@@ -53,15 +53,7 @@ readonly FTP_CERTIFICATE="/etc/ssl/private/pure-ftpd.pem"
 # (installer/files/sshd-sftp.conf). The agent adds new accounts.
 readonly SFTP_GROUP="rayxo-sftp"
 readonly SFTP_SSHD_CONF="/etc/ssh/sshd_config.d/rayxo-sftp.conf"
-# A server installed before the rename keeps signing with "nusapanel"
-# (configure_dkim), so the DKIM record its DNS already has stays valid.
-DKIM_SELECTOR="rayxo"
-# Before RAYXO the panel was called nusapanel. migrate_from_nusapanel moves a
-# server installed then to the new names, keeping its accounts, websites,
-# ids and database; finish_rename_migration removes what is left of the old
-# names once the agent has written every website again.
-readonly LEGACY_CONFIG_DIR="/etc/nusapanel"
-readonly MIGRATION_MARKER="$CONFIG_DIR/.nusapanel-migration-pending"
+readonly DKIM_SELECTOR="rayxo"
 readonly DNS_REPORT="$CONFIG_DIR/dns-records.txt"
 readonly RELEASE_REPO="fianbiasa/rayxo"
 readonly POLICY_RC="/usr/sbin/policy-rc.d"
@@ -108,8 +100,6 @@ dns_report_lines=()
 quota_mount=""
 # Set while our temporary policy-rc.d is in place.
 policy_rc_created=0
-# Set by preflight when this server still has (some of) its nusapanel names.
-rename_needed=0
 # The PHP versions websites can use, resolved by resolve_php_versions.
 site_php_versions=()
 
@@ -386,30 +376,6 @@ is_private_ip() {
     [[ "$1" =~ $private_re ]]
 }
 
-# Whether setup.sh left marker file $1 in its configuration directory, which
-# on a server still to be migrated is the old one.
-has_setup_marker() {
-    [[ -f "$CONFIG_DIR/$1" || -f "$LEGACY_CONFIG_DIR/$1" ]]
-}
-
-# Whether this server still has something of its nusapanel install: the old
-# configuration directory, users, groups or services, or a migration that
-# has not been finished.
-has_nusapanel_install() {
-    [[ (-d "$LEGACY_CONFIG_DIR" && ! -L "$LEGACY_CONFIG_DIR") || -f "$MIGRATION_MARKER" ||
-        -f /etc/systemd/system/nusad.service ]] && return 0
-
-    local name
-    for name in nusapanel nusa-pma; do
-        getent passwd "$name" >/dev/null && return 0
-    done
-    for name in nusapanel nusa-pma nusa-access nusa-sftp; do
-        getent group "$name" >/dev/null && return 0
-    done
-
-    return 1
-}
-
 preflight() {
     step "Memeriksa server"
 
@@ -461,12 +427,8 @@ preflight() {
         fi
     done
 
-    if has_nusapanel_install; then
-        rename_needed=1
-    fi
-
     # A server we already started installing on is allowed to have our own packages.
-    if ! has_setup_marker .setup-started && ((force == 0)); then
+    if [[ ! -f "$CONFIG_DIR/.setup-started" && $force -eq 0 ]]; then
         local package
         for package in apache2 nginx mysql-server mariadb-server "php$PHP_VERSION-fpm"; do
             if dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q "install ok installed"; then
@@ -494,7 +456,7 @@ preflight() {
     local username_re='^[a-z][a-z0-9]{2,15}$'
     [[ "$admin_user" =~ $username_re ]] || die "username admin harus 3-16 huruf kecil/angka dan diawali huruf"
 
-    if [[ -z "$admin_email" ]] && ! has_setup_marker admin-created; then
+    if [[ -z "$admin_email" && ! -f "$CONFIG_DIR/admin-created" ]]; then
         if { : </dev/tty; } 2>/dev/null; then
             read -r -p "Email admin pertama: " admin_email </dev/tty
         else
@@ -503,7 +465,7 @@ preflight() {
     fi
 
     local email_re='^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$'
-    if ! has_setup_marker admin-created && [[ ! "$admin_email" =~ $email_re ]]; then
+    if [[ ! -f "$CONFIG_DIR/admin-created" && ! "$admin_email" =~ $email_re ]]; then
         die "email admin tidak valid: $admin_email"
     fi
 
@@ -601,11 +563,6 @@ confirm() {
         info "SSL      : Let's Encrypt untuk $server_hostname, diperpanjang otomatis"
         info "           (dengan melanjutkan, kamu menyetujui Let's Encrypt Subscriber Agreement)"
     fi
-    if ((rename_needed)); then
-        info "Migrasi  : nusapanel di server ini dipindah ke nama RAYXO (user, folder, database,"
-        info "           service). Akun, website, database dan email tetap; website terus dilayani"
-        info "           konfigurasi lama sampai agent selesai menulis yang baru. Backup di /root."
-    fi
 
     if ((assume_yes)); then
         return
@@ -618,368 +575,6 @@ confirm() {
 
     read -r -p "Lanjutkan instalasi? [y/N] " answer </dev/tty
     [[ "$answer" == y || "$answer" == Y ]] || die "dibatalkan"
-}
-
-# Copy what the migration changes to a root-only folder in /root first: the
-# configuration of every service involved and a dump of the panel database.
-backup_nusapanel() {
-    if ! command -v mariadb-dump >/dev/null; then
-        die "mariadb-dump tidak ditemukan; database nusapanel tidak bisa di-backup"
-    fi
-
-    local dir path paths=()
-    dir="/root/rayxo-migration-$(date +%Y%m%d-%H%M%S)"
-    install -d -m 0700 "$dir"
-
-    for path in etc/nusapanel etc/nusa-pma etc/nginx etc/apache2 etc/php etc/ssh etc/pure-ftpd etc/letsencrypt \
-        etc/logrotate.d etc/systemd/system etc/opendkim etc/passwd etc/group etc/shadow etc/gshadow var/lib/nusa-pma; do
-        if [[ -e "/$path" ]]; then
-            paths+=("$path")
-        fi
-    done
-    tar -czf "$dir/config.tar.gz" -C / "${paths[@]}"
-
-    if [[ "$(mariadb -N -B -e "SHOW DATABASES LIKE 'nusapanel'")" == nusapanel ]]; then
-        mariadb-dump --single-transaction --routines --events nusapanel | gzip >"$dir/nusapanel.sql.gz"
-    fi
-
-    info "Backup konfigurasi dan database lama: $dir"
-}
-
-# Stop what still runs as user $1: usermod cannot rename a user in use.
-stop_user_processes() {
-    local name="$1" attempt
-
-    pkill -TERM -u "$name" || true
-    for attempt in $(seq 1 20); do
-        if ! pgrep -u "$name" >/dev/null; then
-            return 0
-        fi
-        sleep 0.5
-    done
-
-    die "proses user $name masih berjalan (cek: ps -u $name); hentikan dulu lalu jalankan setup.sh lagi"
-}
-
-# Rename group $1 to $2. The gid stays, so files and members keep it.
-rename_legacy_group() {
-    local old="$1" new="$2"
-
-    if getent group "$old" >/dev/null; then
-        if getent group "$new" >/dev/null; then
-            die "grup $old dan $new sama-sama ada; gabungkan secara manual lalu jalankan setup.sh lagi"
-        fi
-        groupmod --new-name "$new" "$old"
-    fi
-}
-
-# Rename system user $1, and its group, to $2 with home $3. The uid stays.
-rename_legacy_user() {
-    local old="$1" new="$2" home="$3"
-
-    if getent passwd "$old" >/dev/null; then
-        if getent passwd "$new" >/dev/null; then
-            die "user $old dan $new sama-sama ada; hapus salah satunya lalu jalankan setup.sh lagi"
-        fi
-        stop_user_processes "$old"
-        usermod --login "$new" --home "$home" "$old"
-    fi
-
-    rename_legacy_group "$old" "$new"
-}
-
-# Move directory $1 to $2 and leave a symlink at $1, so configuration that
-# still names the old path (websites, running PHP pools) keeps working until
-# finish_rename_migration has seen it written again.
-move_legacy_dir() {
-    local old="$1" new="$2"
-
-    if [[ ! -d "$old" || -L "$old" ]]; then
-        return 0
-    fi
-
-    if [[ -e "$new" ]] && ! rmdir "$new" 2>/dev/null; then
-        die "$old dan $new sama-sama ada; pindahkan isinya secara manual lalu jalankan setup.sh lagi"
-    fi
-
-    mv -T "$old" "$new"
-    ln -s "$new" "$old"
-}
-
-# Move the panel's tables to the database "rayxo". Views cannot move between
-# databases, so v_ftp_users is dropped; a panel migration creates it again.
-# The old MariaDB users go too: setup_database and configure_ftp create
-# those of the new names.
-rename_legacy_database() {
-    if ! command -v mariadb >/dev/null ||
-        [[ "$(mariadb -N -B -e "SHOW DATABASES LIKE 'nusapanel'")" != nusapanel ]]; then
-        return 0
-    fi
-
-    local old_tables new_tables
-    old_tables="$(mariadb -N -B -e "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'nusapanel' AND TABLE_TYPE = 'BASE TABLE'")"
-    new_tables="$(mariadb -N -B -e "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'rayxo'")"
-
-    if ((old_tables > 0 && new_tables > 0)); then
-        die "database nusapanel dan rayxo sama-sama berisi tabel; pindahkan secara manual lalu jalankan setup.sh lagi"
-    fi
-
-    mariadb <<'SQL'
-CREATE DATABASE IF NOT EXISTS `rayxo` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-SET @views = (SELECT GROUP_CONCAT(CONCAT('`nusapanel`.`', TABLE_NAME, '`')) FROM information_schema.TABLES
-    WHERE TABLE_SCHEMA = 'nusapanel' AND TABLE_TYPE = 'VIEW');
-EXECUTE IMMEDIATE IF(@views IS NULL, 'DO 0', CONCAT('DROP VIEW ', @views));
-SET @tables = (SELECT GROUP_CONCAT(CONCAT('`nusapanel`.`', TABLE_NAME, '` TO `rayxo`.`', TABLE_NAME, '`'))
-    FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'nusapanel' AND TABLE_TYPE = 'BASE TABLE');
-EXECUTE IMMEDIATE IF(@tables IS NULL, 'DO 0', CONCAT('RENAME TABLE ', @tables));
-SQL
-
-    local left foreign
-    left="$(mariadb -N -B -e "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'nusapanel'")"
-    foreign="$(mariadb -N -B -e "SELECT COUNT(*) FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = 'rayxo' AND UNIQUE_CONSTRAINT_SCHEMA <> 'rayxo'")"
-    if ((left > 0 || foreign > 0)); then
-        die "tabel panel tidak pindah dengan bersih ke database rayxo; database nusapanel dibiarkan (backup ada di /root)"
-    fi
-
-    mariadb <<'SQL'
-DROP DATABASE `nusapanel`;
-DROP USER IF EXISTS 'nusapanel'@'localhost', 'nusapanel'@'127.0.0.1', 'nusapanel-ftp'@'localhost';
-SQL
-
-    info "Tabel panel dipindah ke database rayxo"
-}
-
-# The panel's settings that name the old install. A name changed by hand is kept.
-rename_legacy_env() {
-    if [[ ! -f "$ENV_FILE" ]]; then
-        return 0
-    fi
-
-    sed -i -E \
-        -e 's/^NUSAPANEL_/RAYXO_/' \
-        -e 's/^APP_NAME="?nusapanel"?$/APP_NAME=RAYXO/I' \
-        -e 's/^MAIL_FROM_NAME="?nusapanel"?$/MAIL_FROM_NAME=RAYXO/I' \
-        -e 's/^MAIL_FROM_ADDRESS=nusapanel@/MAIL_FROM_ADDRESS=rayxo@/' \
-        -e 's/^DB_DATABASE=nusapanel$/DB_DATABASE=rayxo/' \
-        -e 's/^DB_USERNAME=nusapanel$/DB_USERNAME=rayxo/' \
-        -e 's|^AGENT_SOCKET=/run/nusapanel/agent\.sock$|AGENT_SOCKET=/run/rayxo/agent.sock|' \
-        "$ENV_FILE"
-    chown "root:$PANEL_USER" "$ENV_FILE"
-    chmod 0640 "$ENV_FILE"
-}
-
-# Move a server installed as nusapanel to the RAYXO names. Every step checks
-# whether it is still needed, so a run that stopped halfway can be repeated.
-# Hosting accounts, their files, websites, databases and mail stay as they
-# are; websites keep being served by their old configuration (still loaded
-# by Nginx and Apache, with its PHP pools running) until the agent has
-# written the new one, and finish_rename_migration removes the old.
-migrate_from_nusapanel() {
-    if ((rename_needed == 0)); then
-        return 0
-    fi
-
-    step "Memindahkan nusapanel ke nama RAYXO"
-
-    if [[ -d "$LEGACY_CONFIG_DIR" && ! -L "$LEGACY_CONFIG_DIR" ]]; then
-        backup_nusapanel
-    fi
-
-    # The panel, its agent and phpMyAdmin stop until the new ones start;
-    # websites are not affected.
-    local unit
-    for unit in nusapanel-scheduler.timer nusapanel-scheduler.service nusapanel-queue.service nusad.service; do
-        if [[ -f "/etc/systemd/system/$unit" ]]; then
-            quietly systemctl disable --now "$unit"
-            rm -f "/etc/systemd/system/$unit"
-        fi
-    done
-    systemctl daemon-reload
-
-    local pool_dir="/etc/php/$PHP_VERSION/fpm/pool.d"
-    if [[ -f "$pool_dir/nusapanel.conf" || -f "$pool_dir/nusapanel-phpmyadmin.conf" ]]; then
-        systemctl stop "php$PHP_VERSION-fpm"
-        rm -f "$pool_dir/nusapanel.conf" "$pool_dir/nusapanel-phpmyadmin.conf"
-
-        # PHP-FPM does not start without a pool, and install_packages starts
-        # it; configure_php_fpm adds the panel's pools and turns "www" off again.
-        if ! compgen -G "$pool_dir/*.conf" >/dev/null && [[ -f "$pool_dir/www.conf.disabled" ]]; then
-            mv "$pool_dir/www.conf.disabled" "$pool_dir/www.conf"
-        fi
-    fi
-
-    # SFTP: sshd matches the new group name before the group is renamed, so
-    # accounts never log in without the SFTP-only rules.
-    local old_sftp_conf=/etc/ssh/sshd_config.d/nusapanel-sftp.conf
-    if [[ -f "$old_sftp_conf" ]]; then
-        sed 's/nusa-sftp/rayxo-sftp/g' "$old_sftp_conf" >"$SFTP_SSHD_CONF"
-        chmod 0644 "$SFTP_SSHD_CONF"
-        install -d -m 0755 /run/sshd
-        if ! /usr/sbin/sshd -t >>"$INSTALL_LOG" 2>&1; then
-            rm -f "$SFTP_SSHD_CONF"
-            die "sshd menolak konfigurasi SFTP baru; konfigurasi lama tetap dipakai (detail di $INSTALL_LOG)"
-        fi
-        quietly systemctl try-reload-or-restart ssh.service
-    fi
-
-    rename_legacy_group nusa-sftp "$SFTP_GROUP"
-    rename_legacy_group nusa-access rayxo-access
-
-    if [[ -f "$old_sftp_conf" ]]; then
-        rm -f "$old_sftp_conf"
-        quietly systemctl try-reload-or-restart ssh.service
-    fi
-
-    rename_legacy_user nusapanel "$PANEL_USER" "$DATA_DIR"
-    rename_legacy_user nusa-pma "$PMA_USER" "$PMA_DATA_DIR"
-
-    # Hosting accounts are recognised by their GECOS comment.
-    local name comment
-    while IFS=: read -r name comment; do
-        quietly usermod --comment "rayxo${comment#nusapanel}" "$name"
-    done < <(getent passwd | awk -F: '$3 >= 1000 && $5 ~ /^nusapanel(,|$)/ {print $1 ":" $5}')
-
-    move_legacy_dir "$LEGACY_CONFIG_DIR" "$CONFIG_DIR"
-    move_legacy_dir /etc/nusa-pma "$PMA_CONFIG_DIR"
-    move_legacy_dir /var/lib/nusapanel "$DATA_DIR"
-    move_legacy_dir /var/lib/nusa-pma "$PMA_DATA_DIR"
-    move_legacy_dir /var/log/nusapanel "$LOG_DIR"
-    move_legacy_dir /var/www/nusapanel-acme "$ACME_DIR"
-
-    rename_legacy_database
-    rename_legacy_env
-
-    # The panel's own Nginx sites keep their content until configure_* write
-    # them again in this run.
-    local site new_site
-    for site in /etc/nginx/sites-available/nusapanel*.conf; do
-        if [[ ! -f "$site" ]]; then
-            continue
-        fi
-        new_site="/etc/nginx/sites-available/rayxo${site#/etc/nginx/sites-available/nusapanel}"
-        mv -f "$site" "$new_site"
-        if [[ -L "/etc/nginx/sites-enabled/${site##*/}" ]]; then
-            rm -f "/etc/nginx/sites-enabled/${site##*/}"
-            ln -sfn "$new_site" "/etc/nginx/sites-enabled/${new_site##*/}"
-        fi
-    done
-
-    local renewal
-    for renewal in /etc/letsencrypt/renewal/*.conf; do
-        if [[ -f "$renewal" ]] && grep -qF /var/www/nusapanel-acme "$renewal"; then
-            sed -i "s|/var/www/nusapanel-acme|$ACME_DIR|g" "$renewal"
-        fi
-    done
-
-    # Their replacements are written later in this run.
-    rm -f /etc/letsencrypt/renewal-hooks/deploy/nusapanel-reload.sh /etc/logrotate.d/nusapanel /usr/local/bin/nusactl
-
-    if [[ -f /var/log/nusapanel-install.log && -d "$LOG_DIR" ]]; then
-        mv /var/log/nusapanel-install.log "$LOG_DIR/nusapanel-install.log"
-    fi
-
-    # finish_rename_migration waits for the websites queued after this moment.
-    date -u '+%Y-%m-%d %H:%M:%S' >"$MIGRATION_MARKER"
-    info "User, grup, folder, database dan service sekarang memakai nama RAYXO"
-}
-
-# Remove what is left of the nusapanel names once the agent has written every
-# website again: the old Nginx and Apache includes, the old PHP pools, and
-# the symlinks at the old paths. Nothing is removed while websites still
-# wait for the agent or could not be written; a later run tries again.
-finish_rename_migration() {
-    if [[ ! -f "$MIGRATION_MARKER" ]]; then
-        return 0
-    fi
-
-    step "Menyelesaikan perpindahan ke RAYXO"
-
-    local since pending="" failed attempt
-    since="$(head -n 1 "$MIGRATION_MARKER")"
-    if [[ ! "$since" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}$ ]]; then
-        since="$(date -u '+%Y-%m-%d %H:%M:%S')"
-    fi
-
-    info "Menunggu agent menulis ulang konfigurasi semua website (paling lama 10 menit)"
-    for attempt in $(seq 1 120); do
-        pending="$(mariadb -N -B rayxo -e "SELECT COUNT(*) FROM tasks WHERE action LIKE 'web.%' AND status IN ('queued', 'running') AND created_at >= '$since'")"
-        if [[ "$pending" == 0 ]]; then
-            break
-        fi
-        sleep 5
-    done
-    failed="$(mariadb -N -B rayxo -e "SELECT COUNT(*) FROM tasks WHERE action LIKE 'web.%' AND status = 'failed' AND created_at >= '$since'")"
-
-    if [[ "$pending" != 0 || "$failed" != 0 ]]; then
-        warn "$pending website belum selesai dan $failed gagal ditulis ulang; website tetap dilayani konfigurasi lama."
-        warn "Cek Tasks di panel, lalu jalankan setup.sh lagi untuk menyelesaikan perpindahan."
-        return 0
-    fi
-
-    # Websites the panel did not write again are not active there.
-    local old_vhost orphans=()
-    for old_vhost in /etc/nginx/nusapanel/*/*.conf; do
-        if [[ -f "$old_vhost" && ! -f "/etc/nginx/rayxo/${old_vhost#/etc/nginx/nusapanel/}" ]]; then
-            orphans+=("$(basename "$old_vhost" .conf)")
-        fi
-    done
-    if ((${#orphans[@]} > 0)); then
-        warn "tidak aktif di panel, jadi tidak dilayani lagi: ${orphans[*]}"
-    fi
-
-    local legacy_sites=/etc/nginx/conf.d/nusapanel-sites.conf
-    if [[ -f "$legacy_sites" ]]; then
-        rm -f "$legacy_sites"
-        if ! nginx -t >>"$INSTALL_LOG" 2>&1; then
-            printf 'include /etc/nginx/nusapanel/*/*.conf;\n' >"$legacy_sites"
-            warn "Nginx menolak konfigurasi tanpa include lama, jadi include lama dipasang lagi (detail di $INSTALL_LOG)"
-            return 0
-        fi
-        systemctl reload nginx
-    fi
-
-    if [[ -e /etc/apache2/conf-available/nusapanel.conf ]]; then
-        if [[ -e /etc/apache2/conf-enabled/nusapanel.conf ]]; then
-            quietly a2disconf -q nusapanel
-        fi
-        rm -f /etc/apache2/conf-available/nusapanel.conf
-        quietly apache2ctl configtest
-        quietly systemctl reload apache2
-    fi
-    rm -rf /etc/nginx/nusapanel /etc/apache2/nusapanel
-
-    # Websites now run in rayxo-php<ver>@<user>.
-    local unit
-    while read -r unit _; do
-        quietly systemctl disable --now "$unit"
-    done < <(systemctl list-units --all --plain --no-legend 'nusa-php*@*.service' || true)
-    find /etc/systemd/system -name 'nusa-php*@*.service' \( -type f -o -type l \) -delete
-    systemctl daemon-reload
-    systemctl reset-failed 'nusa-php*' >/dev/null 2>&1 || true
-    rm -rf /run/nusa-php
-
-    local old_paths=(/etc/nusapanel /etc/nusa-pma /var/lib/nusapanel /var/lib/nusa-pma /var/log/nusapanel
-        /var/www/nusapanel-acme /usr/local/nusapanel)
-    local path patterns=() in_use
-    for path in "${old_paths[@]}"; do
-        patterns+=(-e "$path")
-    done
-    in_use="$(grep -rIlsF "${patterns[@]}" /etc/nginx /etc/apache2 /etc/php /etc/systemd/system /etc/letsencrypt/renewal \
-        /etc/letsencrypt/renewal-hooks /etc/pure-ftpd /etc/ssh /etc/logrotate.d "$CONFIG_DIR" "$PMA_CONFIG_DIR" || true)"
-
-    if [[ -n "$in_use" ]]; then
-        warn "path lama masih disebut di $(paste -sd ' ' <<<"$in_use"); symlink lama dan /usr/local/nusapanel dibiarkan"
-    else
-        for path in "${old_paths[@]}"; do
-            if [[ -L "$path" ]]; then
-                rm -f "$path"
-            fi
-        done
-        rm -rf /usr/local/nusapanel
-    fi
-
-    rm -f "$MIGRATION_MARKER"
-    info "Perpindahan ke RAYXO selesai; konfigurasi nusapanel yang lama sudah dihapus"
 }
 
 create_layout() {
@@ -1092,16 +687,11 @@ DEBCONF
 # the defaults on a first install without the option. The panel's own
 # version is always one of them. Versions are never removed here.
 resolve_php_versions() {
-    local list="" v versions_file="$PHP_VERSIONS_FILE"
+    local list="" v
     local -A seen=()
 
-    # Read before migrate_from_nusapanel has moved the old directory.
-    if [[ ! -s "$versions_file" && -s "$LEGACY_CONFIG_DIR/php-versions" ]]; then
-        versions_file="$LEGACY_CONFIG_DIR/php-versions"
-    fi
-
-    if [[ -s "$versions_file" ]]; then
-        list="$(tr '\n' ' ' <"$versions_file")"
+    if [[ -s "$PHP_VERSIONS_FILE" ]]; then
+        list="$(tr '\n' ' ' <"$PHP_VERSIONS_FILE")"
     elif [[ -z "$requested_php_versions" ]]; then
         list="$DEFAULT_SITE_PHP_VERSIONS"
     fi
@@ -1372,13 +962,6 @@ configure_dkim() {
     step "Mengatur DKIM (tanda tangan untuk email panel)"
 
     local key_dir="/etc/opendkim/keys/$server_hostname"
-
-    # The key of a server installed as nusapanel is published in DNS under
-    # that selector; keep using it.
-    if [[ ! -f "$key_dir/$DKIM_SELECTOR.private" && -f "$key_dir/nusapanel.private" ]]; then
-        DKIM_SELECTOR="nusapanel"
-    fi
-
     local private_key="$key_dir/$DKIM_SELECTOR.private"
 
     if [[ ! -f "$private_key" ]]; then
@@ -1850,13 +1433,6 @@ CONF
             printf 'server_names_hash_max_size 4096;\n'
         fi
     } >/etc/nginx/conf.d/rayxo-sites.conf
-
-    # A server moved from nusapanel serves its websites from their old files
-    # until finish_rename_migration; that include stays, the settings above
-    # must only appear once.
-    if [[ -f /etc/nginx/conf.d/nusapanel-sites.conf ]]; then
-        printf 'include /etc/nginx/nusapanel/*/*.conf;\n' >/etc/nginx/conf.d/nusapanel-sites.conf
-    fi
 
     # Host names no website uses get a 404, never a customer's site.
     local site=/etc/nginx/sites-available/rayxo-default.conf
@@ -2387,7 +1963,6 @@ main() {
     resolve_php_versions
     check_dns
     confirm
-    migrate_from_nusapanel
     create_layout
     install_packages
     install_site_php
@@ -2412,7 +1987,6 @@ main() {
     verify_install
     rebuild_websites
     apply_quotas
-    finish_rename_migration
     # Last, right before the summary, so a failure in an earlier step can never
     # leave an admin whose generated password was not shown.
     create_admin

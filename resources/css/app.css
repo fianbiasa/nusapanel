@@ -8,9 +8,9 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * rayxo theme, after docs/style/nusapanelv1: navy text, one strong blue,
- * white cards with soft blue shadows on a pale blue page. Dark mode uses the
- * navy palette of the sidebar asset sheet.
+ * RAYXO theme, after the design reference in docs/style: navy text, one
+ * strong blue, white cards with soft blue shadows on a pale blue page. Dark
+ * mode uses the navy palette of the sidebar asset sheet.
  */
 @theme {
     --font-sans:

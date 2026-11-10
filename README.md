@@ -120,8 +120,6 @@ runuser -u rayxo -- php8.4 /usr/local/rayxo/current/panel/artisan rayxo:reset-pa
 
 Password baru ditampilkan sekali, dan semua session lama akun itu dikeluarkan.
 
-**Pindah dari nusapanel.** Sebelum bernama RAYXO, panel ini bernama nusapanel. Server yang dipasang dengan nama lama itu dipindah otomatis begitu `setup.sh` versi baru dijalankan: user, grup, folder, database, dan service berganti nama dengan uid/gid yang sama, dan akun, website, database, FTP, SFTP, serta cron tetap jalan. Konfigurasi dan database lama di-backup dulu ke `/root/rayxo-migration-<waktu>/`. Website terus dilayani konfigurasi lama sampai agent selesai menulis yang baru, baru setelah itu sisa nama lama dihapus. Selector DKIM `nusapanel` tetap dipakai, jadi rekaman DNS tidak perlu diubah.
-
 ## Membuat rilis
 
 Rilis dibuat otomatis oleh GitHub Actions (`.github/workflows/release.yml`) setiap kali tag versi di-push:

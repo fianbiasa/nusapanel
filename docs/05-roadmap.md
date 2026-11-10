@@ -162,7 +162,7 @@ Software manager (setara CustomBuild), app installer & WordPress manager, Git de
 
 ## Langkah pertama
 
-1. Tetapkan nama final: **RAYXO** (sebelumnya codename `nusapanel`).
+1. Tetapkan nama final: **RAYXO**.
 2. Siapkan VM Ubuntu 24.04 di Mac (OrbStack/Multipass).
 3. Scaffold panel Laravel + React (di Herd) dan agent Go.
 4. Socket agent + `system.info`, tampil di dashboard admin.
