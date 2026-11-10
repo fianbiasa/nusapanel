@@ -81,7 +81,17 @@ Pekerjaan:
 
 - `rayxo rebuild` ✅: menulis ulang semua konfigurasi dari database panel (Nginx, Apache dan pool PHP setiap website, kuota disk dan crontab setiap akun, folder setiap login FTP), lewat `rayxo rebuild` di server, `php artisan rayxo:rebuild`, atau tombol "Tulis ulang konfigurasi" di halaman Services; aman diulang karena setiap tugas menulis keadaan lengkapnya.
 
-Berikutnya: penutup P1 (pengaturan server). SSL mail menyusul bersama email (P2).
+- SSL hostname/panel ✅: `setup.sh` mengambil sertifikat Let's Encrypt untuk hostname setiap kali dijalankan (kalau belum ada atau sisa masa berlakunya kurang dari 30 hari), dipakai panel (port 2222) dan FTP, lalu diperpanjang `certbot.timer`; kalau gagal, panel memakai sertifikat self-signed sampai `setup.sh` dijalankan lagi. Menerbitkan ulang dari panel (misalnya setelah hostname diganti) menyusul bersama pengaturan server.
+
+- info sistem ✅ (sejak P0): dashboard admin menampilkan hostname, sistem operasi, CPU, load, memori, disk, uptime dan versi agent dari `system.info`.
+
+- 2FA ✅ (sejak P0): Settings > Security mengaktifkan 2FA lewat aplikasi authenticator (dengan konfirmasi kode dan recovery code) serta passkey; keduanya meminta konfirmasi password dulu.
+
+- CLI `rayxo` ✅: `rayxo ping`, `rayxo call <method> [params-json]` (memanggil aksi agent apa pun dari terminal server), `rayxo rebuild` dan `rayxo version`.
+
+Sisa P1: pengaturan server (termasuk menerbitkan ulang SSL hostname dari panel), tes otomatis bahwa akun A tidak bisa membaca file akun B, dan uji WordPress lengkap di VPS (HTTPS, database, FTP, file manager). SSL mail menyusul bersama email (P2).
+
+**Cakupan:**
 
 - Akun user & paket user, buat/suspend/hapus akun, quota disk & inode.
 - Domain, subdomain, pointer, redirect, www/HTTPS.
@@ -95,8 +105,8 @@ Berikutnya: penutup P1 (pengaturan server). SSL mail menyusul bersama email (P2)
 **Selesai kalau:**
 
 - WordPress bisa di-host dengan HTTPS, database, FTP, dan file manager;
-- suspend, unsuspend, dan hapus akun bersih tanpa sisa;
-- `rayxo rebuild` menghasilkan config yang identik;
+- suspend, unsuspend, dan hapus akun bersih tanpa sisa; ✅ teruji di VPS: tidak ada sisa home, vhost, pool PHP, unit systemd, crontab, maupun user/database MariaDB dari 19 akun yang sudah dihapus;
+- `rayxo rebuild` menghasilkan config yang identik; ✅ teruji di VPS: dua kali berturut-turut, checksum config, crontab, kuota dan izin folder sama persis;
 - user A terbukti tidak bisa membaca file user B (diuji otomatis).
 
 ## P2 — DNS & email
