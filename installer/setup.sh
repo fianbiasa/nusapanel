@@ -90,6 +90,7 @@ skip_dns_check=0
 requested_version=""
 requested_php_versions=""
 reconfigure=0
+allow_downgrade=0
 requested_panel_port=""
 
 # Filled in while installing.
@@ -158,6 +159,7 @@ Lainnya:
                         sudah terpasang tidak dihapus
   --panel-port PORT     port panel (default: 2222, atau port yang dipilih sebelumnya);
                         1024-65535, bukan port layanan lain di server ini
+  --allow-downgrade     izinkan memasang versi yang lebih lama dari rilis yang terpasang
   --reconfigure         jalankan ulang semua langkah konfigurasi dengan rilis yang sudah
                         terpasang, tanpa mengunduh paket atau memasang paket sistem;
                         dipakai panel untuk mengganti hostname (bersama --hostname)
@@ -183,6 +185,7 @@ parse_args() {
             --hostname) need_value "$1" "${2:-}"; server_hostname="$2"; shift 2 ;;
             -y | --yes) assume_yes=1; shift ;;
             --reconfigure) reconfigure=1; shift ;;
+            --allow-downgrade) allow_downgrade=1; shift ;;
             --panel-port) need_value "$1" "${2:-}"; requested_panel_port="$2"; shift 2 ;;
             --force) force=1; shift ;;
             --public-ip) need_value "$1" "${2:-}"; public_ip="$2"; public_ip_given=1; shift 2 ;;
@@ -381,7 +384,28 @@ resolve_github_release() {
     local version_re='^[0-9A-Za-z][0-9A-Za-z._-]*$'
     [[ "$wanted" =~ $version_re ]] || die "versi tidak valid: $wanted"
 
+    # Known before anything is installed: refuse an older release right away.
+    guard_downgrade "$wanted"
+
     release_url="https://github.com/$RELEASE_REPO/releases/download/v$wanted/rayxo-$wanted-linux-$arch.tar.gz"
+}
+
+# Refuse to install release $1 over a newer release: its code would not know
+# the database the newer one migrated (migrations only go forward), so an
+# old setup.sh from the website could quietly break a server. Development
+# builds (versions with a suffix, like 0.10.1-dev) have no order against
+# releases, so only an installed release is protected.
+guard_downgrade() {
+    local wanted="$1" installed
+    installed="$(head -n 1 "$INSTALL_DIR/current/VERSION" 2>/dev/null || true)"
+
+    if ((allow_downgrade)) || [[ -z "$installed" || "$installed" == *-* || "$installed" == "$wanted" ]]; then
+        return
+    fi
+
+    if [[ "$(printf '%s\n%s\n' "$wanted" "$installed" | sort -V | head -n 1)" == "$wanted" ]]; then
+        die "versi $wanted lebih lama dari RAYXO yang terpasang ($installed). Pakai setup.sh dari versi terpasang ($INSTALL_DIR/current/setup.sh) atau yang lebih baru; tambahkan --allow-downgrade hanya kalau memang sengaja turun versi"
+    fi
 }
 
 latest_release_version() {
@@ -923,6 +947,7 @@ fetch_release() {
     version="$(head -n 1 "$top/VERSION")"
     local version_re='^[0-9A-Za-z][0-9A-Za-z._-]*$'
     [[ "$version" =~ $version_re ]] || die "versi paket tidak valid: $version"
+    guard_downgrade "$version"
 
     release_dir="$INSTALL_DIR/releases/$version"
     if [[ -e "$release_dir" ]]; then
