@@ -42,8 +42,13 @@ import {
     hostname as updateHostname,
     hostnameCertificate,
     phpUploads,
+    port as tryPort,
     timezone as updateTimezone,
 } from '@/routes/admin/server-settings';
+import {
+    cancel as cancelPort,
+    confirm as confirmPort,
+} from '@/routes/admin/server-settings/port';
 
 type HostnameCertificate = {
     hostname: string;
@@ -57,7 +62,8 @@ type CertificateRequest = { pending: boolean; error: string | null };
 
 /** The latest hostname change: setup.sh running again in the background. */
 type Reconfigure = {
-    hostname: string;
+    hostname?: string;
+    panel_port?: number;
     started_at: string;
     running: boolean;
     exit_code: number | null;
@@ -65,12 +71,22 @@ type Reconfigure = {
     log: string[];
 } | null;
 
+/** A port opened next to the panel's own, until confirmed or closed. */
+type PortTrial = {
+    port: number;
+    previous: number;
+    expires_at: string;
+    confirmed: boolean;
+};
+
 type Props = {
     server: {
         hostname: string;
         timezone: string;
         certificate: HostnameCertificate | null;
         reconfigure: Reconfigure;
+        panel_port: number;
+        port_trial: PortTrial | null;
     } | null;
     error: string | null;
     certificate_request: CertificateRequest;
@@ -92,7 +108,9 @@ export default function ServerSettings({
     );
 
     const busy =
-        certificate_request.pending || server?.reconfigure?.running === true;
+        certificate_request.pending ||
+        server?.reconfigure?.running === true ||
+        (server?.port_trial ?? null) !== null;
 
     // Follow a certificate request or a hostname change until it finishes.
     useEffect(() => {
@@ -130,7 +148,19 @@ export default function ServerSettings({
             {server !== null && (
                 <HostnameChangePanel
                     current={server.hostname}
-                    change={server.reconfigure}
+                    change={hostnameChange(server.reconfigure, server.hostname)}
+                />
+            )}
+
+            {server !== null && (
+                <PortPanel
+                    current={server.panel_port}
+                    trial={server.port_trial}
+                    change={
+                        server.reconfigure?.panel_port
+                            ? server.reconfigure
+                            : null
+                    }
                 />
             )}
 
@@ -145,6 +175,24 @@ export default function ServerSettings({
             </div>
         </>
     );
+}
+
+/**
+ * The hostname change to show: none when the latest run of setup.sh was
+ * for the port, or failed for the name the server has by now (changed
+ * outside the panel, such as by the VPS provider along with the PTR).
+ */
+function hostnameChange(change: Reconfigure, current: string): Reconfigure {
+    if (!change?.hostname) {
+        return null;
+    }
+
+    const stale =
+        !change.running &&
+        change.exit_code !== 0 &&
+        change.hostname === current;
+
+    return stale ? null : change;
 }
 
 function HostnamePanel({
@@ -315,8 +363,10 @@ function HostnameChangePanel({
                     <Spinner />
                     <AlertDescription>
                         Mengganti hostname ke{' '}
-                        <span className="font-mono">{change.hostname}</span>…
-                        Panel sempat tidak menjawab sebentar saat layanannya
+                        <span className="font-mono">
+                            {change.hostname ?? ''}
+                        </span>
+                        … Panel sempat tidak menjawab sebentar saat layanannya
                         dijalankan ulang; halaman ini diperbarui sendiri.
                     </AlertDescription>
                 </Alert>
@@ -325,13 +375,15 @@ function HostnameChangePanel({
                     <CheckCircle2 />
                     <AlertDescription>
                         Hostname sekarang{' '}
-                        <span className="font-mono">{change.hostname}</span>.
-                        Buka panel di{' '}
+                        <span className="font-mono">
+                            {change.hostname ?? ''}
+                        </span>
+                        . Buka panel di{' '}
                         <a
                             className="font-medium underline"
-                            href={panelUrl(change.hostname)}
+                            href={panelUrl(change.hostname ?? '')}
                         >
-                            {panelUrl(change.hostname)}
+                            {panelUrl(change.hostname ?? '')}
                         </a>
                         , lalu perbarui rekaman SPF, DKIM dan DMARC di DNS
                         sesuai /etc/rayxo/dns-records.txt.
@@ -342,7 +394,10 @@ function HostnameChangePanel({
                     <ShieldAlert />
                     <AlertDescription className="break-words">
                         Hostname tidak diganti ke{' '}
-                        <span className="font-mono">{change.hostname}</span>:{' '}
+                        <span className="font-mono">
+                            {change.hostname ?? ''}
+                        </span>
+                        :{' '}
                         {change.error ||
                             'proses berhenti sebelum selesai; lihat log di bawah.'}
                     </AlertDescription>
@@ -420,6 +475,184 @@ function HostnameChangePanel({
                     </Form>
                 </DialogContent>
             </Dialog>
+        </Panel>
+    );
+}
+
+function PortPanel({
+    current,
+    trial,
+    change,
+}: {
+    current: number;
+    trial: PortTrial | null;
+    change: Reconfigure;
+}) {
+    const [processing, setProcessing] = useState(false);
+    const [actionError, setActionError] = useState<string | null>(null);
+    const browser = typeof window === 'undefined' ? null : window.location;
+    const onTrialPort =
+        trial !== null &&
+        browser !== null &&
+        browser.port === String(trial.port);
+    const trialUrl =
+        trial !== null && browser !== null
+            ? `https://${browser.hostname}:${trial.port}${browser.pathname}`
+            : '';
+
+    const send = (action: 'confirm' | 'cancel') => {
+        setProcessing(true);
+        setActionError(null);
+        const options = {
+            preserveScroll: true,
+            onError: (errors: Record<string, string>) =>
+                setActionError(Object.values(errors)[0] ?? null),
+            onFinish: () => setProcessing(false),
+        };
+
+        if (action === 'confirm') {
+            router.post(confirmPort().url, {}, options);
+        } else {
+            router.delete(cancelPort().url, options);
+        }
+    };
+
+    return (
+        <Panel
+            title="Port panel"
+            description={`Panel sekarang di port ${current}. Port baru dibuka dulu berdampingan, lalu dipakai setelah dikonfirmasi lewat port itu; kalau tidak dikonfirmasi dalam 5 menit, port baru ditutup lagi otomatis.`}
+        >
+            {actionError && (
+                <Alert variant="destructive" className="mb-4">
+                    <ShieldAlert />
+                    <AlertDescription>{actionError}</AlertDescription>
+                </Alert>
+            )}
+
+            {change !== null && (change.running || trial?.confirmed) ? (
+                <Alert>
+                    <Spinner />
+                    <AlertDescription>
+                        Memindahkan panel ke port {change.panel_port}… Halaman
+                        ini diperbarui sendiri.
+                    </AlertDescription>
+                </Alert>
+            ) : trial !== null && onTrialPort ? (
+                <div className="grid gap-4">
+                    <Alert>
+                        <CheckCircle2 />
+                        <AlertDescription>
+                            Port {trial.port} bisa dijangkau dari jaringan kamu.
+                            Pakai port ini untuk panel? Port {trial.previous}{' '}
+                            ditutup setelahnya.
+                        </AlertDescription>
+                    </Alert>
+                    <div className="flex flex-wrap gap-2">
+                        <Button
+                            disabled={processing}
+                            onClick={() => send('confirm')}
+                        >
+                            {processing && <Spinner />}
+                            Pakai port {trial.port}
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            disabled={processing}
+                            onClick={() => send('cancel')}
+                        >
+                            Batalkan
+                        </Button>
+                    </div>
+                </div>
+            ) : trial !== null ? (
+                <div className="grid gap-4">
+                    <Alert>
+                        <Clock />
+                        <AlertDescription>
+                            Port {trial.port} dibuka sementara sampai{' '}
+                            {formatDateTime(trial.expires_at)}. Buka{' '}
+                            <a
+                                className="font-medium underline"
+                                href={trialUrl}
+                            >
+                                {trialUrl}
+                            </a>{' '}
+                            lalu konfirmasi di sana. Kalau halaman itu tidak
+                            terbuka, port {trial.port} kemungkinan diblokir
+                            firewall provider; biarkan saja, nanti ditutup
+                            otomatis.
+                        </AlertDescription>
+                    </Alert>
+                    <div>
+                        <Button
+                            variant="secondary"
+                            disabled={processing}
+                            onClick={() => send('cancel')}
+                        >
+                            {processing && <Spinner />}
+                            Batalkan
+                        </Button>
+                    </div>
+                </div>
+            ) : (
+                <Form
+                    {...tryPort.form()}
+                    options={{ preserveScroll: true }}
+                    className="grid gap-4"
+                >
+                    {({ processing: trying, errors }) => (
+                        <>
+                            {change !== null &&
+                                !change.running &&
+                                (change.exit_code === 0 ? (
+                                    <Alert>
+                                        <CheckCircle2 />
+                                        <AlertDescription>
+                                            Panel sekarang di port{' '}
+                                            {change.panel_port}.
+                                        </AlertDescription>
+                                    </Alert>
+                                ) : (
+                                    <Alert variant="destructive">
+                                        <ShieldAlert />
+                                        <AlertDescription className="break-words">
+                                            Panel tidak dipindah ke port{' '}
+                                            {change.panel_port}:{' '}
+                                            {change.error ||
+                                                'proses berhenti sebelum selesai.'}
+                                        </AlertDescription>
+                                    </Alert>
+                                ))}
+                            <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
+                                <Field
+                                    id="port"
+                                    label="Port baru"
+                                    error={errors.port}
+                                >
+                                    <Input
+                                        id="port"
+                                        name="port"
+                                        type="number"
+                                        min={1024}
+                                        max={65535}
+                                        placeholder="misalnya 8443"
+                                        className="rounded-xl"
+                                        required
+                                    />
+                                </Field>
+                                <Button type="submit" disabled={trying}>
+                                    {trying && <Spinner />}
+                                    Coba port ini
+                                </Button>
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                                Buka dulu port itu di firewall atau security
+                                group provider VPS.
+                            </p>
+                        </>
+                    )}
+                </Form>
+            )}
         </Panel>
     );
 }

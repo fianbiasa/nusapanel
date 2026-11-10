@@ -99,16 +99,25 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('services', [ServiceController::class, 'index'])->name('services.index');
         Route::get('server-settings', [ServerSettingController::class, 'index'])->name('server-settings.index');
         Route::put('server-settings/hostname', [ServerSettingController::class, 'updateHostname'])
-            ->middleware('throttle:5,1')
+            ->middleware('throttle:5,1,server-hostname')
             ->name('server-settings.hostname');
+        Route::post('server-settings/port', [ServerSettingController::class, 'tryPort'])
+            ->middleware('throttle:5,1,server-port')
+            ->name('server-settings.port');
+        Route::post('server-settings/port/confirm', [ServerSettingController::class, 'confirmPort'])
+            ->middleware('throttle:5,1,server-port-confirm')
+            ->name('server-settings.port.confirm');
+        Route::delete('server-settings/port', [ServerSettingController::class, 'cancelPort'])
+            ->middleware('throttle:10,1,server-port-cancel')
+            ->name('server-settings.port.cancel');
         Route::put('server-settings/timezone', [ServerSettingController::class, 'updateTimezone'])
-            ->middleware('throttle:10,1')
+            ->middleware('throttle:10,1,server-timezone')
             ->name('server-settings.timezone');
         Route::post('server-settings/hostname-certificate', [ServerSettingController::class, 'issueHostnameCertificate'])
-            ->middleware('throttle:5,1')
+            ->middleware('throttle:5,1,server-certificate')
             ->name('server-settings.hostname-certificate');
         Route::put('server-settings/php-uploads', [ServerSettingController::class, 'updatePhpUploads'])
-            ->middleware('throttle:10,1')
+            ->middleware('throttle:10,1,server-uploads')
             ->name('server-settings.php-uploads');
         Route::post('services/rebuild', [ServiceController::class, 'rebuild'])
             ->middleware('throttle:6,1')

@@ -16,6 +16,8 @@ import (
 
 	"rayxo/agent/internal/actions"
 	"rayxo/agent/internal/files"
+	"rayxo/agent/internal/panelport"
+	"rayxo/agent/internal/reconfigure"
 	"rayxo/agent/internal/rpc"
 	"rayxo/agent/internal/services"
 	"rayxo/agent/internal/version"
@@ -94,6 +96,8 @@ func run(logger *slog.Logger, cfg config) error {
 	}
 
 	manager := services.New(services.DefaultConfig())
+	changer := reconfigure.New(reconfigure.DefaultConfig())
+	ports := panelport.New(panelport.DefaultConfig())
 
 	registry := rpc.NewRegistry()
 	actions.Register(registry, actions.Config{
@@ -102,7 +106,9 @@ func run(logger *slog.Logger, cfg config) error {
 			TransferDir: cfg.transferDir,
 			PanelUID:    int(allowedUID),
 		},
-		Services: manager,
+		Services:    manager,
+		Reconfigure: changer,
+		PanelPort:   ports,
 	})
 
 	listener, err := rpc.Listen(cfg.socketPath, 0o660, gid)
@@ -116,6 +122,10 @@ func run(logger *slog.Logger, cfg config) error {
 	if cfg.watchdog > 0 {
 		go manager.Watch(ctx, cfg.watchdog)
 	}
+
+	// Closes a panel port tried but not confirmed in time, also after the
+	// agent restarted in the meantime.
+	go ports.Watch(ctx, 15*time.Second, changer.Running)
 
 	server := &rpc.Server{
 		Registry:    registry,

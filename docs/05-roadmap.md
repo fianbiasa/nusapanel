@@ -97,7 +97,9 @@ Pekerjaan:
 
 - pengaturan server tahap 2 ✅: hostname bisa diganti dari Pengaturan Server. Agent menjalankan ulang `setup.sh --reconfigure --hostname <baru>` (rilis yang terpasang, tanpa unduh paket atau apt) di unit systemd sendiri; setup.sh mengecek A record & PTR dulu dan tidak mengubah apa pun kalau belum benar, lalu mengganti hostname sistem, `/etc/hosts`, cloud-init, SSL, Postfix, DKIM, phpMyAdmin dan alamat panel, dan menghapus sertifikat hostname lama; halaman menampilkan proses, hasil dan log-nya.
 
-Sisa P1: pengaturan server tahap 3 (ganti port panel dengan jendela konfirmasi). SSL mail menyusul bersama email (P2).
+- pengaturan server tahap 3 ✅: port panel bisa diganti dari Pengaturan Server tanpa risiko terkunci. Port baru dibuka dulu berdampingan dengan port lama selama 5 menit; admin membuka panel lewat port baru dan mengonfirmasi di sana (bukti port itu tembus firewall), lalu `setup.sh --reconfigure --panel-port <port>` menulis semua config untuk port itu dan mengingatnya. Port yang tidak dikonfirmasi tepat waktu, atau yang setup.sh-nya gagal, ditutup lagi otomatis.
+
+Semua fitur P1 sudah ada; bahasa default menyusul bersama UI dua bahasa. SSL mail menyusul bersama email (P2).
 
 **Cakupan:**
 

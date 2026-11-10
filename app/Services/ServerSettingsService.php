@@ -119,6 +119,42 @@ class ServerSettingsService
     }
 
     /**
+     * Open port for the panel as well, for a few minutes, so the admin can
+     * check it is reachable before it becomes the panel's port.
+     *
+     * @return array<string, mixed> The trial: port, previous port and when it closes again.
+     */
+    public function tryPanelPort(int $port, User $actor): array
+    {
+        $trial = $this->agent->call('panel.port_trial', ['port' => $port], 30);
+
+        $this->audit->record('server.panel_port_tried', null, ['port' => $port], $actor);
+
+        return $trial;
+    }
+
+    /**
+     * Make the port being tried the panel's: setup.sh writes every config
+     * for it in the background.
+     */
+    public function confirmPanelPort(int $port, User $actor): void
+    {
+        $this->agent->call('panel.port_confirm', [], 30);
+
+        $this->audit->record('server.panel_port_changed', null, ['port' => $port], $actor);
+    }
+
+    /**
+     * Close the port being tried; the panel keeps its port.
+     */
+    public function cancelPanelPort(User $actor): void
+    {
+        $this->agent->call('panel.port_cancel', [], 30);
+
+        $this->audit->record('server.panel_port_cancelled', null, [], $actor);
+    }
+
+    /**
      * Queue getting the hostname's Let's Encrypt certificate again for the
      * panel, phpMyAdmin and FTP.
      */

@@ -35,6 +35,9 @@ class ServerSettingsTest extends TestCase
 
         $this->actingAs($account)->get(route('admin.server-settings.index'))->assertForbidden();
         $this->actingAs($account)->put(route('admin.server-settings.hostname'), ['hostname' => 'server2.example.com'])->assertForbidden();
+        $this->actingAs($account)->post(route('admin.server-settings.port'), ['port' => 8443])->assertForbidden();
+        $this->actingAs($account)->post(route('admin.server-settings.port.confirm'))->assertForbidden();
+        $this->actingAs($account)->delete(route('admin.server-settings.port.cancel'))->assertForbidden();
         $this->actingAs($account)->put(route('admin.server-settings.timezone'), ['timezone' => 'UTC'])->assertForbidden();
         $this->actingAs($account)->post(route('admin.server-settings.hostname-certificate'))->assertForbidden();
         $this->actingAs($account)->put(route('admin.server-settings.php-uploads'), ['limit' => '64M', 'default' => '8M'])->assertForbidden();
@@ -119,6 +122,94 @@ class ServerSettingsTest extends TestCase
             ->assertSessionHasErrors(['hostname' => 'The hostname cannot be changed: shop.example.com is the domain of a website; choose a hostname no account uses']);
 
         $this->assertDatabaseMissing(AuditLog::class, ['action' => 'server.hostname_change_started']);
+    }
+
+    public function test_trying_a_panel_port_opens_it_through_the_agent()
+    {
+        $agent = $this->app->instance(AgentClient::class, new FakeAgentClient);
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($admin)
+            ->post(route('admin.server-settings.port'), ['port' => 8443])
+            ->assertSessionHasNoErrors()
+            ->assertInertiaFlash('toast.message', 'Port 8443 is open for 5 minutes. Open the panel through it to confirm.');
+
+        $this->assertSame([['method' => 'panel.port_trial', 'params' => ['port' => 8443]]], $agent->calls());
+        $this->assertDatabaseHas(AuditLog::class, ['action' => 'server.panel_port_tried', 'actor_id' => $admin->id]);
+    }
+
+    public function test_a_panel_port_outside_the_allowed_range_never_reaches_the_agent()
+    {
+        $this->mock(AgentClient::class, fn (MockInterface $mock) => $mock->shouldNotReceive('call'));
+        $admin = User::factory()->admin()->create();
+
+        foreach ([80, 443, 70000, 'abc'] as $port) {
+            $this->actingAs($admin)
+                ->post(route('admin.server-settings.port'), ['port' => $port])
+                ->assertSessionHasErrors('port');
+        }
+    }
+
+    public function test_what_the_agent_refuses_about_a_port_is_explained()
+    {
+        $this->mock(AgentClient::class, fn (MockInterface $mock) => $mock
+            ->shouldReceive('call')->once()
+            ->andThrow(new AgentException('port 9000 is already in use on this server', -32000)));
+
+        $this->actingAs(User::factory()->admin()->create())
+            ->post(route('admin.server-settings.port'), ['port' => 9000])
+            ->assertSessionHasErrors(['port' => 'The panel port cannot be changed: port 9000 is already in use on this server']);
+
+        $this->assertDatabaseMissing(AuditLog::class, ['action' => 'server.panel_port_tried']);
+    }
+
+    public function test_a_port_is_only_confirmed_through_itself()
+    {
+        $this->mock(AgentClient::class, function (MockInterface $mock) {
+            $mock->shouldReceive('call')->with('system.settings', [], 20)
+                ->andReturn(['port_trial' => ['port' => 8443, 'previous' => 2222, 'confirmed' => false]]);
+            $mock->shouldReceive('call')->with('panel.port_confirm', [], 30)->once()->andReturn(['confirmed' => true]);
+        });
+        $admin = User::factory()->admin()->create();
+        $path = route('admin.server-settings.port.confirm', absolute: false);
+
+        // Through the panel's own port, nothing proves 8443 can be reached.
+        $this->actingAs($admin)
+            ->post('https://panel.example.test:2222'.$path)
+            ->assertSessionHasErrors(['port' => 'Open the panel through port 8443 to confirm it: that shows the port can be reached.']);
+
+        $this->assertDatabaseMissing(AuditLog::class, ['action' => 'server.panel_port_changed']);
+
+        $this->actingAs($admin)
+            ->post('https://panel.example.test:8443'.$path)
+            ->assertSessionHasNoErrors()
+            ->assertInertiaFlash('toast.message', 'Moving the panel to port 8443. This takes a minute; follow it on this page.');
+
+        $this->assertDatabaseHas(AuditLog::class, ['action' => 'server.panel_port_changed', 'actor_id' => $admin->id]);
+    }
+
+    public function test_confirming_without_a_port_being_tried_is_refused()
+    {
+        $this->mock(AgentClient::class, fn (MockInterface $mock) => $mock
+            ->shouldReceive('call')->once()->with('system.settings', [], 20)->andReturn(['port_trial' => null]));
+
+        $this->actingAs(User::factory()->admin()->create())
+            ->post(route('admin.server-settings.port.confirm'))
+            ->assertSessionHasErrors(['port' => 'No port is being tried.']);
+    }
+
+    public function test_a_port_being_tried_can_be_closed_again()
+    {
+        $agent = $this->app->instance(AgentClient::class, new FakeAgentClient);
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($admin)
+            ->delete(route('admin.server-settings.port.cancel'))
+            ->assertSessionHasNoErrors()
+            ->assertInertiaFlash('toast.message', 'The port tried is closed again.');
+
+        $this->assertSame('panel.port_cancel', $agent->calls()[0]['method']);
+        $this->assertDatabaseHas(AuditLog::class, ['action' => 'server.panel_port_cancelled', 'actor_id' => $admin->id]);
     }
 
     public function test_changing_the_timezone_asks_the_agent_and_is_audited()

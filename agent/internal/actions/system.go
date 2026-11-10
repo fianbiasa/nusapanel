@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"rayxo/agent/internal/clock"
+	"rayxo/agent/internal/panelport"
 	"rayxo/agent/internal/reconfigure"
 	"rayxo/agent/internal/rpc"
 	"rayxo/agent/internal/validate"
@@ -24,8 +25,18 @@ type hostnameCertificates interface {
 // hostnameChanger runs setup.sh again for a new hostname.
 // reconfigure.Manager implements it.
 type hostnameChanger interface {
-	Start(ctx context.Context, hostname string) error
+	Start(ctx context.Context, request reconfigure.Request) error
 	Status(ctx context.Context) (*reconfigure.State, error)
+}
+
+// panelPorts moves the panel to another port. panelport.Manager
+// implements it.
+type panelPorts interface {
+	Current() int
+	Pending() (*panelport.Trial, error)
+	Open(ctx context.Context, port int) (panelport.Trial, error)
+	Confirm(ctx context.Context, start func(ctx context.Context, port int) error) (panelport.Trial, error)
+	Close(ctx context.Context) error
 }
 
 // serverClock is the server's timezone. clock.Manager implements it.
@@ -42,6 +53,12 @@ type serverSettings struct {
 	Timezone    string                         `json:"timezone"`
 	Certificate *webserver.HostnameCertificate `json:"certificate"`
 	Reconfigure *reconfigure.State             `json:"reconfigure"`
+	PanelPort   int                            `json:"panel_port"`
+	PortTrial   *panelport.Trial               `json:"port_trial"`
+}
+
+type portParams struct {
+	Port int `json:"port"`
 }
 
 type hostnameParams struct {
@@ -53,7 +70,7 @@ type timezoneParams struct {
 }
 
 // systemMethods returns the methods behind the panel's server settings.
-func systemMethods(certificates hostnameCertificates, serverTime serverClock, changer hostnameChanger) map[string]rpc.Method {
+func systemMethods(certificates hostnameCertificates, serverTime serverClock, changer hostnameChanger, ports panelPorts) map[string]rpc.Method {
 	return map[string]rpc.Method{
 		"system.settings": {Handler: func(ctx context.Context, raw json.RawMessage) (any, error) {
 			if err := rpc.DecodeParams(raw, &struct{}{}); err != nil {
@@ -73,8 +90,51 @@ func systemMethods(certificates hostnameCertificates, serverTime serverClock, ch
 			}
 
 			settings.Reconfigure = state
+			settings.PanelPort = ports.Current()
+
+			if settings.PortTrial, err = ports.Pending(); err != nil {
+				return nil, err
+			}
 
 			return settings, nil
+		}},
+		"panel.port_trial": {Handler: func(ctx context.Context, raw json.RawMessage) (any, error) {
+			var params portParams
+			if err := rpc.DecodeParams(raw, &params); err != nil {
+				return nil, err
+			}
+
+			trial, err := ports.Open(ctx, params.Port)
+			if err != nil {
+				return nil, portError(err, params.Port)
+			}
+
+			return trial, nil
+		}},
+		"panel.port_confirm": {Handler: func(ctx context.Context, raw json.RawMessage) (any, error) {
+			if err := rpc.DecodeParams(raw, &struct{}{}); err != nil {
+				return nil, err
+			}
+
+			trial, err := ports.Confirm(ctx, func(ctx context.Context, port int) error {
+				return changer.Start(ctx, reconfigure.Request{PanelPort: port})
+			})
+			if err != nil {
+				return nil, portError(err, 0)
+			}
+
+			return trial, nil
+		}},
+		"panel.port_cancel": {Handler: func(ctx context.Context, raw json.RawMessage) (any, error) {
+			if err := rpc.DecodeParams(raw, &struct{}{}); err != nil {
+				return nil, err
+			}
+
+			if err := ports.Close(ctx); err != nil {
+				return nil, err
+			}
+
+			return map[string]bool{"closed": true}, nil
 		}},
 		"system.change_hostname": {Handler: func(ctx context.Context, raw json.RawMessage) (any, error) {
 			var params hostnameParams
@@ -99,7 +159,7 @@ func systemMethods(certificates hostnameCertificates, serverTime serverClock, ch
 				return nil, rpc.Errorf(rpc.CodeActionFailed, "%s is the domain of a website; choose a hostname no account uses", params.Hostname)
 			}
 
-			if err := changer.Start(ctx, params.Hostname); err != nil {
+			if err := changer.Start(ctx, reconfigure.Request{Hostname: params.Hostname}); err != nil {
 				if errors.Is(err, reconfigure.ErrRunning) {
 					return nil, &rpc.Error{Code: rpc.CodeActionFailed, Message: "the hostname is already being changed", Data: map[string]string{"reason": "busy"}}
 				}
@@ -144,4 +204,33 @@ func systemMethods(certificates hostnameCertificates, serverTime serverClock, ch
 			return status, nil
 		}},
 	}
+}
+
+// portError explains why the panel cannot move to a port. A reason lets
+// the panel tell a busy server apart.
+func portError(err error, port int) error {
+	busy := func(message string) error {
+		return &rpc.Error{Code: rpc.CodeActionFailed, Message: message, Data: map[string]string{"reason": "busy"}}
+	}
+
+	switch {
+	case errors.Is(err, panelport.ErrReservedPort):
+		return rpc.Errorf(rpc.CodeInvalidParams, "invalid params: port %d is below 1024 or used by another service of this server", port)
+	case errors.Is(err, panelport.ErrSamePort):
+		return rpc.Errorf(rpc.CodeActionFailed, "the panel already uses port %d", port)
+	case errors.Is(err, panelport.ErrPortInUse):
+		return rpc.Errorf(rpc.CodeActionFailed, "port %d is already in use on this server", port)
+	case errors.Is(err, panelport.ErrConfigRejected):
+		return rpc.Errorf(rpc.CodeActionFailed, "Nginx refused the configuration for port %d", port)
+	case errors.Is(err, panelport.ErrNoTrial):
+		return rpc.Errorf(rpc.CodeActionFailed, "no port is being tried")
+	case errors.Is(err, panelport.ErrTrialExpired):
+		return rpc.Errorf(rpc.CodeActionFailed, "the port was closed again before it was confirmed; try it again")
+	case errors.Is(err, panelport.ErrTrialRunning):
+		return busy("another port is being tried; confirm or cancel it first")
+	case errors.Is(err, reconfigure.ErrRunning):
+		return busy("the server is already being configured; try again when it is done")
+	}
+
+	return err
 }

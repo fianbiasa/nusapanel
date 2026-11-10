@@ -1,5 +1,6 @@
 // Package reconfigure runs the installed setup.sh again to give the server
-// a new hostname. setup.sh restarts the agent on the way, so it runs in a
+// a new hostname or panel port. setup.sh restarts the agent on the way, so
+// it runs in a
 // systemd unit of its own (systemd-run), never as the agent's child; its
 // output and exit code go to files the agent reads back for the panel.
 package reconfigure
@@ -28,10 +29,11 @@ const (
 	failurePrefix = "GAGAL: "
 )
 
-// script runs setup.sh with the hostname, its output to the log and its exit
-// code to the exit file, both readable by root only. The values arrive as
-// positional parameters, never inside the script text.
-const script = `umask 077; "$1" --reconfigure --yes --hostname "$2" >"$3" 2>&1; echo $? >"$4"`
+// script runs setup.sh (the arguments after the log and exit file), its
+// output to the log and its exit code to the exit file, both readable by
+// root only. The values arrive as positional parameters, never inside the
+// script text.
+const script = `umask 077; log=$1; exit_file=$2; shift 2; "$@" >"$log" 2>&1; echo $? >"$exit_file"`
 
 // ErrRunning means setup.sh is still running from an earlier request.
 var ErrRunning = errors.New("setup.sh is already running")
@@ -63,9 +65,16 @@ func DefaultConfig() Config {
 	}
 }
 
+// Request is what setup.sh runs again for: a new hostname, a new panel
+// port, or both; the caller has validated them.
+type Request struct {
+	Hostname  string `json:"hostname,omitempty"`
+	PanelPort int    `json:"panel_port,omitempty"`
+}
+
 // State is the latest run of setup.sh.
 type State struct {
-	Hostname  string    `json:"hostname"`
+	Request
 	StartedAt time.Time `json:"started_at"`
 	Running   bool      `json:"running"`
 	// ExitCode is nil while setup.sh runs, or when its end was not recorded.
@@ -86,9 +95,9 @@ func New(cfg Config) *Manager {
 	return &Manager{cfg: cfg}
 }
 
-// Start runs setup.sh for hostname, which the caller has validated, in the
-// background. It refuses while an earlier run is still going (ErrRunning).
-func (m *Manager) Start(ctx context.Context, hostname string) error {
+// Start runs setup.sh for request in the background. It refuses while an
+// earlier run is still going (ErrRunning).
+func (m *Manager) Start(ctx context.Context, request Request) error {
 	if m.running(ctx) {
 		return ErrRunning
 	}
@@ -99,7 +108,7 @@ func (m *Manager) Start(ctx context.Context, hostname string) error {
 		}
 	}
 
-	state, err := json.Marshal(State{Hostname: hostname, StartedAt: m.now().UTC()})
+	state, err := json.Marshal(State{Request: request, StartedAt: m.now().UTC()})
 	if err != nil {
 		return err
 	}
@@ -108,9 +117,20 @@ func (m *Manager) Start(ctx context.Context, hostname string) error {
 		return fmt.Errorf("write %s: %w", m.cfg.StateFile, err)
 	}
 
-	_, err = m.cfg.Run(ctx, systemdRunProgram,
-		"--unit="+m.cfg.Unit, "--collect", "--quiet", "--description=RAYXO: change the hostname",
-		"/bin/sh", "-c", script, m.cfg.Unit, m.cfg.Script, hostname, m.cfg.LogFile, m.exitFile())
+	args := []string{
+		"--unit=" + m.cfg.Unit, "--collect", "--quiet", "--description=RAYXO: configure the server again",
+		"/bin/sh", "-c", script, m.cfg.Unit, m.cfg.LogFile, m.exitFile(), m.cfg.Script, "--reconfigure", "--yes",
+	}
+
+	if request.Hostname != "" {
+		args = append(args, "--hostname", request.Hostname)
+	}
+
+	if request.PanelPort != 0 {
+		args = append(args, "--panel-port", strconv.Itoa(request.PanelPort))
+	}
+
+	_, err = m.cfg.Run(ctx, systemdRunProgram, args...)
 	if err != nil {
 		return fmt.Errorf("start setup.sh: %w", err)
 	}
@@ -150,6 +170,11 @@ func (m *Manager) Status(ctx context.Context) (*State, error) {
 	}
 
 	return &state, nil
+}
+
+// Running reports whether setup.sh is still running.
+func (m *Manager) Running(ctx context.Context) bool {
+	return m.running(ctx)
 }
 
 // running reports whether setup.sh's unit is still active.

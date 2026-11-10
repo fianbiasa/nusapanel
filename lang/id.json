@@ -235,5 +235,11 @@
     "The hostname must be a fully qualified name, such as server1.example.com.": "Hostname harus berupa nama lengkap, misalnya server1.domainmu.com.",
     "The hostname is already being changed.": "Hostname sedang diganti.",
     "The hostname cannot be changed: :detail": "Hostname tidak bisa diganti: :detail",
-    "Changing the hostname to :hostname. This takes a few minutes; follow it on this page.": "Mengganti hostname ke :hostname. Ini butuh beberapa menit; pantau di halaman ini."
+    "Changing the hostname to :hostname. This takes a few minutes; follow it on this page.": "Mengganti hostname ke :hostname. Ini butuh beberapa menit; pantau di halaman ini.",
+    "Port :port is open for 5 minutes. Open the panel through it to confirm.": "Port :port dibuka selama 5 menit. Buka panel lewat port itu untuk mengonfirmasi.",
+    "No port is being tried.": "Tidak ada port yang sedang dicoba.",
+    "Open the panel through port :port to confirm it: that shows the port can be reached.": "Buka panel lewat port :port untuk mengonfirmasinya: itu bukti port tersebut bisa dijangkau.",
+    "Moving the panel to port :port. This takes a minute; follow it on this page.": "Memindahkan panel ke port :port. Ini butuh sekitar semenit; pantau di halaman ini.",
+    "The port tried is closed again.": "Port yang dicoba sudah ditutup lagi.",
+    "The panel port cannot be changed: :detail": "Port panel tidak bisa diganti: :detail"
 }

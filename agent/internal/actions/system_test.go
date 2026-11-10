@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"rayxo/agent/internal/clock"
+	"rayxo/agent/internal/panelport"
 	"rayxo/agent/internal/reconfigure"
 	"rayxo/agent/internal/rpc"
 	"rayxo/agent/internal/webserver"
@@ -27,18 +28,58 @@ type fakeHostname struct {
 	startErr  error
 	started   []string
 	state     *reconfigure.State
+	ports     []reconfigure.Request
+	trial     *panelport.Trial
+	openErr   error
+	closed    int
+}
+
+func (f *fakeHostname) Current() int { return 2222 }
+
+func (f *fakeHostname) Pending() (*panelport.Trial, error) { return f.trial, nil }
+
+func (f *fakeHostname) Open(_ context.Context, port int) (panelport.Trial, error) {
+	if f.openErr != nil {
+		return panelport.Trial{}, f.openErr
+	}
+
+	f.trial = &panelport.Trial{Port: port, Previous: 2222}
+
+	return *f.trial, nil
+}
+
+func (f *fakeHostname) Confirm(ctx context.Context, start func(ctx context.Context, port int) error) (panelport.Trial, error) {
+	if f.trial == nil {
+		return panelport.Trial{}, panelport.ErrNoTrial
+	}
+
+	if err := start(ctx, f.trial.Port); err != nil {
+		return panelport.Trial{}, err
+	}
+
+	f.trial.Confirmed = true
+
+	return *f.trial, nil
+}
+
+func (f *fakeHostname) Close(context.Context) error {
+	f.closed++
+	f.trial = nil
+
+	return nil
 }
 
 func (f *fakeHostname) HasWebsite(domain string) (bool, error) {
 	return slices.Contains(f.websites, domain), nil
 }
 
-func (f *fakeHostname) Start(_ context.Context, hostname string) error {
+func (f *fakeHostname) Start(_ context.Context, request reconfigure.Request) error {
 	if f.startErr != nil {
 		return f.startErr
 	}
 
-	f.started = append(f.started, hostname)
+	f.started = append(f.started, request.Hostname)
+	f.ports = append(f.ports, request)
 
 	return nil
 }
@@ -85,7 +126,7 @@ func callSystem(t *testing.T, fake *fakeHostname, method string, params any) (ma
 
 	raw, _ := json.Marshal(params)
 
-	result, err := systemMethods(fake, fake, fake)[method].Handler(context.Background(), raw)
+	result, err := systemMethods(fake, fake, fake, fake)[method].Handler(context.Background(), raw)
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +145,7 @@ func TestSystemMethodsAreRegistered(t *testing.T) {
 	registry := rpc.NewRegistry()
 	Register(registry, Config{})
 
-	for _, name := range []string{"system.settings", "system.set_timezone", "ssl.issue_hostname", "system.change_hostname"} {
+	for _, name := range []string{"system.settings", "system.set_timezone", "ssl.issue_hostname", "system.change_hostname", "panel.port_trial", "panel.port_confirm", "panel.port_cancel"} {
 		if !slices.Contains(registry.Names(), name) {
 			t.Errorf("%s is not registered", name)
 		}
@@ -217,7 +258,7 @@ func TestChangeHostnameStartsSetupForAFreeName(t *testing.T) {
 
 func TestSystemSettingsReportTheLatestHostnameChange(t *testing.T) {
 	code := 1
-	fake := &fakeHostname{timezone: "UTC", state: &reconfigure.State{Hostname: "server2.example.net", ExitCode: &code, Error: "A record belum ada", Log: []string{"GAGAL: A record belum ada"}}}
+	fake := &fakeHostname{timezone: "UTC", state: &reconfigure.State{Request: reconfigure.Request{Hostname: "server2.example.net"}, ExitCode: &code, Error: "A record belum ada", Log: []string{"GAGAL: A record belum ada"}}}
 
 	settings, err := callSystem(t, fake, "system.settings", map[string]any{})
 	if err != nil {
@@ -227,5 +268,62 @@ func TestSystemSettingsReportTheLatestHostnameChange(t *testing.T) {
 	change, _ := settings["reconfigure"].(map[string]any)
 	if change["hostname"] != "server2.example.net" || change["exit_code"] != float64(1) || change["error"] != "A record belum ada" {
 		t.Fatalf("reconfigure = %v", settings["reconfigure"])
+	}
+}
+
+func TestPanelPortIsTriedConfirmedThroughSetupAndCancelled(t *testing.T) {
+	fake := &fakeHostname{}
+
+	trial, err := callSystem(t, fake, "panel.port_trial", map[string]any{"port": 8443})
+	if err != nil || trial["port"] != float64(8443) {
+		t.Fatalf("trial = %v, %v", trial, err)
+	}
+
+	settings, _ := callSystem(t, fake, "system.settings", map[string]any{})
+	if settings["panel_port"] != float64(2222) || settings["port_trial"].(map[string]any)["port"] != float64(8443) {
+		t.Fatalf("settings = %v", settings)
+	}
+
+	if _, err := callSystem(t, fake, "panel.port_confirm", map[string]any{}); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(fake.ports) != 1 || fake.ports[0] != (reconfigure.Request{PanelPort: 8443}) {
+		t.Fatalf("setup.sh started with %+v, want only the panel port", fake.ports)
+	}
+
+	if _, err := callSystem(t, fake, "panel.port_cancel", map[string]any{}); err != nil || fake.closed != 1 {
+		t.Fatalf("cancel: %v, closed %d", err, fake.closed)
+	}
+}
+
+func TestPanelPortRefusalsAreExplained(t *testing.T) {
+	for _, tc := range []struct {
+		err    error
+		code   int
+		want   string
+		reason string
+	}{
+		{panelport.ErrReservedPort, rpc.CodeInvalidParams, "port 3306 is below 1024 or used by another service", ""},
+		{panelport.ErrPortInUse, rpc.CodeActionFailed, "port 3306 is already in use", ""},
+		{panelport.ErrTrialRunning, rpc.CodeActionFailed, "another port is being tried", "busy"},
+	} {
+		_, err := callSystem(t, &fakeHostname{openErr: tc.err}, "panel.port_trial", map[string]any{"port": 3306})
+
+		var rpcErr *rpc.Error
+		if !errors.As(err, &rpcErr) || rpcErr.Code != tc.code || !strings.Contains(rpcErr.Message, tc.want) {
+			t.Errorf("%v: err = %v, want %q", tc.err, err, tc.want)
+		}
+
+		if tc.reason != "" && (rpcErr == nil || rpcErr.Data == nil || rpcErr.Data.(map[string]string)["reason"] != tc.reason) {
+			t.Errorf("%v: no reason %q", tc.err, tc.reason)
+		}
+	}
+
+	_, err := callSystem(t, &fakeHostname{}, "panel.port_confirm", map[string]any{})
+
+	var rpcErr *rpc.Error
+	if !errors.As(err, &rpcErr) || !strings.Contains(rpcErr.Message, "no port is being tried") {
+		t.Fatalf("confirm without a trial: err = %v", err)
 	}
 }

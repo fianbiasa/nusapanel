@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Agent\AgentException;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\TryPanelPortRequest;
 use App\Http\Requests\Admin\UpdatePhpUploadLimitsRequest;
 use App\Http\Requests\Admin\UpdateServerHostnameRequest;
 use App\Http\Requests\Admin\UpdateServerTimezoneRequest;
@@ -103,6 +104,73 @@ class ServerSettingController extends Controller
     }
 
     /**
+     * Open a port for the panel next to its own, to be confirmed through it.
+     *
+     * @throws ValidationException
+     */
+    public function tryPort(TryPanelPortRequest $request): RedirectResponse
+    {
+        $port = $request->integer('port');
+
+        try {
+            $this->settings->tryPanelPort($port, $request->user());
+        } catch (AgentException $exception) {
+            throw $this->portError($exception);
+        }
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Port :port is open for 5 minutes. Open the panel through it to confirm.', ['port' => $port])]);
+
+        return back();
+    }
+
+    /**
+     * Make the port being tried the panel's. Only a request that came in
+     * through that port may, since it proves the port can be reached.
+     *
+     * @throws ValidationException
+     */
+    public function confirmPort(Request $request): RedirectResponse
+    {
+        $trial = $this->portTrial();
+
+        if ($trial === null) {
+            throw ValidationException::withMessages(['port' => __('No port is being tried.')]);
+        }
+
+        if ($request->getPort() !== $trial['port']) {
+            throw ValidationException::withMessages(['port' => __('Open the panel through port :port to confirm it: that shows the port can be reached.', ['port' => $trial['port']])]);
+        }
+
+        try {
+            $this->settings->confirmPanelPort($trial['port'], $request->user());
+        } catch (AgentException $exception) {
+            throw $this->portError($exception);
+        }
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Moving the panel to port :port. This takes a minute; follow it on this page.', ['port' => $trial['port']])]);
+
+        return back();
+    }
+
+    /**
+     * Close the port being tried.
+     *
+     * @throws ValidationException
+     */
+    public function cancelPort(Request $request): RedirectResponse
+    {
+        try {
+            $this->settings->cancelPanelPort($request->user());
+        } catch (AgentException $exception) {
+            throw $this->portError($exception);
+        }
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('The port tried is closed again.')]);
+
+        return back();
+    }
+
+    /**
      * Get the hostname's Let's Encrypt certificate again, in the background.
      *
      * @throws ValidationException
@@ -141,5 +209,34 @@ class ServerSettingController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => $message]);
 
         return back();
+    }
+
+    /**
+     * The port being tried, as the agent reports it.
+     *
+     * @return array{port: int, confirmed: bool}|null
+     */
+    private function portTrial(): ?array
+    {
+        try {
+            $trial = $this->settings->serverState()['port_trial'] ?? null;
+        } catch (AgentException $exception) {
+            throw $this->portError($exception);
+        }
+
+        if (! is_array($trial) || ! is_int($trial['port'] ?? null)) {
+            return null;
+        }
+
+        return ['port' => $trial['port'], 'confirmed' => (bool) ($trial['confirmed'] ?? false)];
+    }
+
+    private function portError(AgentException $exception): ValidationException
+    {
+        if ($exception->reason === null && $exception->getCode() !== -32000 && $exception->getCode() !== -32602) {
+            report($exception);
+        }
+
+        return ValidationException::withMessages(['port' => __('The panel port cannot be changed: :detail', ['detail' => $exception->getMessage()])]);
     }
 }

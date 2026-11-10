@@ -26,12 +26,19 @@ readonly PHP_BIN="/usr/bin/php$PHP_VERSION"
 readonly DEFAULT_SITE_PHP_VERSIONS="7.4 8.0 8.1 8.2 8.3 8.4 8.5"
 readonly SITE_PHP_PACKAGES="fpm cli common mysql mbstring xml curl intl zip bcmath opcache readline gd imagick soap"
 readonly PANEL_USER="rayxo"
-readonly PANEL_PORT="2222"
+# The panel's port: 2222 unless chosen otherwise (--panel-port, or from the
+# panel), remembered in PANEL_PORT_FILE for later runs.
+readonly DEFAULT_PANEL_PORT="2222"
+PANEL_PORT="$DEFAULT_PANEL_PORT"
 readonly INSTALL_DIR="/usr/local/rayxo"
 readonly CONFIG_DIR="/etc/rayxo"
 readonly DATA_DIR="/var/lib/rayxo"
 readonly LOG_DIR="/var/log/rayxo"
 readonly ENV_FILE="$CONFIG_DIR/panel.env"
+readonly PANEL_PORT_FILE="$CONFIG_DIR/panel-port"
+# Left by the panel while a new port is tried; configure_nginx removes them.
+readonly PANEL_PORT_TRIAL_SITE="/etc/nginx/sites-enabled/rayxo-panel-trial.conf"
+readonly PANEL_PORT_TRIAL_STATE="$DATA_DIR/panel-port-trial.json"
 readonly AGENT_SOCKET="/run/rayxo/agent.sock"
 readonly INSTALL_LOG="/var/log/rayxo-install.log"
 readonly ACME_DIR="/var/www/rayxo-acme"
@@ -83,6 +90,7 @@ skip_dns_check=0
 requested_version=""
 requested_php_versions=""
 reconfigure=0
+requested_panel_port=""
 
 # Filled in while installing.
 arch=""
@@ -94,6 +102,7 @@ db_password=""
 admin_password=""
 stale_release=""
 previous_hostname=""
+previous_panel_port=""
 ssl_status=""
 dkim_public_key=""
 dns_report_lines=()
@@ -147,6 +156,8 @@ Lainnya:
   --php-versions LIST   versi PHP untuk website, misalnya "8.2 8.3 8.4" (default saat instal
                         pertama: 7.4 8.0 8.1 8.2 8.3 8.4 8.5); 8.4 selalu ikut, dan versi yang
                         sudah terpasang tidak dihapus
+  --panel-port PORT     port panel (default: 2222, atau port yang dipilih sebelumnya);
+                        1024-65535, bukan port layanan lain di server ini
   --reconfigure         jalankan ulang semua langkah konfigurasi dengan rilis yang sudah
                         terpasang, tanpa mengunduh paket atau memasang paket sistem;
                         dipakai panel untuk mengganti hostname (bersama --hostname)
@@ -172,6 +183,7 @@ parse_args() {
             --hostname) need_value "$1" "${2:-}"; server_hostname="$2"; shift 2 ;;
             -y | --yes) assume_yes=1; shift ;;
             --reconfigure) reconfigure=1; shift ;;
+            --panel-port) need_value "$1" "${2:-}"; requested_panel_port="$2"; shift 2 ;;
             --force) force=1; shift ;;
             --public-ip) need_value "$1" "${2:-}"; public_ip="$2"; public_ip_given=1; shift 2 ;;
             --skip-dns-check) skip_dns_check=1; shift ;;
@@ -257,8 +269,8 @@ env_value() {
 }
 
 # Replace KEY's value when it is still the one setup.sh wrote for the
-# previous hostname; a value someone changed by hand is kept.
-follow_hostname() {
+# previous hostname or port; a value someone changed by hand is kept.
+follow_env_value() {
     if [[ "$(env_value "$1")" == "$2" ]]; then
         set_env_value "$1" "$3"
     fi
@@ -455,6 +467,8 @@ preflight() {
     # change of hostname (--hostname).
     previous_hostname="$(head -n 1 /etc/mailname 2>/dev/null || true)"
 
+    resolve_panel_port
+
     if [[ -z "$server_hostname" ]]; then
         server_hostname="$(hostname -f 2>/dev/null || hostname)"
     fi
@@ -640,6 +654,32 @@ apply_hostname() {
 # hostnames: only letters, digits, dots and hyphens.
 rename_in_hosts() {
     sed -i -E "s/(^|[[:space:]])${1//./\\.}([[:space:]]|$)/\1$2\2/g" /etc/hosts
+}
+
+# The panel's port: --panel-port, else the one chosen before, else 2222. A
+# new port may not be another service's on this server, nor in use, except
+# by Nginx while the panel tries it.
+resolve_panel_port() {
+    previous_panel_port="$(head -n 1 "$PANEL_PORT_FILE" 2>/dev/null || true)"
+    [[ "$previous_panel_port" =~ ^[0-9]+$ ]] || previous_panel_port="$DEFAULT_PANEL_PORT"
+    PANEL_PORT="${requested_panel_port:-$previous_panel_port}"
+
+    [[ "$PANEL_PORT" =~ ^[0-9]+$ ]] && ((PANEL_PORT >= 1024 && PANEL_PORT <= 65535)) ||
+        die "port panel harus angka 1024-65535: $PANEL_PORT"
+
+    local passive_low passive_high
+    read -r passive_low passive_high <<<"$FTP_PASSIVE_PORTS"
+    case "$PANEL_PORT" in
+        3306 | 8080 | 8891) die "port $PANEL_PORT dipakai layanan lain di server ini; pilih port lain" ;;
+    esac
+    if ((PANEL_PORT >= passive_low && PANEL_PORT <= passive_high)); then
+        die "port $PANEL_PORT termasuk port passive FTP ($passive_low-$passive_high); pilih port lain"
+    fi
+
+    if [[ "$PANEL_PORT" != "$previous_panel_port" ]] &&
+        ss -Hltnp "sport = :$PANEL_PORT" 2>/dev/null | grep -v '"nginx"' | grep -q .; then
+        die "port $PANEL_PORT sudah dipakai program lain; pilih port lain"
+    fi
 }
 
 # --reconfigure: the release that is installed is the one to configure.
@@ -979,11 +1019,12 @@ write_env() {
         add_phpmyadmin_env
         # Installs from before the file manager.
         add_env_value RAYXO_TRANSFER_DIR "$DATA_DIR/transfer"
-        # The panel's own addresses follow a new hostname.
-        if [[ -n "$previous_hostname" && "$previous_hostname" != "$server_hostname" ]]; then
-            follow_hostname APP_URL "https://$previous_hostname:$PANEL_PORT" "https://$server_hostname:$PANEL_PORT"
-            follow_hostname PHPMYADMIN_URL "https://$previous_hostname/phpmyadmin/" "https://$server_hostname/phpmyadmin/"
-            follow_hostname MAIL_FROM_ADDRESS "rayxo@$previous_hostname" "rayxo@$server_hostname"
+        # The panel's own addresses follow a new hostname or port.
+        local old_host="${previous_hostname:-$server_hostname}"
+        follow_env_value APP_URL "https://$old_host:$previous_panel_port" "https://$server_hostname:$PANEL_PORT"
+        if [[ "$old_host" != "$server_hostname" ]]; then
+            follow_env_value PHPMYADMIN_URL "https://$old_host/phpmyadmin/" "https://$server_hostname/phpmyadmin/"
+            follow_env_value MAIL_FROM_ADDRESS "rayxo@$old_host" "rayxo@$server_hostname"
         fi
         return
     fi
@@ -1320,9 +1361,13 @@ configure_nginx() {
 
     ln -sfn "$site" /etc/nginx/sites-enabled/rayxo.conf
     rm -f /etc/nginx/sites-enabled/default
+    # A port tried from the panel is now the panel's port, or given up.
+    rm -f "$PANEL_PORT_TRIAL_SITE"
 
     quietly nginx -t
     systemctl reload nginx
+    printf '%s\n' "$PANEL_PORT" >"$PANEL_PORT_FILE"
+    rm -f "$PANEL_PORT_TRIAL_STATE"
     info "Panel dilayani di port $PANEL_PORT"
 }
 

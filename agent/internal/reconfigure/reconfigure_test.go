@@ -51,13 +51,14 @@ func TestStartRunsSetupInItsOwnUnit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := manager.Start(context.Background(), "server2.example.net"); err != nil {
+	if err := manager.Start(context.Background(), Request{Hostname: "server2.example.net", PanelPort: 2223}); err != nil {
 		t.Fatal(err)
 	}
 
 	want := []string{
-		systemdRunProgram, "--unit=rayxo-reconfigure", "--collect", "--quiet", "--description=RAYXO: change the hostname",
-		"/bin/sh", "-c", script, "rayxo-reconfigure", cfg.Script, "server2.example.net", cfg.LogFile, cfg.StateFile + ".exit",
+		systemdRunProgram, "--unit=rayxo-reconfigure", "--collect", "--quiet", "--description=RAYXO: configure the server again",
+		"/bin/sh", "-c", script, "rayxo-reconfigure", cfg.LogFile, cfg.StateFile + ".exit",
+		cfg.Script, "--reconfigure", "--yes", "--hostname", "server2.example.net", "--panel-port", "2223",
 	}
 	if got := systemd.calls[len(systemd.calls)-1]; !slices.Equal(got, want) {
 		t.Fatalf("systemd-run call =\n  %q\nwant\n  %q", got, want)
@@ -74,9 +75,22 @@ func TestStartRunsSetupInItsOwnUnit(t *testing.T) {
 	systemd.active = true
 
 	state, err := manager.Status(context.Background())
-	if err != nil || state == nil || !state.Running || state.Hostname != "server2.example.net" ||
+	if err != nil || state == nil || !state.Running || state.Hostname != "server2.example.net" || state.PanelPort != 2223 ||
 		!state.StartedAt.Equal(time.Date(2026, 11, 11, 8, 0, 0, 0, time.UTC)) || state.ExitCode != nil {
 		t.Fatalf("status while running = %+v, %v", state, err)
+	}
+}
+
+func TestStartPassesOnlyWhatChanges(t *testing.T) {
+	manager, systemd, cfg := newManager(t)
+
+	if err := manager.Start(context.Background(), Request{PanelPort: 8443}); err != nil {
+		t.Fatal(err)
+	}
+
+	call := systemd.calls[len(systemd.calls)-1]
+	if got := call[len(call)-5:]; !slices.Equal(got, []string{cfg.Script, "--reconfigure", "--yes", "--panel-port", "8443"}) {
+		t.Fatalf("setup.sh arguments = %q", got)
 	}
 }
 
@@ -84,7 +98,7 @@ func TestStartRefusesWhileSetupRuns(t *testing.T) {
 	manager, systemd, _ := newManager(t)
 	systemd.active = true
 
-	if err := manager.Start(context.Background(), "server2.example.net"); !errors.Is(err, ErrRunning) {
+	if err := manager.Start(context.Background(), Request{Hostname: "server2.example.net"}); !errors.Is(err, ErrRunning) {
 		t.Fatalf("err = %v, want ErrRunning", err)
 	}
 
@@ -102,7 +116,7 @@ func TestStatusReportsWhySetupStopped(t *testing.T) {
 		t.Fatalf("status before any run = %+v, %v; want nil", state, err)
 	}
 
-	if err := manager.Start(context.Background(), "server2.example.net"); err != nil {
+	if err := manager.Start(context.Background(), Request{Hostname: "server2.example.net"}); err != nil {
 		t.Fatal(err)
 	}
 

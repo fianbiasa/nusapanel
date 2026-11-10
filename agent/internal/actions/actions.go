@@ -9,6 +9,7 @@ import (
 	"rayxo/agent/internal/clock"
 	"rayxo/agent/internal/database"
 	"rayxo/agent/internal/files"
+	"rayxo/agent/internal/panelport"
 	"rayxo/agent/internal/quota"
 	"rayxo/agent/internal/reconfigure"
 	"rayxo/agent/internal/rpc"
@@ -24,6 +25,10 @@ type Config struct {
 	Files FilesConfig
 	// Services also runs the watchdog; nil makes one for real systemd.
 	Services *services.Manager
+	// Reconfigure runs setup.sh again, and PanelPort tries panel ports;
+	// rayxod also watches them. nil makes them for the real server.
+	Reconfigure *reconfigure.Manager
+	PanelPort   *panelport.Manager
 }
 
 // Register adds all agent methods to registry.
@@ -47,7 +52,17 @@ func Register(registry *rpc.Registry, config Config) {
 		registry.Register(name, method)
 	}
 
-	for name, method := range systemMethods(web, clock.New(clock.DefaultConfig()), reconfigure.New(reconfigure.DefaultConfig())) {
+	changer := config.Reconfigure
+	if changer == nil {
+		changer = reconfigure.New(reconfigure.DefaultConfig())
+	}
+
+	ports := config.PanelPort
+	if ports == nil {
+		ports = panelport.New(panelport.DefaultConfig())
+	}
+
+	for name, method := range systemMethods(web, clock.New(clock.DefaultConfig()), changer, ports) {
 		registry.Register(name, method)
 	}
 
