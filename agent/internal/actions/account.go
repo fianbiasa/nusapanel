@@ -1,11 +1,13 @@
 package actions
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
+	"regexp"
 	"strings"
 
 	"nusapanel/agent/internal/quota"
@@ -28,7 +30,13 @@ const (
 	// the domains inside it but cannot list the home.
 	accessGroup   = "nusa-access"
 	webServerUser = "www-data"
+	// sftpGroup holds every hosting account. sshd gives its members SFTP
+	// only, in their home: no shell, no forwarding (setup.sh configures it).
+	sftpGroup = "nusa-sftp"
 )
+
+// passwordHashPattern is a SHA512-CRYPT hash as chpasswd -e takes it.
+var passwordHashPattern = regexp.MustCompile(`^\$6\$(rounds=[0-9]{4,9}\$)?[./0-9A-Za-z]{1,16}\$[./0-9A-Za-z]{86}$`)
 
 // homeDirs are the directories inside every home, owned by the account.
 var homeDirs = []sysuser.Dir{
@@ -57,6 +65,9 @@ type accountSystem interface {
 	PrepareHome(ctx context.Context, home sysuser.Home) error
 	// SetCrontab installs the user's crontab, or removes it when empty.
 	SetCrontab(ctx context.Context, name string, crontab []byte) error
+	// SetPassword sets the user's password hash as it is, such as "!" for
+	// no password.
+	SetPassword(ctx context.Context, name, hash string) error
 }
 
 // accountWeb is what the account actions need from the web server side:
@@ -118,12 +129,13 @@ func accountMethods(system accountSystem, web accountWeb, quotas accountQuota, d
 	accounts := accountActions{system: system, web: web, quotas: quotas, databases: databases}
 
 	return map[string]rpc.Method{
-		"account.create":    {Handler: accounts.create, LockKey: accountLockKey},
-		"account.suspend":   {Handler: accounts.suspend, LockKey: accountLockKey},
-		"account.unsuspend": {Handler: accounts.unsuspend, LockKey: accountLockKey},
-		"account.delete":    {Handler: accounts.remove, LockKey: accountLockKey},
-		"account.set_quota": {Handler: accounts.setQuota, LockKey: setQuotaLockKey},
-		"quota.report":      {Handler: accounts.quotaReport},
+		"account.create":       {Handler: accounts.create, LockKey: accountLockKey},
+		"account.suspend":      {Handler: accounts.suspend, LockKey: accountLockKey},
+		"account.unsuspend":    {Handler: accounts.unsuspend, LockKey: accountLockKey},
+		"account.delete":       {Handler: accounts.remove, LockKey: accountLockKey},
+		"account.set_quota":    {Handler: accounts.setQuota, LockKey: setQuotaLockKey},
+		"account.set_password": {Handler: accounts.setPassword, LockKey: webLockKey[setPasswordParams]},
+		"quota.report":         {Handler: accounts.quotaReport},
 	}
 }
 
@@ -186,6 +198,10 @@ func (a accountActions) create(ctx context.Context, raw json.RawMessage) (any, e
 		Dirs:      homeDirs,
 	})
 	if err != nil {
+		return nil, systemError(err)
+	}
+
+	if _, err := a.system.EnsureGroupMember(ctx, sftpGroup, user.Name); err != nil {
 		return nil, systemError(err)
 	}
 
@@ -391,4 +407,54 @@ func systemError(err error) error {
 	}
 
 	return err
+}
+
+// setPasswordParams are the params of account.set_password. PasswordHash is
+// a SHA512-CRYPT hash, so the password itself never reaches the agent, or ""
+// for no password.
+type setPasswordParams struct {
+	Username     string `json:"username"`
+	PasswordHash string `json:"password_hash"`
+}
+
+func (p setPasswordParams) account() string { return p.Username }
+
+func (p setPasswordParams) validate() error {
+	if err := validate.Username(p.Username); err != nil {
+		return err
+	}
+
+	if p.PasswordHash != "" && !passwordHashPattern.MatchString(p.PasswordHash) {
+		return errors.New("password_hash must be a SHA512-CRYPT hash ($6$salt$hash) or empty")
+	}
+
+	return nil
+}
+
+// setPassword implements account.set_password: the account's Linux password
+// for SFTP becomes the given hash, or none (locked) for an empty one. The
+// account joins the SFTP group, which accounts created before SFTP were not
+// in. A suspended account stays expired, so it still cannot log in.
+func (a accountActions) setPassword(ctx context.Context, raw json.RawMessage) (any, error) {
+	params, err := decodeWebParams[setPasswordParams](raw)
+	if err != nil {
+		return nil, err
+	}
+
+	user, err := a.requireAccount(ctx, params.Username)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := a.system.EnsureGroupMember(ctx, sftpGroup, user.Name); err != nil {
+		return nil, systemError(err)
+	}
+
+	hash := cmp.Or(params.PasswordHash, "!")
+
+	if err := a.system.SetPassword(ctx, user.Name, hash); err != nil {
+		return nil, systemError(err)
+	}
+
+	return struct{}{}, nil
 }

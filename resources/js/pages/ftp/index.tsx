@@ -26,7 +26,12 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
+import { formatDateTime } from '@/lib/format';
 import { destroy, store, update } from '@/routes/ftp';
+import {
+    destroy as removeSftpPassword,
+    update as setSftpPassword,
+} from '@/routes/sftp-password';
 import type { AccountLimits } from '@/types';
 
 type Status = 'pending' | 'active' | 'failed';
@@ -48,6 +53,15 @@ type Props = {
     max_directory: number;
     limits: AccountLimits;
     connection: { host: string; port: number };
+    sftp: SftpState;
+};
+
+type SftpState = {
+    username: string;
+    port: number;
+    password_set_at: string | null;
+    pending: boolean;
+    error: string | null;
 };
 
 type Action =
@@ -66,6 +80,7 @@ export default function FtpIndex({
     max_directory,
     limits,
     connection,
+    sftp,
 }: Props) {
     const [action, setAction] = useState<Action | null>(null);
     const [dialogOpen, setDialogOpen] = useState(false);
@@ -77,13 +92,14 @@ export default function FtpIndex({
 
     const closeDialog = () => setDialogOpen(false);
 
-    // Refresh the list while the agent is still preparing folders.
-    const hasPendingLogins = ftp_accounts.some(
-        (account) => account.status === 'pending',
-    );
+    // Refresh while the agent is still preparing folders or setting the
+    // SFTP password.
+    const hasPendingLogins =
+        sftp.pending ||
+        ftp_accounts.some((account) => account.status === 'pending');
     const { start, stop } = usePoll(
         3000,
-        { only: ['ftp_accounts', 'limits'] },
+        { only: ['ftp_accounts', 'limits', 'sftp'] },
         { autoStart: false },
     );
 
@@ -101,11 +117,11 @@ export default function FtpIndex({
 
     return (
         <>
-            <Head title="FTP" />
+            <Head title="FTP & SFTP" />
 
             <PageHeader
-                title="FTP"
-                description="Akun FTP untuk mengunggah file ke website. Setiap akun hanya bisa membuka foldernya sendiri."
+                title="FTP & SFTP"
+                description="Akun FTP untuk mengunggah file ke website, yang masing-masing hanya bisa membuka foldernya sendiri, dan SFTP untuk akun utama kamu."
             />
 
             <Panel
@@ -261,6 +277,8 @@ export default function FtpIndex({
                     </dd>
                 </dl>
             </Panel>
+
+            <SftpPanel sftp={sftp} host={connection.host} />
 
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
                 <DialogContent className="rounded-2xl">
@@ -546,5 +564,114 @@ function EditFtpAccountForm({
                 </>
             )}
         </Form>
+    );
+}
+
+/**
+ * SFTP for the account's own Linux user: where to connect, and its password,
+ * which is separate from the panel password.
+ */
+function SftpPanel({ sftp, host }: { sftp: SftpState; host: string }) {
+    const [password, setPassword] = useState('');
+
+    return (
+        <Panel
+            title="SFTP (akun utama)"
+            description="Akses semua file di home kamu lewat SFTP, dengan password khusus SFTP (berbeda dari password panel)."
+        >
+            <div className="grid gap-6 lg:grid-cols-2">
+                <dl className="grid content-start gap-x-8 gap-y-3 text-sm sm:grid-cols-[auto_1fr]">
+                    <dt className="text-muted-foreground">Host</dt>
+                    <dd className="font-mono font-semibold break-all">
+                        {host}
+                    </dd>
+                    <dt className="text-muted-foreground">Port</dt>
+                    <dd className="font-mono font-semibold">{sftp.port}</dd>
+                    <dt className="text-muted-foreground">Username</dt>
+                    <dd className="font-mono font-semibold">{sftp.username}</dd>
+                    <dt className="text-muted-foreground">Password</dt>
+                    <dd>
+                        {sftp.password_set_at
+                            ? `Sudah diatur (${formatDateTime(sftp.password_set_at)})`
+                            : 'Belum ada; atur dulu di sini.'}
+                    </dd>
+                </dl>
+
+                <div className="grid content-start gap-4">
+                    {sftp.pending && (
+                        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Spinner /> Password sedang diterapkan ke server…
+                        </p>
+                    )}
+                    {sftp.error !== null && (
+                        <p className="text-sm text-destructive-foreground">
+                            Password terakhir gagal diterapkan
+                            {sftp.error !== '' ? `: ${sftp.error}` : '.'}
+                        </p>
+                    )}
+
+                    <Form
+                        {...setSftpPassword.form()}
+                        options={{ preserveScroll: true }}
+                        onSuccess={() => setPassword('')}
+                        className="grid gap-3"
+                    >
+                        {({ processing, errors }) => (
+                            <>
+                                <Label htmlFor="sftp-password">
+                                    {sftp.password_set_at
+                                        ? 'Password SFTP baru'
+                                        : 'Password SFTP'}
+                                </Label>
+                                <GeneratedPasswordInput
+                                    id="sftp-password"
+                                    value={password}
+                                    onChange={setPassword}
+                                    required
+                                    placeholder="Minimal 12 karakter"
+                                    invalid={Boolean(errors.password)}
+                                />
+                                <InputError message={errors.password} />
+                                <div>
+                                    <Button type="submit" disabled={processing}>
+                                        {processing ? (
+                                            <Spinner />
+                                        ) : (
+                                            <KeyRound />
+                                        )}
+                                        Simpan password SFTP
+                                    </Button>
+                                </div>
+                            </>
+                        )}
+                    </Form>
+
+                    {sftp.password_set_at && (
+                        <Form
+                            {...removeSftpPassword.form()}
+                            options={{ preserveScroll: true }}
+                        >
+                            {({ processing }) => (
+                                <Button
+                                    type="submit"
+                                    variant="ghost"
+                                    size="sm"
+                                    disabled={processing}
+                                    className="text-muted-foreground"
+                                >
+                                    Hapus password SFTP (login hanya dengan SSH
+                                    key)
+                                </Button>
+                            )}
+                        </Form>
+                    )}
+
+                    <p className="text-xs text-muted-foreground">
+                        Hanya SFTP: tidak ada akses shell. File yang diunggah
+                        milik akun kamu dan terhitung di kuota disk.
+                    </p>
+                </div>
+            </div>
+        </Panel>
     );
 }

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\FtpAccountStatus;
+use App\Support\CryptPassword;
 use Database\Factories\FtpAccountFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -39,14 +40,7 @@ class FtpAccount extends Model
      */
     public static function hashPassword(string $password): string
     {
-        $alphabet = './0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
-        $salt = '';
-
-        for ($i = 0; $i < 16; $i++) {
-            $salt .= $alphabet[random_int(0, 63)];
-        }
-
-        return crypt($password, '$6$'.$salt.'$');
+        return CryptPassword::hash($password);
     }
 
     /**
@@ -54,7 +48,7 @@ class FtpAccount extends Model
      */
     public function passwordMatches(string $password): bool
     {
-        return hash_equals($this->password_hash, crypt($password, $this->password_hash));
+        return CryptPassword::matches($password, $this->password_hash);
     }
 
     /**

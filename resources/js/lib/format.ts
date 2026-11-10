@@ -42,6 +42,8 @@ export const auditActionLabels: Record<string, string> = {
     'cron_job.created': 'Cron job dibuat',
     'cron_job.updated': 'Cron job diubah',
     'cron_job.deleted': 'Cron job dihapus',
+    'account.sftp_password_set': 'Password SFTP diatur',
+    'account.sftp_password_removed': 'Password SFTP dihapus',
     'redirect.created': 'Pengalihan ditambahkan',
     'redirect.deleted': 'Pengalihan dihapus',
     'package.created': 'Paket dibuat',
@@ -148,6 +150,7 @@ export const taskActionLabels: Record<string, string> = {
     'db.delete_user': 'Hapus user database',
     'ftp.ensure_dir': 'Siapkan folder FTP',
     'cron.apply': 'Terapkan cron job',
+    'account.set_password': 'Atur password SFTP',
     'ssl.delete': 'Hapus sertifikat SSL',
     'system.info': 'Baca info server',
 };

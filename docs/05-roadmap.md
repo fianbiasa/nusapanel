@@ -69,7 +69,9 @@ Pekerjaan:
 
 - cron jobs ✅: halaman Cron Jobs menambah, mengubah, menjeda dan menghapus job (jadwal siap pakai seperti setiap 5 menit atau harian, atau lima kolom sendiri; perintah satu baris) dengan batas jumlah dari paket; agent menulis crontab akun dari semua job aktif, dijalankan daemon cron sebagai user akun itu; job akun yang di-suspend tidak berjalan (cron menolak akun kedaluwarsa lewat PAM) dan jalan lagi setelah unsuspend; crontab ikut dihapus bersama akun.
 
-Berikutnya: SFTP, file manager. SSL mail menyusul bersama email (P2).
+- SFTP ✅: akun utama login SFTP (port 22) dengan username akunnya dan password khusus SFTP yang diatur di halaman FTP & SFTP (terpisah dari password panel; panel hanya mengirim hash SHA512-CRYPT ke server); sshd memberi akun hosting SFTP saja, tanpa shell, forwarding, atau tunnel, sementara root dan user lain tidak berubah; file yang diunggah milik akun itu (644/755); suspend memblokir login, termasuk dengan SSH key.
+
+Berikutnya: file manager. SSL mail menyusul bersama email (P2).
 
 - Akun user & paket user, buat/suspend/hapus akun, quota disk & inode.
 - Domain, subdomain, pointer, redirect, www/HTTPS.

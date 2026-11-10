@@ -49,6 +49,10 @@ readonly FTP_DB_USER="nusapanel-ftp"
 readonly FTP_PASSIVE_PORTS="35000 35999"
 # Pure-FTPd reads its key and certificate from this one file, and only at start.
 readonly FTP_CERTIFICATE="/etc/ssl/private/pure-ftpd.pem"
+# Every hosting account is in this group; sshd gives its members SFTP only
+# (installer/files/sshd-sftp.conf). The agent adds new accounts.
+readonly SFTP_GROUP="nusa-sftp"
+readonly SFTP_SSHD_CONF="/etc/ssh/sshd_config.d/nusapanel-sftp.conf"
 readonly DKIM_SELECTOR="nusapanel"
 readonly DNS_REPORT="$CONFIG_DIR/dns-records.txt"
 readonly RELEASE_REPO="fianbiasa/nusapanel"
@@ -620,20 +624,38 @@ create_layout() {
     touch "$CONFIG_DIR/.setup-started"
 }
 
+# Run "<apt-get ...> update", tried again a few times: Ubuntu's mirrors fail
+# now and then while they sync ("File has unexpected size").
+apt_update() {
+    local attempt
+    for attempt in 1 2 3; do
+        if "$@" update >>"$INSTALL_LOG" 2>&1; then
+            return 0
+        fi
+
+        if ((attempt < 3)); then
+            warn "apt-get update gagal (percobaan $attempt dari 3); dicoba lagi 20 detik lagi"
+            sleep 20
+        fi
+    done
+
+    die "langkah gagal: apt-get update (detail di $INSTALL_LOG)"
+}
+
 install_packages() {
     step "Memasang paket sistem (beberapa menit; detail di $INSTALL_LOG)"
 
     export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a
     local apt=(apt-get -y -q -o DPkg::Lock::Timeout=300)
 
-    quietly "${apt[@]}" update
+    apt_update "${apt[@]}"
     quietly "${apt[@]}" install ca-certificates curl gnupg openssl software-properties-common tar
 
     if ! grep -rqs "ondrej/php" /etc/apt/sources.list.d/; then
         info "Menambahkan repo PHP ondrej/php"
         # -n: skip its own apt update, which would not wait for the dpkg lock.
         quietly add-apt-repository -y -n ppa:ondrej/php
-        quietly "${apt[@]}" update
+        apt_update "${apt[@]}"
     fi
 
     # Postfix asks questions while installing; answer them up front.
@@ -1321,6 +1343,41 @@ OPTIONS
     info "FTP aktif di port 21: wajib TLS, passive ${FTP_PASSIVE_PORTS/ /-}, login dibuat customer di panel"
 }
 
+# SFTP for hosting accounts, as their own Linux user with the password they
+# set in the panel. sshd gives the members of nusa-sftp SFTP only; nothing
+# changes for root or other users of the server. If sshd refuses the
+# configuration, it is removed again, so SSH always keeps working.
+configure_sftp() {
+    step "Mengatur SFTP untuk akun hosting"
+
+    if ! getent group "$SFTP_GROUP" >/dev/null; then
+        quietly groupadd --system "$SFTP_GROUP"
+    fi
+
+    # Accounts created before SFTP join the group too (the panel's accounts
+    # carry "nusapanel" as their GECOS comment).
+    local name
+    while read -r name; do
+        if ! id -nG "$name" | tr ' ' '\n' | grep -qx "$SFTP_GROUP"; then
+            quietly gpasswd --add "$name" "$SFTP_GROUP"
+        fi
+    done < <(getent passwd | awk -F: '$3 >= 1000 && $5 ~ /^nusapanel(,|$)/ {print $1}')
+
+    render "$release_dir/config/sshd-sftp.conf" "$SFTP_SSHD_CONF"
+    chmod 0644 "$SFTP_SSHD_CONF"
+
+    # sshd -t needs the privilege separation directory, which only exists
+    # once ssh.service has run (Ubuntu 24.04 starts it on the first connection).
+    install -d -m 0755 /run/sshd
+    if ! /usr/sbin/sshd -t >>"$INSTALL_LOG" 2>&1; then
+        rm -f "$SFTP_SSHD_CONF"
+        die "sshd menolak konfigurasi SFTP; file-nya dihapus lagi supaya SSH tetap normal (detail di $INSTALL_LOG)"
+    fi
+
+    quietly systemctl try-reload-or-restart ssh.service
+    info "SFTP aktif di port 22 untuk akun hosting (hanya SFTP, tanpa shell); password SFTP diatur customer di halaman FTP"
+}
+
 # Customer websites: Nginx in front (ports 80/443, static files), Apache on
 # 127.0.0.1:8080 behind it so .htaccess works, PHP in a pool per account.
 # The agent writes one Nginx and one Apache file per domain into the
@@ -1747,6 +1804,13 @@ verify_install() {
         info "https://$server_hostname:$PANEL_PORT bisa dibuka dengan sertifikat yang valid"
     fi
 
+    # SFTP only applies to hosting accounts: root keeps its own settings.
+    local sshd_root
+    sshd_root="$(/usr/sbin/sshd -T -C "user=root,host=localhost,addr=127.0.0.1" 2>/dev/null | grep '^forcecommand ' || true)"
+    [[ "$sshd_root" == "forcecommand none" ]] ||
+        die "konfigurasi SSH untuk root berubah ($sshd_root); cek $SFTP_SSHD_CONF"
+    info "SFTP untuk akun hosting aktif; SSH untuk root tidak berubah"
+
     # FTP must switch to TLS with the hostname certificate, and refuse a
     # login sent before that. fd 4: fd 3 is the terminal.
     systemctl is-active --quiet pure-ftpd-mysql || die "Pure-FTPd tidak berjalan (cek: journalctl -u pure-ftpd-mysql)"
@@ -1915,6 +1979,7 @@ main() {
     configure_nginx
     configure_phpmyadmin
     configure_ftp
+    configure_sftp
     configure_web
     configure_quota
     configure_logrotate

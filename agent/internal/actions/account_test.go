@@ -25,7 +25,7 @@ import (
 	"nusapanel/agent/internal/webserver"
 )
 
-var accountMethodNames = []string{"account.create", "account.suspend", "account.unsuspend", "account.delete"}
+var accountMethodNames = []string{"account.create", "account.suspend", "account.unsuspend", "account.delete", "account.set_password"}
 
 func TestAccountMethodsAreRegistered(t *testing.T) {
 	registry := rpc.NewRegistry()
@@ -111,7 +111,7 @@ func TestCreateMakesTheAccount(t *testing.T) {
 		t.Fatalf("unexpected result %s", result)
 	}
 
-	assertCalls(t, system, "lookup budi", "group nusa-access www-data", "useradd budi", "lookup budi", "prepare /home/budi")
+	assertCalls(t, system, "lookup budi", "group nusa-access www-data", "useradd budi", "lookup budi", "prepare /home/budi", "group nusa-sftp budi")
 
 	user := system.users["budi"]
 	if user.Comment != "nusapanel" || user.Shell != "/usr/sbin/nologin" || user.Home != "/home/budi" {
@@ -160,7 +160,7 @@ func TestCreateIsIdempotent(t *testing.T) {
 		t.Fatalf("results differ: %s and %s", first, second)
 	}
 
-	assertCalls(t, system, "lookup budi", "group nusa-access www-data", "prepare /home/budi")
+	assertCalls(t, system, "lookup budi", "group nusa-access www-data", "prepare /home/budi", "group nusa-sftp budi")
 }
 
 func TestCreateReportsNamesTakenByGroups(t *testing.T) {
@@ -445,6 +445,8 @@ type fakeSystem struct {
 	calls  []string
 	// crontabs are the installed crontabs by user.
 	crontabs map[string]string
+	// passwords are the password hashes set by user.
+	passwords map[string]string
 
 	nextID int
 	// failWith, when set, is returned by every change.
@@ -472,6 +474,7 @@ func newFakeSystem() *fakeSystem {
 		groups:     map[string]*sysuser.Group{},
 		homes:      map[string]sysuser.Home{},
 		crontabs:   map[string]string{},
+		passwords:  map[string]string{},
 		nextID:     1001,
 		quotaState: "on",
 	}
@@ -621,6 +624,12 @@ func (f *fakeSystem) DeleteUser(_ context.Context, name string) error {
 	delete(f.groups, name)
 
 	return nil
+}
+
+func (f *fakeSystem) SetPassword(_ context.Context, name, hash string) error {
+	f.passwords[name] = hash
+
+	return f.record("password %s", name)
 }
 
 func (f *fakeSystem) SetCrontab(_ context.Context, name string, crontab []byte) error {
@@ -774,4 +783,66 @@ func TestDeleteKeepsTheAccountWhenItsDatabasesCannotBeDropped(t *testing.T) {
 	}
 
 	assertCalls(t, system, "lookup budi", "web remove budi", "db remove budi")
+}
+
+// sha512Hash is crypt("test-password") with SHA512-CRYPT.
+const sha512Hash = "$6$abcdefgh12345678$6tQGsA.SOj0o1.rHXHtYJZ5n8sL8YS0OTe6xNGJMdHyscxU5wQGoAWDHCkubqoooNxoSq4iQvCR9KdePjmPVF/"
+
+func TestSetPasswordSetsTheHashAndJoinsTheSFTPGroup(t *testing.T) {
+	system := newFakeSystem()
+	system.addAccount("budi", 1001)
+
+	if _, err := callAccount(t, system, "account.set_password", map[string]string{"username": "budi", "password_hash": sha512Hash}); err != nil {
+		t.Fatal(err)
+	}
+
+	if system.passwords["budi"] != sha512Hash {
+		t.Fatalf("hash = %q", system.passwords["budi"])
+	}
+
+	assertCalls(t, system, "lookup budi", "group nusa-sftp budi", "password budi")
+}
+
+func TestSetPasswordWithoutAHashLocksThePassword(t *testing.T) {
+	system := newFakeSystem()
+	system.addAccount("budi", 1001)
+
+	if _, err := callAccount(t, system, "account.set_password", map[string]string{"username": "budi", "password_hash": ""}); err != nil {
+		t.Fatal(err)
+	}
+
+	if system.passwords["budi"] != "!" {
+		t.Fatalf("hash = %q", system.passwords["budi"])
+	}
+}
+
+func TestSetPasswordRefusesWhatIsNotAHashOrAnAccount(t *testing.T) {
+	invalid := []map[string]string{
+		{"username": "budi", "password_hash": "secret-password"},
+		{"username": "budi", "password_hash": "!"},
+		{"username": "budi", "password_hash": "$1$abc$def"},
+		{"username": "budi", "password_hash": sha512Hash + "\nroot:x"},
+		{"username": "budi", "password_hash": sha512Hash + ":0"},
+		{"username": "root", "password_hash": sha512Hash},
+		{"username": "budi", "password": "secret-password"},
+	}
+
+	for _, params := range invalid {
+		system := newFakeSystem()
+		system.addAccount("budi", 1001)
+
+		_, err := callAccount(t, system, "account.set_password", params)
+		assertCode(t, err, rpc.CodeInvalidParams)
+
+		if len(system.passwords) != 0 {
+			t.Fatalf("%v reached the system", params)
+		}
+	}
+
+	system := newFakeSystem()
+
+	_, err := callAccount(t, system, "account.set_password", map[string]string{"username": "budi", "password_hash": sha512Hash})
+	if agentErr := assertCode(t, err, rpc.CodeActionFailed); agentErr.Message != "account budi does not exist" {
+		t.Fatalf("message = %q", agentErr.Message)
+	}
 }

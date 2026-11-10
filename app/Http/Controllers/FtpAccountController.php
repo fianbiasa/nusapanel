@@ -7,6 +7,7 @@ use App\Http\Requests\UpdateFtpAccountRequest;
 use App\Models\Domain;
 use App\Models\FtpAccount;
 use App\Services\FtpService;
+use App\Services\SftpService;
 use App\Support\AccountLimits;
 use App\Support\FtpDirectory;
 use Illuminate\Http\RedirectResponse;
@@ -17,7 +18,10 @@ use Inertia\Response;
 
 class FtpAccountController extends Controller
 {
-    public function __construct(private FtpService $ftp) {}
+    public function __construct(
+        private FtpService $ftp,
+        private SftpService $sftp,
+    ) {}
 
     /**
      * List the signed-in account's FTP logins, the domains a login can be
@@ -50,6 +54,12 @@ class FtpAccountController extends Controller
             'connection' => [
                 'host' => parse_url((string) config('app.url'), PHP_URL_HOST) ?: 'localhost',
                 'port' => 21,
+            ],
+            'sftp' => [
+                'username' => $account->username,
+                'port' => 22,
+                'password_set_at' => $account->sftp_password_set_at?->toIso8601String(),
+                ...$this->sftp->syncState($account),
             ],
         ]);
     }

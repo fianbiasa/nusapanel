@@ -12,6 +12,7 @@ use App\Http\Controllers\DomainController;
 use App\Http\Controllers\FtpAccountController;
 use App\Http\Controllers\PhpMyAdminController;
 use App\Http\Controllers\PointerController;
+use App\Http\Controllers\SftpPasswordController;
 use App\Http\Controllers\SubdomainController;
 use App\Http\Controllers\UrlRedirectController;
 use Illuminate\Support\Facades\Route;
@@ -42,6 +43,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('cron-jobs', [CronJobController::class, 'store'])->name('cron-jobs.store');
         Route::put('cron-jobs/{cronJob}', [CronJobController::class, 'update'])->name('cron-jobs.update');
         Route::delete('cron-jobs/{cronJob}', [CronJobController::class, 'destroy'])->name('cron-jobs.destroy');
+        Route::put('sftp-password', [SftpPasswordController::class, 'update'])->middleware('throttle:10,1')->name('sftp-password.update');
+        Route::delete('sftp-password', [SftpPasswordController::class, 'destroy'])->name('sftp-password.destroy');
         Route::get('ftp', [FtpAccountController::class, 'index'])->name('ftp.index');
         Route::post('ftp', [FtpAccountController::class, 'store'])->name('ftp.store');
         Route::put('ftp/{ftpAccount}', [FtpAccountController::class, 'update'])->name('ftp.update');

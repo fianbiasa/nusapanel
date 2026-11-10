@@ -17,29 +17,30 @@ Konvensi:
 
 Satu tabel untuk admin, reseller, dan user (sama seperti DirectAdmin: setiap level juga user Linux). Memakai tabel `users` bawaan Laravel/Fortify; kolom yang baru dibutuhkan di fase berikutnya ditambahkan saat fase itu dikerjakan.
 
-| Kolom                        | Tipe                                                        | Keterangan                                                                                             |
-| ---------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| username                     | varchar(16), unique                                         | Juga nama user Linux. Pola `^[a-z][a-z0-9]{2,15}$`, bukan nama tercadang                               |
-| name                         | varchar                                                     | Nama tampilan                                                                                          |
-| email                        | varchar                                                     |                                                                                                        |
-| password                     | varchar                                                     | bcrypt, untuk login panel                                                                              |
-| role                         | enum `admin`, `reseller`, `user`                            |                                                                                                        |
-| owner_id                     | → users, null                                               | Pembuat akun (admin/reseller). Admin pertama `null`                                                    |
-| package_id                   | → packages, null                                            |                                                                                                        |
-| custom_limits                | json, null                                                  | Override limit paket khusus akun ini                                                                   |
-| status                       | enum `pending`, `active`, `suspended`, `deleting`, `failed` |                                                                                                        |
-| suspend_reason               | varchar, null                                               |                                                                                                        |
-| phpmyadmin_expires_at        | timestamp, null                                             | kapan sesi phpMyAdmin yang terbuka berakhir; scheduler lalu memberi user pemilik MariaDB password acak |
-| uid                          | int, unique                                                 | UID Linux                                                                                              |
-| gid                          | int, null                                                   | GID grup milik akun (dari agent, seperti uid); login FTP berjalan sebagai uid:gid ini                  |
-| ip_address_id                | → ip_addresses                                              | IP utama                                                                                               |
-| language, timezone, theme    | varchar                                                     |                                                                                                        |
-| cron_email                   | varchar, null                                               | Tujuan email output cron                                                                               |
-| two_factor_secret 🔒         | text, null                                                  |                                                                                                        |
-| two_factor_recovery_codes 🔒 | text, null                                                  |                                                                                                        |
-| two_factor_confirmed_at      | timestamp, null                                             |                                                                                                        |
-| branding                     | json, null                                                  | Khusus reseller: logo, nama, warna, domain panel                                                       |
-| last_login_at                | timestamp, null                                             |                                                                                                        |
+| Kolom                        | Tipe                                                        | Keterangan                                                                                                          |
+| ---------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| username                     | varchar(16), unique                                         | Juga nama user Linux. Pola `^[a-z][a-z0-9]{2,15}$`, bukan nama tercadang                                            |
+| name                         | varchar                                                     | Nama tampilan                                                                                                       |
+| email                        | varchar                                                     |                                                                                                                     |
+| password                     | varchar                                                     | bcrypt, untuk login panel                                                                                           |
+| role                         | enum `admin`, `reseller`, `user`                            |                                                                                                                     |
+| owner_id                     | → users, null                                               | Pembuat akun (admin/reseller). Admin pertama `null`                                                                 |
+| package_id                   | → packages, null                                            |                                                                                                                     |
+| custom_limits                | json, null                                                  | Override limit paket khusus akun ini                                                                                |
+| status                       | enum `pending`, `active`, `suspended`, `deleting`, `failed` |                                                                                                                     |
+| suspend_reason               | varchar, null                                               |                                                                                                                     |
+| phpmyadmin_expires_at        | timestamp, null                                             | kapan sesi phpMyAdmin yang terbuka berakhir; scheduler lalu memberi user pemilik MariaDB password acak              |
+| sftp_password_set_at         | timestamp, null                                             | kapan password SFTP terakhir diatur; null kalau belum ada. Password-nya hanya ada di server (hash di `/etc/shadow`) |
+| uid                          | int, unique                                                 | UID Linux                                                                                                           |
+| gid                          | int, null                                                   | GID grup milik akun (dari agent, seperti uid); login FTP berjalan sebagai uid:gid ini                               |
+| ip_address_id                | → ip_addresses                                              | IP utama                                                                                                            |
+| language, timezone, theme    | varchar                                                     |                                                                                                                     |
+| cron_email                   | varchar, null                                               | Tujuan email output cron                                                                                            |
+| two_factor_secret 🔒         | text, null                                                  |                                                                                                                     |
+| two_factor_recovery_codes 🔒 | text, null                                                  |                                                                                                                     |
+| two_factor_confirmed_at      | timestamp, null                                             |                                                                                                                     |
+| branding                     | json, null                                                  | Khusus reseller: logo, nama, warna, domain panel                                                                    |
+| last_login_at                | timestamp, null                                             |                                                                                                                     |
 
 ### `packages`
 

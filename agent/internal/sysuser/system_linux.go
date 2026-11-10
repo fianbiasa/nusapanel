@@ -24,6 +24,7 @@ const (
 	userdelProgram  = "/usr/sbin/userdel"
 	pkillProgram    = "/usr/bin/pkill"
 	crontabProgram  = "/usr/bin/crontab"
+	chpasswdProgram = "/usr/sbin/chpasswd"
 )
 
 // Exit codes documented by those programs.
@@ -227,6 +228,21 @@ func (System) PrepareHome(_ context.Context, home Home) error {
 // default index.html, without following symlinks.
 func (System) PrepareSite(_ context.Context, site Site) error {
 	return prepareSite(site)
+}
+
+// SetPassword sets the password hash of user name as it is (chpasswd -e),
+// such as a SHA512-CRYPT hash or "!" for no password. The hash goes on
+// stdin, so it never shows up in the process list.
+func (System) SetPassword(ctx context.Context, name, hash string) error {
+	if strings.ContainsAny(name+hash, ":\n") {
+		return fmt.Errorf("set password of %s: name and hash may not hold ':' or newlines", name)
+	}
+
+	if _, err := runner.RunInput(ctx, []byte(name+":"+hash+"\n"), chpasswdProgram, "-e"); err != nil {
+		return fmt.Errorf("set password of %s: %w", name, err)
+	}
+
+	return nil
 }
 
 // SetCrontab installs crontab as the crontab of user name, which the cron

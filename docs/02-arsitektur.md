@@ -113,7 +113,7 @@ Mode lain (Nginx saja, OpenLiteSpeed) bisa ditambah di P6, karena semua config d
 | Symlink   | Nginx `disable_symlinks if_not_owner`, Apache `SymLinksIfOwnerMatch`, supaya user tidak bisa membuat symlink ke `wp-config.php` milik orang lain                     |
 | Resource  | PHP-FPM, cron, dan sesi SSH user ditempatkan di slice systemd `nusa-<user>.slice` dengan batas CPU, RAM, proses, IO                                                  |
 | Email     | Disimpan di `/home/<user>/imap/...` milik user itu, jadi ikut terhitung di quota disk user                                                                           |
-| SFTP      | Tanpa chroot, dibatasi oleh permission home `0710`                                                                                                                   |
+| SFTP      | Hanya SFTP (`ForceCommand internal-sftp`, tanpa shell & forwarding) dengan password khusus SFTP; tanpa chroot, dibatasi oleh permission home `0710`                  |
 | SSH shell | Hanya kalau paket mengizinkan, dan jalan di dalam jail                                                                                                               |
 
 ## 2.8 Panel (Laravel)
