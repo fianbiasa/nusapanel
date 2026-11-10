@@ -63,6 +63,10 @@ readonly SFTP_SSHD_CONF="/etc/ssh/sshd_config.d/rayxo-sftp.conf"
 readonly DKIM_SELECTOR="rayxo"
 readonly DNS_REPORT="$CONFIG_DIR/dns-records.txt"
 readonly RELEASE_REPO="fianbiasa/rayxo"
+# Public DNS over HTTPS, asked in this order. A resolver's cache can still
+# hold a record that just changed (a Cloudflare node kept an old PTR for its
+# whole TTL), so a check that fails with one asks the next before failing.
+readonly DNS_RESOLVERS=("https://cloudflare-dns.com/dns-query" "https://dns.google/resolve")
 readonly POLICY_RC="/usr/sbin/policy-rc.d"
 readonly POLICY_RC_MARKER="# rayxo setup.sh: temporary"
 # The site PHP versions installed so far, one per line, so an upgrade keeps
@@ -334,14 +338,19 @@ ensure_dir() {
     fi
 }
 
-# Ask public DNS (Cloudflare, then Google, over HTTPS) so the answer matches
+# Ask public DNS (DNS_RESOLVERS, or only resolver $3) so the answer matches
 # what Let's Encrypt and remote mail servers see, not this server's /etc/hosts
 # or resolver cache. Prints one value per line: TXT strings joined and
-# unquoted, trailing dots removed. Fails only if neither resolver answers.
+# unquoted, trailing dots removed. Fails only if no resolver answers.
 dns_lookup() {
     local name="$1" type="$2" url response
+    local resolvers=("${DNS_RESOLVERS[@]}")
 
-    for url in "https://cloudflare-dns.com/dns-query" "https://dns.google/resolve"; do
+    if [[ -n "${3:-}" ]]; then
+        resolvers=("$3")
+    fi
+
+    for url in "${resolvers[@]}"; do
         if response="$(curl -fsS --max-time 10 -H 'accept: application/dns-json' \
             "$url?name=$name&type=$type" 2>/dev/null)"; then
             DNS_RESPONSE="$response" DNS_TYPE="$type" python3 - <<'PY'
@@ -364,6 +373,45 @@ PY
     done
 
     return 1
+}
+
+# Ask each resolver for name/type until the answer passes the function
+# $3; dns_answer is that answer, or else the first one, for the message.
+# Returns 1 when no answer passes, 2 when no resolver answered at all.
+dns_agrees() {
+    local name="$1" type="$2" check="$3" url answer reached=0
+    dns_answer=""
+
+    for url in "${DNS_RESOLVERS[@]}"; do
+        answer="$(dns_lookup "$name" "$type" "$url")" || continue
+
+        if ((reached == 0)); then
+            dns_answer="$answer"
+        elif "$check" "$answer"; then
+            warn "$type $name: sebagian resolver DNS masih menyimpan nilai lama ($(paste -sd ' ' <<<"$dns_answer")); biasanya hilang sendiri dalam satu jam"
+        fi
+
+        if "$check" "$answer"; then
+            dns_answer="$answer"
+            return 0
+        fi
+
+        reached=1
+    done
+
+    if ((reached)); then
+        return 1
+    fi
+
+    return 2
+}
+
+a_is_public_ip() {
+    [[ "$1" == "$public_ip" ]]
+}
+
+ptr_is_hostname() {
+    grep -qx "$server_hostname" <<<"$1"
 }
 
 normalize_ipv6() {
@@ -574,20 +622,23 @@ check_dns() {
     local ipv4_re='^([0-9]{1,3}\.){3}[0-9]{1,3}$'
     [[ "$public_ip" =~ $ipv4_re ]] || die "IP publik server tidak terdeteksi; isi dengan --public-ip"
 
-    local a_records
-    a_records="$(dns_lookup "$server_hostname" A)" ||
-        die "tidak bisa menghubungi DNS publik (cloudflare-dns.com / dns.google) untuk memeriksa A record"
+    local status=0
+    dns_agrees "$server_hostname" A a_is_public_ip || status=$?
 
-    if [[ -z "$a_records" ]]; then
+    if ((status == 2)); then
+        die "tidak bisa menghubungi DNS publik (cloudflare-dns.com / dns.google) untuk memeriksa A record"
+    fi
+
+    if ((status == 1)) && [[ -z "$dns_answer" ]]; then
         die "A record $server_hostname belum ada. Tambahkan A record $server_hostname -> $public_ip, tunggu beberapa menit, lalu ulangi"
     fi
 
-    if [[ "$a_records" != "$public_ip" ]]; then
+    if ((status == 1)); then
         local hint=" (kalau pakai Cloudflare, set A record ke \"DNS only\", bukan proxy)"
         if is_private_ip "$server_ip" && ((public_ip_given == 0)); then
             hint=" (server ini di belakang NAT? isi IP publiknya dengan --public-ip)"
         fi
-        die "A record $server_hostname harus mengarah hanya ke $public_ip, sekarang: $(tr '\n' ' ' <<<"$a_records")$hint"
+        die "A record $server_hostname harus mengarah hanya ke $public_ip, sekarang: $(paste -sd ' ' <<<"$dns_answer")$hint"
     fi
     info "A record  $server_hostname -> $public_ip  ✔"
 
@@ -604,13 +655,17 @@ check_dns() {
         fi
     done <<<"$aaaa_records"
 
-    local reverse_name ptr_records
+    local reverse_name
     reverse_name="$(awk -F. '{print $4 "." $3 "." $2 "." $1 ".in-addr.arpa"}' <<<"$public_ip")"
-    ptr_records="$(dns_lookup "$reverse_name" PTR)" ||
-        die "tidak bisa menghubungi DNS publik untuk memeriksa PTR"
+    status=0
+    dns_agrees "$reverse_name" PTR ptr_is_hostname || status=$?
 
-    if ! grep -qx "$server_hostname" <<<"$ptr_records"; then
-        die "PTR (reverse DNS) $public_ip harus $server_hostname, sekarang: ${ptr_records:-belum diatur}. Atur lewat panel/support provider VPS, lalu ulangi"
+    if ((status == 2)); then
+        die "tidak bisa menghubungi DNS publik untuk memeriksa PTR"
+    fi
+
+    if ((status == 1)); then
+        die "PTR (reverse DNS) $public_ip harus $server_hostname, sekarang: ${dns_answer:-belum diatur}. Atur lewat panel/support provider VPS, lalu ulangi"
     fi
     info "PTR       $public_ip -> $server_hostname  ✔"
 }
