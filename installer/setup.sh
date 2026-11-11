@@ -20,7 +20,8 @@ umask 022
 # site versions below.
 readonly PHP_VERSION="8.4"
 readonly PHP_BIN="/usr/bin/php$PHP_VERSION"
-# PHP versions installed for websites (ondrej/php) unless --php-versions or
+# PHP versions installed for websites (Ondřej Surý's packages, see
+# add_php_repository) unless --php-versions or
 # an earlier install says otherwise, and the packages each one gets. A
 # package a version does not have (8.5 has opcache built in) is skipped.
 readonly DEFAULT_SITE_PHP_VERSIONS="7.4 8.0 8.1 8.2 8.3 8.4 8.5"
@@ -697,7 +698,7 @@ confirm() {
     info "Paket    : ${package_file:-$release_url}"
     info "Admin    : $admin_user ${admin_email:+<$admin_email>}"
     info "Panel    : https://$server_hostname:$PANEL_PORT"
-    info "Dipasang : Nginx + Apache, MariaDB, PHP ${site_php_versions[*]} (repo ondrej/php), Postfix + DKIM (kirim-saja), agent rayxod"
+    info "Dipasang : Nginx + Apache, MariaDB, PHP ${site_php_versions[*]} (paket Ondřej Surý), PowerDNS, email (Postfix, Dovecot, Rspamd, Roundcube), FTP, agent rayxod"
     if ((skip_dns_check == 0)); then
         info "SSL      : Let's Encrypt untuk $server_hostname, diperpanjang otomatis"
         info "           (dengan melanjutkan, kamu menyetujui Let's Encrypt Subscriber Agreement)"
@@ -868,6 +869,192 @@ apt_update() {
     die "langkah gagal: apt-get update (detail di $INSTALL_LOG)"
 }
 
+# PHP for the panel and the websites (7.4 to 8.5) is not in Ubuntu 24.04,
+# which has 8.3 only. Ondřej Surý builds it for Ubuntu and publishes the same
+# packages in two places: his own repository, packages.sury.org, and the
+# ondrej/php PPA on Launchpad. A new server takes packages.sury.org, or the
+# PPA when packages.sury.org cannot be reached; afterwards it keeps the
+# repository it got. Both signing keys are pinned below.
+
+# Write the armored key on stdin to FILE, once it proves to be exactly one
+# key: the one with FINGERPRINT.
+install_apt_key() {
+    local key="$1" expected="$2" gpg_home fingerprints
+
+    install -d -m 0755 /etc/apt/keyrings
+    cat >"$key.new"
+    gpg_home="$(mktemp -d)"
+    fingerprints="$(gpg --homedir "$gpg_home" --show-keys --with-colons "$key.new" 2>>"$INSTALL_LOG" |
+        awk -F: '$1 == "pub" {primary = 1; next} primary && $1 == "fpr" {print $10; primary = 0}')"
+    rm -rf "$gpg_home"
+    if [[ "$fingerprints" != "$expected" ]]; then
+        rm -f "$key.new"
+        die "kunci repo $key tidak cocok (fingerprint: ${fingerprints:-tidak terbaca})"
+    fi
+
+    chmod 0644 "$key.new"
+    mv -f "$key.new" "$key"
+}
+
+# packages.sury.org, signed by "DEB.SURY.ORG Automatic Signing Key"
+# (1505 8500 A023 5D97 F5D1 0063 B188 E2B6 95BD 4743). Written again on every
+# run, so upgrading RAYXO renews the key: it expires on 2028-02-04, so put
+# the renewed one (same fingerprint, from
+# https://packages.sury.org/debsuryorg-archive-keyring.deb) here before then.
+write_sury_php_source() {
+    install_apt_key /etc/apt/keyrings/sury-php.asc 15058500A0235D97F5D10063B188E2B695BD4743 <<'KEY'
+-----BEGIN PGP PUBLIC KEY BLOCK-----
+
+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
+dIWqjhhcyJCHsdyUkP0=
+=uUxL
+-----END PGP PUBLIC KEY BLOCK-----
+KEY
+    cat >/etc/apt/sources.list.d/sury-php.sources <<'SOURCES'
+# Written by RAYXO setup.sh on every run: PHP for the panel and the websites.
+Types: deb
+URIs: https://packages.sury.org/php/
+Suites: noble
+Components: main
+Signed-By: /etc/apt/keyrings/sury-php.asc
+SOURCES
+}
+
+# The ondrej/php PPA, written in the file add-apt-repository would write.
+# add-apt-repository itself first asks Launchpad's API about the PPA, which
+# drops connections or is down more often than the PPA. Signed by
+# "Launchpad PPA for Ondřej Surý" (B8DC 7E53 9466 56EF BCE4 C1DD 71DA EAAB
+# 4AD4 CAB6), a key that does not expire.
+write_ppa_php_source() {
+    install_apt_key /etc/apt/keyrings/ondrej-php.asc B8DC7E53946656EFBCE4C1DD71DAEAAB4AD4CAB6 <<'KEY'
+-----BEGIN PGP PUBLIC KEY BLOCK-----
+
+mQINBGYo0vEBEAC0Semxy5I2b8exRUxJfTKkHR4f5uyS0dTd9vYgMI5T3gsa7ypH
+HtE+GiZC+T9m/F9h66+XJMxhuNsKRs7T2In5NSeso9H/ytlSTayUaBtCFfRp6y6b
+6ozuRBfqYJGxhjAnIzvNF/Wpp2BvfQm3OrQ7uJJrt5IvzLDC4jPxl/Xs3sTT+Hbk
+bkKKprZ3xmy2enuwBaNWR/CUtAz3hbkzL1kGbhX9m3QidFJagVVdDw3aNEwo8ush
+djWfF+BajNvpDFYJKBGQbCeagB753Baa5yIN62x+THLnLiKTMDS1e7U0ZDiV9671
+noTbtN5TeZeyfsEmeZ8X60x11JIP3yYHYZT70/DyTYX3WC9yQFyIgVOfRlGklMKI
+k3TLMmtq8w5Hz1vovwzV7PzaQnmY+uNP2ZbAP4fJ3iFAj0L+u0i1nOFgTy0Lq058
+O/FjRrQxuceDDCF+9ThspXMw3Puvz8giuBDCdEda84uC7XWMdqgz/maLfFQjAmyP
+Ixi1EMxMlHYyZajpR1cdCfrAIQlnQjHSWmyeCFgXPPfRA71aCcJ7oSrDjogW6Ahd
+HRkQRKf1FF9BFzycgSQotfR+7CKfPQh1kghufM9W/spARzA709nGZjXJzgEJLQd3
+CDB6dIIxT/0YI36h3Qgfmiiw4twO24MMEqEEPIELz2WJKeWGkdQdcekpxQARAQAB
+tB9MYXVuY2hwYWQgUFBBIGZvciBPbmTFmWVqIFN1csO9iQJOBBMBCgA4FiEEuNx+
+U5RmVu+85MHdcdrqq0rUyrYFAmYo0vECGwMFCwkIBwIGFQoJCAsCBBYCAwECHgEC
+F4AACgkQcdrqq0rUyrYOPQ/+IArA4s1J3op/w7cXek0ieFHWHFDrxPYS+78/LF/J
+LoYZw0nIU5Ovr+LzehFMIQU6esgPXwbeCVgwLwat57augAkAYWT0UzH5dE6RKAGr
+C2vsHWVfPhQn6UndfzwXc0mTLGQni25aQaZ6k60Dbm/vblejrTQrtAUWoMO3Z1cr
+NDGJ3Z9DCxtr2o9gRYUI6HwLHJtobTIeI5xsr5x+GvXiIAVCPa3ZEuRL6jMQfqfS
+C43mpuiS1kGgsnQLs2DbN7EFCfiJoNX1QzZu25zg+IS9PXbCJnheZWnH0rwUSb/N
+hZPcSefGlNlhr824OfT30v79hQnw59XbsfV270O9jPbD4kttN+OiszbU66zsuiOh
+BO46XCckQPqDkBMw56GPFuVrQgGb1thXvn67URJgPyJhwauBWKPNAJ9Ojuo+yVq/
+hdR1VNWThXQbZgaGSWrbjt6FdYtQb9VX88uu5gFDmr180HogHNUDUcqNLLdnjfFs
+4DyJlusQ5I/a7cQ7nlkNgxAmHszwO/mGLBuGljDUYkwZDW9nqP1Q5Q2jMtrhgXvR
+2SOtufvecUbB7+eoRSaOnu7CNMATG6LocFEMzhKUde1uZTfWSqnYEcdqoFJMi46y
+qaNxhiNLsQ5OBMbgSp2zCbQxRBdITMVvBR5YjCetUIGEs6T1yQ5wh5Xpoi34ShHn
+v38=
+=kFlZ
+-----END PGP PUBLIC KEY BLOCK-----
+KEY
+    cat >/etc/apt/sources.list.d/ondrej-ubuntu-php-noble.sources <<'SOURCES'
+# Written by RAYXO setup.sh: PHP for the panel and the websites (ppa:ondrej/php).
+Types: deb
+URIs: https://ppa.launchpadcontent.net/ondrej/php/ubuntu/
+Suites: noble
+Components: main
+Signed-By: /etc/apt/keyrings/ondrej-php.asc
+SOURCES
+}
+
+# Set up the PHP repository. Succeeds when it added one, so apt needs an
+# update; fails when the server already had its repository.
+add_php_repository() {
+    if [[ -f /etc/apt/sources.list.d/sury-php.sources ]]; then
+        write_sury_php_source
+        return 1
+    fi
+
+    if grep -rqs "ondrej/php" /etc/apt/sources.list.d/; then
+        return 1
+    fi
+
+    if curl -fsS --max-time 20 -o /dev/null https://packages.sury.org/php/dists/noble/InRelease 2>>"$INSTALL_LOG"; then
+        info "Menambahkan repo PHP packages.sury.org"
+        write_sury_php_source
+    elif curl -fsS --max-time 20 -o /dev/null https://ppa.launchpadcontent.net/ondrej/php/ubuntu/dists/noble/InRelease 2>>"$INSTALL_LOG"; then
+        warn "packages.sury.org tidak bisa dihubungi; PHP diambil dari cadangannya, ppa:ondrej/php di Launchpad"
+        write_ppa_php_source
+    else
+        die "repo PHP tidak bisa dihubungi, baik packages.sury.org maupun cadangannya ppa.launchpadcontent.net (Launchpad). Cek koneksi server ke keduanya, lalu jalankan setup.sh lagi"
+    fi
+}
+
 install_packages() {
     step "Memasang paket sistem (beberapa menit; detail di $INSTALL_LOG)"
 
@@ -875,13 +1062,23 @@ install_packages() {
     local apt=(apt-get -y -q -o DPkg::Lock::Timeout=300)
 
     apt_update "${apt[@]}"
-    quietly "${apt[@]}" install ca-certificates curl gnupg openssl software-properties-common tar
+    quietly "${apt[@]}" install ca-certificates curl gnupg openssl tar
 
-    if ! grep -rqs "ondrej/php" /etc/apt/sources.list.d/; then
-        info "Menambahkan repo PHP ondrej/php"
-        # -n: skip its own apt update, which would not wait for the dpkg lock.
-        quietly add-apt-repository -y -n ppa:ondrej/php
+    if add_php_repository; then
         apt_update "${apt[@]}"
+    fi
+
+    # When the PHP repository cannot be reached, apt update merely warns, and
+    # the install would fail later on a PHP package it cannot find; say what
+    # is wrong instead. The output is read whole: grep -q in a pipe stops
+    # reading at the match, apt-cache then dies of SIGPIPE, and pipefail
+    # turns that into a failure.
+    local php_policy
+    php_policy="$(apt-cache policy "php$PHP_VERSION-fpm" 2>/dev/null || true)"
+    if ! grep -q 'Candidate: [0-9]' <<<"$php_policy"; then
+        local php_repository=ppa.launchpadcontent.net
+        [[ -f /etc/apt/sources.list.d/sury-php.sources ]] && php_repository=packages.sury.org
+        die "paket PHP $PHP_VERSION tidak tersedia: repo PHP $php_repository tidak bisa dihubungi. Cek dengan: curl -I https://$php_repository, lalu jalankan setup.sh lagi"
     fi
 
     # Postfix asks questions while installing; answer them up front.
@@ -968,7 +1165,7 @@ install_site_php() {
             if apt-cache show "$package" >/dev/null 2>&1; then
                 missing+=("$package")
             elif [[ "$name" == fpm ]]; then
-                die "PHP $v tidak tersedia di repo ondrej/php"
+                die "PHP $v tidak tersedia di repo PHP (packages.sury.org atau ppa:ondrej/php)"
             fi
         done
     done
@@ -2679,8 +2876,11 @@ PYTHON
     for unit in dovecot rspamd redis-server; do
         systemctl is-active --quiet "$unit" || die "$unit tidak berjalan (cek: journalctl -u $unit)"
     done
-    if ! timeout 15 openssl s_client -connect 127.0.0.1:21 -starttls ftp -servername "$server_hostname" \
-        </dev/null 2>/dev/null | grep -q "BEGIN CERTIFICATE"; then
+    # Read whole, not piped into grep -q (SIGPIPE with pipefail).
+    local ftp_tls
+    ftp_tls="$(timeout 15 openssl s_client -connect 127.0.0.1:21 -starttls ftp -servername "$server_hostname" \
+        </dev/null 2>/dev/null || true)"
+    if ! grep -q "BEGIN CERTIFICATE" <<<"$ftp_tls"; then
         die "FTP di port 21 tidak bisa beralih ke TLS (cek: journalctl -u pure-ftpd-mysql)"
     fi
     local reply

@@ -43,7 +43,7 @@
 4. **Semua bisa dibangun ulang.** `rayxo rebuild` menulis ulang semua config dari database (setara `rewrite_confs` di DirectAdmin). Penting saat template di-update atau server dipulihkan.
 5. **Operasi file atas nama user.** File manager, cron, backup user, dan WP-CLI dijalankan agent setelah turun hak ke UID user tersebut. Kalau ada bug di panel yang meloloskan path yang salah, izin OS tetap membatasi kerusakan.
 6. **Tulis config dengan aman.** Tulis ke file sementara → validasi (`nginx -t`, `apachectl configtest`, `postfix check`, `php-fpm -t`) → rename atomik → reload. Kalau gagal, versi lama dikembalikan dan error dilaporkan.
-7. **Pakai paket distro, bukan compile.** PHP dari repo ondrej/sury, sisanya dari repo resmi Ubuntu. Update keamanan cukup lewat `apt`.
+7. **Pakai paket distro, bukan compile.** PHP 7.4–8.5 dari paket Ondřej Surý: server baru memakai `packages.sury.org`, dengan PPA `ondrej/php` di Launchpad sebagai cadangan kalau sury.org tidak bisa dihubungi (kunci keduanya dipatok di `setup.sh`). Sisanya dari repo resmi Ubuntu. Update keamanan cukup lewat `apt`.
 
 ## 2.4 Komunikasi panel ↔ agent
 
@@ -168,4 +168,4 @@ Struktur folder user mengikuti DirectAdmin (`domains/<domain>/public_html`, `ima
 
 - Panel dilayani Herd di `rayxo.test`. SSL, versi PHP, dan pengaturan situs lainnya diatur dari aplikasi Herd.
 - Agent hanya bisa jalan di Linux (butuh systemd, `useradd`, `SO_PEERCRED`, dll.). Di Mac, panel memakai `AGENT_DRIVER=fake`, yang mensimulasikan jawaban agent supaya UI bisa dikembangkan tanpa server.
-- Agent Go dikembangkan dan diuji di VM Ubuntu (OrbStack/Multipass), lalu panel di server memakai `AGENT_DRIVER=socket`.
+- Agent Go dikembangkan di Mac dan diuji di Ubuntu: `installer/test-in-vm.sh` memasang RAYXO di server yang masih bersih (VM Lima baru di Mac atau di CI, atau VPS uji lewat `--ssh`), login sebagai admin, memeriksa info sistem dari agent di dashboard, lalu menjalankan tes isolasi. Panel di server memakai `AGENT_DRIVER=socket`.

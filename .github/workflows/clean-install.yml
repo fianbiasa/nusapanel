@@ -1,0 +1,61 @@
+name: clean-install
+
+# Installs RAYXO on a brand-new Ubuntu 24.04 VM (Lima, QEMU with KVM) and
+# checks it end to end with installer/test-in-vm.sh: setup.sh on a clean
+# server, the admin signing in to a dashboard with the agent's server
+# information, and the agent's isolation test. It takes a while, so it runs
+# apart from the tests workflow: after every push to main, and on demand.
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: clean-install-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  vm:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
+        with:
+          php-version: '8.4'
+          tools: composer:v2
+          coverage: none
+
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+
+      - name: Setup pnpm
+        run: npm install --global pnpm@12.16.1
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: agent/go.mod
+          cache-dependency-path: agent/go.sum
+
+      # QEMU with KVM, and Lima's release checked against its attestation.
+      - name: Setup Lima
+        uses: lima-vm/lima-actions/setup@55627e31b78637bf254a8b2a14da8ea7d12564e5 # v1.1.0
+        with:
+          version: v2.3.0
+
+      - name: Install on a clean VM and check it
+        run: installer/test-in-vm.sh

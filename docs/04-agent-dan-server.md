@@ -28,7 +28,7 @@ agent/
 │   └── services/       wrapper postfix, API PowerDNS, MariaDB, ...
 ├── packaging/
 │   └── rayxod.service   ✅ unit systemd
-└── Makefile            ✅ build (Mac), linux (amd64/arm64 static), isolation (binary tes isolasi untuk server), test, vet, check
+└── Makefile            ✅ build (Mac), linux (amd64/arm64 static), isolation (binary tes isolasi untuk server; `ARCH=arm64` untuk arm64), test, vet, check
 ```
 
 Template config (vhost, pool PHP-FPM, unit systemd, halaman default & suspended) ada di `internal/webserver/templates/` dan ditanam di binary `rayxod`, jadi tidak bisa diubah tanpa root. Override template per server (`/etc/rayxo/templates/custom/`) menyusul di P3.
@@ -321,6 +321,7 @@ Setiap aksi dijalankan oleh proses pembantu (`rayxod files-helper`) yang berjala
 /var/www/rayxo-acme/                webroot verifikasi Let's Encrypt (port 80), dipakai hostname dan semua domain
 /aquota.user                            data kuota user (journaled, vfsv1); fstab filesystem /home mendapat usrjquota=aquota.user,jqfmt=vfsv1
 /etc/fstab.rayxo-<waktu>            cadangan fstab sebelum setup.sh mengaktifkan kuota
+/etc/apt/sources.list.d/sury-php.sources  repo PHP packages.sury.org (server baru), kuncinya /etc/apt/keyrings/sury-php.asc ditulis ulang setiap setup.sh; cadangannya ondrej-ubuntu-php-noble.sources (PPA, kunci /etc/apt/keyrings/ondrej-php.asc)
 /etc/opendkim/keys/<hostname>/          kunci DKIM email panel (0600 opendkim)
 /var/spool/postfix/{rspamd,opendkim}/   socket milter Rspamd (dir _rspamd:postfix 0750) dan OpenDKIM (dir opendkim, postfix anggota grup opendkim)
 /etc/rspamd/override.d/worker-*.inc     worker Rspamd di socket; proxy memindai sendiri (self_scan)

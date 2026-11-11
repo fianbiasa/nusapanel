@@ -32,16 +32,22 @@ rayxo/
 └── docs/
 ```
 
-Pekerjaan:
+**Status** (diperiksa ulang 11 November 2026):
 
-- Panel dikembangkan di Herd (`rayxo.test`); SSL dan versi PHP diatur dari aplikasi Herd.
-- VM pengembangan di Mac (OrbStack atau Multipass) dengan Ubuntu 24.04 untuk agent, plus snapshot "bersih" untuk menguji installer berulang kali.
-- Agent: server JSON-RPC di Unix socket, cek `SO_PEERCRED`, kunci per akun, aksi pertama `system.info`.
-- Panel: Laravel + Inertia + React (dari starter kit resmi), login username/email + 2FA, peran admin/reseller/user, tabel `tasks` & `audit_logs`, klien agent (driver `fake` di Mac, `socket` di server).
-- Installer: `setup.sh` mewajibkan A record & PTR hostname yang benar, lalu memasang Nginx, MariaDB, PHP 8.4, Postfix kirim-saja + DKIM (email panel), SSL Let's Encrypt untuk hostname, user `rayxo`, panel & agent dari paket rilis (`build-release.sh`), dan membuat admin pertama.
-- CI: test Go & PHP; test integrasi agent di VM.
+- Panel dikembangkan di Herd (`rayxo.test`); SSL dan versi PHP diatur dari aplikasi Herd. ✅
+- Uji di server bersih ✅, menggantikan rencana VM OrbStack/Multipass dengan snapshot. `installer/test-in-vm.sh` memasang RAYXO di server yang masih bersih lalu memeriksanya dari ujung ke ujung. Servernya bisa VM Ubuntu 24.04 baru dari Lima (di Mac atau di CI); setiap run dimulai dari image bersih, jadi tidak perlu snapshot. Bisa juga VPS uji yang masih bersih lewat `--ssh`, dengan pengecekan DNS A/PTR dan Let's Encrypt sungguhan. Uji pertamanya menemukan tiga bug instalasi baru yang tidak terlihat di VPS yang hanya di-upgrade, dan semuanya sudah diperbaiki:
+    - PHP gagal dipasang kalau API Launchpad bermasalah. PHP kini diambil dari `packages.sury.org`, dengan PPA `ondrej/php` sebagai cadangan; kunci keduanya dipatok.
+    - Pengecekan paket PHP selalu gagal (SIGPIPE dengan `pipefail`).
+    - Ringkasan instalasi yang usang.
+- Agent: server JSON-RPC di Unix socket, cek `SO_PEERCRED`, kunci per akun, aksi pertama `system.info`. ✅
+- Panel: Laravel + Inertia + React (dari starter kit resmi), login username/email + 2FA, peran admin/reseller/user, tabel `tasks` & `audit_logs`, klien agent (driver `fake` di Mac, `socket` di server). ✅
+- Installer: `setup.sh` mewajibkan A record & PTR hostname yang benar, lalu memasang Nginx, MariaDB, PHP 8.4, Postfix + DKIM (email panel; sejak P2 email lengkap), SSL Let's Encrypt untuk hostname, user `rayxo`, panel & agent dari paket rilis (`build-release.sh`), dan membuat admin pertama. ✅
+- CI: test Go & PHP di setiap push (workflow `tests`) ✅; test integrasi agent di VM (workflow `clean-install`: `test-in-vm.sh` di VM Lima dengan KVM, setiap push ke main) ⏳ skripnya sudah lolos di Mac dan di VPS uji, tinggal run pertamanya di GitHub setelah push.
 
-**Selesai kalau:** install di VM bersih → login admin → dashboard menampilkan info sistem dari agent.
+**Selesai kalau:** install di VM bersih → login admin → dashboard menampilkan info sistem dari agent. ✅ Teruji 11 November 2026 dengan `test-in-vm.sh`:
+
+- VM Lima baru (Ubuntu 24.04 arm64): instalasi lolos, admin login, dashboard menampilkan info sistem dari agent, dan tes isolasi lolos.
+- VPS uji amd64 dengan DNS sungguhan: sama, ditambah sertifikat Let's Encrypt yang valid dan semua pemeriksaan `verify_install`.
 
 ## P1 — Hosting inti
 
@@ -227,8 +233,8 @@ Software manager (setara CustomBuild), app installer & WordPress manager, Git de
 
 ## Langkah pertama
 
-1. Tetapkan nama final: **RAYXO**.
-2. Siapkan VM Ubuntu 24.04 di Mac (OrbStack/Multipass).
-3. Scaffold panel Laravel + React (di Herd) dan agent Go.
-4. Socket agent + `system.info`, tampil di dashboard admin.
-5. Installer versi pertama.
+1. Tetapkan nama final: **RAYXO**. ✅
+2. Siapkan server Ubuntu 24.04 bersih untuk uji (`installer/test-in-vm.sh`: VM Lima atau VPS uji). ✅
+3. Scaffold panel Laravel + React (di Herd) dan agent Go. ✅
+4. Socket agent + `system.info`, tampil di dashboard admin. ✅
+5. Installer versi pertama. ✅

@@ -18,11 +18,14 @@ linux:
 	done
 
 # The proof that accounts cannot read each other's files, as a Linux test
-# binary to run as root on a RAYXO server (see internal/isolation):
+# binary to run as root on a RAYXO server (see internal/isolation), in
+# bin/linux-$(ARCH) (make isolation ARCH=arm64 for arm64 servers):
 #   ./isolation.test -test.v
+ARCH ?= amd64
+
 isolation:
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go test -c -trimpath -tags integration \
-		-o bin/linux-amd64/isolation.test ./internal/isolation
+	CGO_ENABLED=0 GOOS=linux GOARCH=$(ARCH) go test -c -trimpath -tags integration \
+		-o bin/linux-$(ARCH)/isolation.test ./internal/isolation
 
 test:
 	go test -race ./...
