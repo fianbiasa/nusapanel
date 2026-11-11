@@ -97,6 +97,15 @@ class ForwarderTest extends TestCase
                 ->where('domains.0.catchall_target', null));
     }
 
+    public function test_srs_leaves_the_envelope_sender_of_every_hosted_domain()
+    {
+        $other = User::factory()->create(['username' => 'sari', 'status' => AccountStatus::Suspended]);
+        Domain::factory()->for($other, 'account')->create(['name' => 'sari.example']);
+
+        // Hosted with or without email, whatever the account's status.
+        $this->assertSame(['example.com', 'sari.example'], DB::table('v_mail_hosted_domains')->orderBy('name')->pluck('name')->all());
+    }
+
     public function test_a_suspended_mailbox_still_gets_its_forwarders_copy()
     {
         $mailDomain = MailDomain::factory()->for($this->domain)->create();

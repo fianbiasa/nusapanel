@@ -78,6 +78,11 @@ readonly PDNS_CONF="/etc/powerdns/pdns.d/rayxo.conf"
 # database as this MariaDB user, which may only read the v_mail_* views.
 readonly MAIL_DB_USER="rayxo-mail"
 readonly POSTFIX_MAPS_DIR="/etc/postfix/rayxo"
+# Forwarded mail gets an SRS envelope sender from rayxod srs, which runs as
+# this user and answers Postfix on a socket in its spool (path relative to
+# the spool, where Postfix's daemons run).
+readonly SRS_USER="rayxo-srs"
+readonly SRS_SOCKET="rayxo-srs/srs.sock"
 # Rspamd signs the mail of hosting accounts' domains with these DKIM keys
 # (<domain>.<selector>.key); the agent writes them and the selector map.
 readonly RSPAMD_DKIM_DIR="/var/lib/rspamd/dkim"
@@ -1990,6 +1995,87 @@ CONF
 # v_mail_mailboxes. Rspamd scans mail and signs it with each domain's DKIM
 # key; OpenDKIM keeps signing the server's own mail. Suspended accounts
 # drop out of the views, so their mail stops at once.
+#
+# Mail this server sends on from other domains, such as forwarded mail, goes
+# out with an SRS envelope sender of the hostname (SRS0=...@<hostname>), so
+# it passes SPF where it goes; bounces to those addresses come back here and
+# go on to the original sender. rayxod srs makes and checks the addresses
+# with a secret key, as its own unprivileged service. The key stays across
+# upgrades, so addresses already sent keep working.
+configure_srs() {
+    if ! id -u "$SRS_USER" >/dev/null 2>&1; then
+        useradd --system --gid postfix --no-create-home --home-dir /nonexistent \
+            --shell /usr/sbin/nologin "$SRS_USER"
+        info "User sistem $SRS_USER (SRS) dibuat"
+    fi
+
+    if [[ ! -s "$CONFIG_DIR/srs.secret" ]]; then
+        (
+            umask 077
+            openssl rand -base64 32 >"$CONFIG_DIR/srs.secret"
+        )
+    fi
+    chown root:root "$CONFIG_DIR/srs.secret"
+    chmod 0600 "$CONFIG_DIR/srs.secret"
+
+    install -d -m 0750 -o "$SRS_USER" -g postfix "/var/spool/postfix/${SRS_SOCKET%/*}"
+
+    cat >/etc/systemd/system/rayxo-srs.service.new <<UNIT
+# Written by RAYXO setup.sh on every run; changes made here are lost.
+[Unit]
+Description=RAYXO SRS for forwarded mail (rayxod srs)
+After=network.target
+Before=postfix.service
+
+[Service]
+Type=simple
+User=$SRS_USER
+Group=postfix
+LoadCredential=srs:$CONFIG_DIR/srs.secret
+ExecStart=$INSTALL_DIR/bin/rayxod srs --socket /var/spool/postfix/$SRS_SOCKET --domain $server_hostname --secret-file %d/srs
+Restart=always
+RestartSec=1
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectSystem=strict
+ReadWritePaths=/var/spool/postfix/${SRS_SOCKET%/*}
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged
+SystemCallErrorNumber=EPERM
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+    mv -f /etc/systemd/system/rayxo-srs.service.new /etc/systemd/system/rayxo-srs.service
+    systemctl daemon-reload
+    quietly systemctl enable rayxo-srs.service
+    systemctl restart rayxo-srs.service
+
+    local attempt
+    for attempt in $(seq 1 20); do
+        [[ -S "/var/spool/postfix/$SRS_SOCKET" ]] && break
+        sleep 0.5
+    done
+    [[ -S "/var/spool/postfix/$SRS_SOCKET" ]] || die "SRS (rayxo-srs) tidak berjalan (cek: journalctl -u rayxo-srs)"
+}
+
 configure_mailboxes() {
     step "Mengatur email akun hosting (Postfix, Dovecot, Rspamd)"
 
@@ -2007,6 +2093,7 @@ GRANT SELECT ON \`rayxo\`.\`v_mail_webmail_sessions\` TO '$MAIL_DB_USER'@'localh
 GRANT SELECT ON \`rayxo\`.\`v_mail_forwarders\` TO '$MAIL_DB_USER'@'localhost';
 GRANT SELECT ON \`rayxo\`.\`v_mail_catchalls\` TO '$MAIL_DB_USER'@'localhost';
 GRANT SELECT ON \`rayxo\`.\`v_mail_local_senders\` TO '$MAIL_DB_USER'@'localhost';
+GRANT SELECT ON \`rayxo\`.\`v_mail_hosted_domains\` TO '$MAIL_DB_USER'@'localhost';
 SQL
 
     # Postfix's lookups, through proxymap (smtpd runs chrooted). Aliases
@@ -2037,6 +2124,7 @@ mail-forwarders SELECT destination FROM v_mail_forwarders WHERE source = '%s'
 mail-addresses SELECT address FROM v_mail_mailboxes WHERE address = '%s'
 mail-catchalls SELECT destination FROM v_mail_catchalls WHERE source = '%s'
 local-senders SELECT senders FROM v_mail_local_senders WHERE login = '%s'
+srs-local SELECT '%s' FROM v_mail_hosted_domains WHERE name = '%d'
 MAPS
 
     # The local sendmail checks a user's envelope sender itself (postdrop,
@@ -2050,8 +2138,19 @@ MAPS
     chown root:postdrop /etc/postfix/rayxo-postdrop/login-senders.regexp
     chmod 0640 /etc/postfix/rayxo-postdrop/login-senders.regexp
 
+    # Running before Postfix asks it (below).
+    configure_srs
+
+    # SRS: an envelope sender of a domain hosted here stays (srs-local maps
+    # it to itself); any other gets an SRS address. Envelope recipients that
+    # are SRS addresses of this server are turned back. Headers stay as
+    # they are, so the original sender's DKIM signature still holds.
     quietly postconf -e \
         "inet_interfaces = all" \
+        "sender_canonical_maps = proxy:mysql:$POSTFIX_MAPS_DIR/srs-local.cf, socketmap:unix:$SRS_SOCKET:forward" \
+        "sender_canonical_classes = envelope_sender" \
+        "recipient_canonical_maps = socketmap:unix:$SRS_SOCKET:reverse" \
+        "recipient_canonical_classes = envelope_recipient" \
         "virtual_mailbox_domains = proxy:mysql:$POSTFIX_MAPS_DIR/mail-domains.cf" \
         "virtual_mailbox_maps = proxy:mysql:$POSTFIX_MAPS_DIR/mail-mailboxes.cf" \
         "virtual_alias_maps = proxy:mysql:$POSTFIX_MAPS_DIR/mail-forwarders.cf, proxy:mysql:$POSTFIX_MAPS_DIR/mail-addresses.cf, proxy:mysql:$POSTFIX_MAPS_DIR/mail-catchalls.cf" \
@@ -2984,6 +3083,15 @@ PYTHON
 
     systemctl is-active --quiet opendkim || die "OpenDKIM tidak berjalan (cek: journalctl -u opendkim)"
     info "OpenDKIM aktif"
+
+    # Forwarded mail gets an SRS sender that comes back as the original;
+    # Postfix's daemons find the socket from the spool.
+    local srs_address srs_back
+    srs_address="$(cd /var/spool/postfix && postmap -q check@example.org "socketmap:unix:$SRS_SOCKET:forward" 2>>"$INSTALL_LOG" || true)"
+    srs_back="$(cd /var/spool/postfix && postmap -q "$srs_address" "socketmap:unix:$SRS_SOCKET:reverse" 2>>"$INSTALL_LOG" || true)"
+    [[ "$srs_address" == SRS0=*"@$server_hostname" && "$srs_back" == check@example.org ]] ||
+        die "SRS untuk email yang diteruskan tidak bekerja (cek: journalctl -u rayxo-srs)"
+    info "Email yang diteruskan dikirim dengan alamat SRS $server_hostname"
 
     # Quotas are optional, so losing them only warns.
     if [[ -n "$quota_mount" ]]; then

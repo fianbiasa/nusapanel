@@ -369,6 +369,7 @@ Setiap aksi dijalankan oleh proses pembantu (`rayxod files-helper`) yang berjala
 | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | `rayxod.service`                     | Agent                                                                                                                                    |
 | `rayxo-queue.service`                | Queue worker Laravel                                                                                                                     |
+| `rayxo-srs.service`                  | SRS untuk email yang diteruskan: `rayxod srs` sebagai user `rayxo-srs`, menjawab socketmap Postfix di `/var/spool/postfix/rayxo-srs/srs.sock` (0660, grup postfix) |
 | `rayxo-scheduler.timer`              | Menjalankan `schedule:run` Laravel tiap menit (ukur pemakaian tiap 15 menit, akhiri sesi phpMyAdmin tiap 5 menit)                        |
 | `pure-ftpd-mysql.service`            | FTP untuk akun hosting: login dari view `v_ftp_users`, chroot ke folder login, berjalan sebagai uid akun, wajib TLS, passive 35000–35999 |
 | `php8.4-fpm.service`                 | Pool PHP-FPM panel (`rayxo`), phpMyAdmin (`rayxo-phpmyadmin`, user `rayxo-pma`) dan webmail (`rayxo-webmail`, user `rayxo-webmail`)      |

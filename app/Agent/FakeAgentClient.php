@@ -114,6 +114,7 @@ final class FakeAgentClient implements AgentClient
             ['mariadb.service', 'MariaDB', false, true],
             ['postfix.service', 'Postfix', true, true],
             ['opendkim.service', 'OpenDKIM', true, true],
+            ['rayxo-srs.service', 'SRS (email diteruskan)', true, true],
             ['pure-ftpd-mysql.service', 'Pure-FTPd', true, true],
             ['cron.service', 'Cron', true, true],
             ['rayxo-queue.service', 'Queue worker panel', false, true],

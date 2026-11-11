@@ -20,6 +20,7 @@ import (
 	"rayxo/agent/internal/reconfigure"
 	"rayxo/agent/internal/rpc"
 	"rayxo/agent/internal/services"
+	"rayxo/agent/internal/srs"
 	"rayxo/agent/internal/version"
 )
 
@@ -37,6 +38,12 @@ func main() {
 	// as the account (see internal/files).
 	if len(os.Args) > 1 && os.Args[1] == files.HelperArg {
 		os.Exit(files.HelperMain(os.Args[2:]))
+	}
+
+	// Postfix's SRS lookups run in rayxod too, as their own unprivileged
+	// service (rayxo-srs, see internal/srs).
+	if len(os.Args) > 1 && os.Args[1] == srs.Arg {
+		os.Exit(srs.Main(os.Args[2:]))
 	}
 
 	var cfg config

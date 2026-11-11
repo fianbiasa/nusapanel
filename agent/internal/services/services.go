@@ -71,6 +71,9 @@ func Catalog() []Service {
 		{Unit: "mariadb.service", Label: "MariaDB", CanControl: true, Panel: true},
 		{Unit: "postfix.service", Label: "Postfix", CanControl: true, CanStop: true},
 		{Unit: "opendkim.service", Label: "OpenDKIM", CanControl: true, CanStop: true},
+		// Postfix asks it about every recipient: while it is down, mail
+		// waits (451) instead of going anywhere.
+		{Unit: "rayxo-srs.service", Label: "SRS (email diteruskan)", CanControl: true, CanStop: true},
 		{Unit: "pure-ftpd-mysql.service", Label: "Pure-FTPd", CanControl: true, CanStop: true},
 		{Unit: "cron.service", Label: "Cron", CanControl: true, CanStop: true},
 		{Unit: "rayxo-queue.service", Label: "Queue worker panel", CanControl: true, Panel: true},
