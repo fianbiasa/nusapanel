@@ -29,6 +29,7 @@ import (
 	"unicode/utf8"
 
 	"rayxo/agent/internal/files"
+	"rayxo/agent/internal/runner"
 	"rayxo/agent/internal/sysuser"
 	"rayxo/agent/internal/validate"
 )
@@ -104,6 +105,8 @@ type Config struct {
 	// MailnamePath holds the server's mail name, the domain of mail its
 	// local users send under their login name.
 	MailnamePath string
+	// Run runs a program (doveadm); nil uses runner.Run.
+	Run func(ctx context.Context, program string, args ...string) ([]byte, error)
 	// KeyGroup is the group of the DKIM keys: Rspamd's.
 	KeyGroup string
 	// LookupGroup returns the gid of a group; nil uses the system's.
@@ -173,6 +176,10 @@ func New(cfg Config) *Manager {
 
 	if cfg.Chown == nil {
 		cfg.Chown = os.Chown
+	}
+
+	if cfg.Run == nil {
+		cfg.Run = runner.Run
 	}
 
 	return &Manager{cfg: cfg}

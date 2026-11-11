@@ -25,6 +25,8 @@ use Illuminate\Support\Carbon;
  * @property string $password_hash SHA512-CRYPT, as Dovecot checks it.
  * @property int|null $quota_mb Null is no limit.
  * @property int|null $daily_send_limit Recipients per 24 hours; null is the account's limit.
+ * @property int|null $used_kb Mail it holds, as last measured; null until then.
+ * @property int|null $message_count
  * @property MailboxStatus $status
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
@@ -60,6 +62,8 @@ class Mailbox extends Model
         return [
             'quota_mb' => 'integer',
             'daily_send_limit' => 'integer',
+            'used_kb' => 'integer',
+            'message_count' => 'integer',
             'status' => MailboxStatus::class,
         ];
     }

@@ -44,6 +44,8 @@ class EmailController extends Controller
                 'domain' => $mailbox->mailDomain->domain->name,
                 'quota_mb' => $mailbox->quota_mb,
                 'daily_send_limit' => $mailbox->daily_send_limit,
+                'used_kb' => $mailbox->used_kb,
+                'message_count' => $mailbox->message_count,
                 'suspended' => $mailbox->status === MailboxStatus::Suspended,
                 'ready' => $mailbox->mailDomain->status === MailDomainStatus::Active,
                 'created_at' => $mailbox->created_at?->toIso8601String(),

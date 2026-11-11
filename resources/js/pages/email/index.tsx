@@ -43,7 +43,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
-import { formatMegabytes } from '@/lib/format';
+import { formatBytes, formatMegabytes } from '@/lib/format';
 import { openSignOnTab, postSignOnTicket } from '@/lib/sign-on';
 import {
     destroy,
@@ -61,6 +61,9 @@ type MailboxRow = {
     quota_mb: number | null;
     /** Its own daily send limit; null follows the hosting account's. */
     daily_send_limit: number | null;
+    /** Mail it holds, as last measured (every 15 minutes); null until then. */
+    used_kb: number | null;
+    message_count: number | null;
     /** Suspended: it may not sign in, but its mail still arrives. */
     suspended: boolean;
     /** Whether its domain takes mail yet (the agent prepared it). */
@@ -220,7 +223,9 @@ export default function EmailIndex({
                             <thead className={tableStyles.head}>
                                 <tr>
                                     <th className={tableStyles.th}>Alamat</th>
-                                    <th className={tableStyles.th}>Kuota</th>
+                                    <th className={tableStyles.th}>
+                                        Terpakai / kuota
+                                    </th>
                                     <th className={tableStyles.th}>
                                         <span className="sr-only">Aksi</span>
                                     </th>
@@ -254,11 +259,26 @@ export default function EmailIndex({
                                         <td
                                             className={`${tableStyles.td} whitespace-nowrap text-muted-foreground`}
                                         >
+                                            <span className="text-foreground">
+                                                {mailbox.used_kb === null
+                                                    ? '—'
+                                                    : formatBytes(
+                                                          mailbox.used_kb *
+                                                              1024,
+                                                      )}
+                                            </span>
+                                            {' / '}
                                             {mailbox.quota_mb === null
-                                                ? 'Tanpa batas'
+                                                ? 'tanpa batas'
                                                 : formatMegabytes(
                                                       mailbox.quota_mb,
                                                   )}
+                                            {mailbox.message_count !== null && (
+                                                <p className="text-xs">
+                                                    {mailbox.message_count}{' '}
+                                                    pesan
+                                                </p>
+                                            )}
                                         </td>
                                         <td className={tableStyles.td}>
                                             <div className="flex items-center justify-end gap-1">

@@ -41,6 +41,7 @@ final class FakeAgentClient implements AgentClient
             'ftp.ensure_dir' => $this->ftpFolder((string) ($params['username'] ?? '')),
             'php.versions' => ['versions' => ['7.4', '8.0', '8.1', '8.2', '8.3', '8.4', '8.5'], 'simulated' => true],
             'service.status' => $this->serviceReport(),
+            'mail.usage' => ['mailboxes' => [], 'simulated' => true],
             'mail.queue_list' => $this->mailQueue(),
             'mail.queue_retry' => ['id' => $params['id'] ?? '', 'simulated' => true],
             'mail.queue_delete' => ['done' => $params['ids'] ?? [], 'failed' => [], 'simulated' => true],

@@ -18,6 +18,7 @@ type mailServer interface {
 	RemoveMailbox(ctx context.Context, account sysuser.User, domain, localPart string) error
 	ApplySieve(ctx context.Context, account sysuser.User, domain, localPart, script string) error
 	ApplySendLimits(limits mail.SendLimits) error
+	Usage(ctx context.Context) ([]mail.MailboxUsage, error)
 }
 
 // mailDomainParams are the params of mail.domain_apply.
@@ -86,6 +87,19 @@ func mailMethods(system accountSystem, server mailServer) map[string]rpc.Method 
 		"mail.domain_remove":  {Handler: actions.removeDomain, LockKey: webLockKey[domainParams]},
 		"mail.mailbox_remove": {Handler: actions.removeMailbox, LockKey: webLockKey[mailboxParams]},
 		"mail.sieve_apply":    {Handler: actions.applySieve, LockKey: webLockKey[mailSieveParams]},
+		// Only reads Dovecot's quota bookkeeping.
+		"mail.usage": {Handler: func(ctx context.Context, raw json.RawMessage) (any, error) {
+			if err := rpc.DecodeParams(raw, &struct{}{}); err != nil {
+				return nil, err
+			}
+
+			usages, err := actions.server.Usage(ctx)
+			if err != nil {
+				return nil, rpc.Errorf(rpc.CodeActionFailed, "the mail usage could not be read: %v", err)
+			}
+
+			return map[string]any{"mailboxes": usages}, nil
+		}},
 		// One map for the whole server, written by one call at a time.
 		"mail.send_limits_apply": {Handler: actions.applySendLimits, LockKey: func(json.RawMessage) (string, error) {
 			return "mail:send_limits", nil

@@ -4,13 +4,14 @@ namespace App\Console\Commands;
 
 use App\Agent\AgentException;
 use App\Services\DatabaseService;
+use App\Services\MailUsageService;
 use App\Services\QuotaService;
 use Illuminate\Console\Command;
 
 /**
  * Stores how much disk space and how many files every hosting account
  * uses, as the server's disk quotas report it, and the size of every
- * database. The scheduler runs it every fifteen minutes; the dashboard,
+ * database and email account. The scheduler runs it every fifteen minutes; the dashboard,
  * the account list and the Databases page show the result.
  */
 class CollectUsageCommand extends Command
@@ -25,7 +26,7 @@ class CollectUsageCommand extends Command
      */
     protected $description = 'Read the disk usage of every hosting account from the server agent';
 
-    public function handle(QuotaService $quotas, DatabaseService $databases): int
+    public function handle(QuotaService $quotas, DatabaseService $databases, MailUsageService $mailUsage): int
     {
         // Database sizes are measured apart from the disk quotas, so one
         // failing does not stop the other.
@@ -36,6 +37,14 @@ class CollectUsageCommand extends Command
             report($exception);
 
             $this->components->error('The server agent could not report database sizes: '.$exception->getMessage());
+        }
+
+        try {
+            $mailboxes = $mailUsage->collect();
+            $this->components->info($mailboxes === 1 ? 'Size of 1 email account stored.' : "Size of {$mailboxes} email accounts stored.");
+        } catch (AgentException $exception) {
+            report($exception);
+            $this->components->error('The server agent could not report the size of email accounts: '.$exception->getMessage());
         }
 
         try {

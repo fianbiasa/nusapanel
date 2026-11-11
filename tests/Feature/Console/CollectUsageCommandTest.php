@@ -7,6 +7,9 @@ use App\Agent\AgentException;
 use App\Enums\AccountStatus;
 use App\Models\AccountUsage;
 use App\Models\Database;
+use App\Models\Domain;
+use App\Models\Mailbox;
+use App\Models\MailDomain;
 use App\Models\Package;
 use App\Models\User;
 use App\Services\QuotaService;
@@ -82,6 +85,26 @@ class CollectUsageCommandTest extends TestCase
         $this->assertNull($unmeasured->fresh()->size_bytes);
     }
 
+    public function test_it_stores_the_size_of_every_email_account()
+    {
+        $domain = Domain::factory()->for(User::factory()->create(['username' => 'budi']), 'account')->create(['name' => 'example.com']);
+        $mailDomain = MailDomain::factory()->for($domain)->create();
+        $info = Mailbox::factory()->for($mailDomain)->create(['local_part' => 'info']);
+        $unmeasured = Mailbox::factory()->for($mailDomain)->create(['local_part' => 'sales']);
+
+        $this->agentReports(['enabled' => true, 'filesystem' => '/', 'accounts' => []], [], [
+            ['address' => 'info@example.com', 'used_kb' => 9, 'messages' => 2],
+            ['address' => 'gone@example.org', 'used_kb' => 100, 'messages' => 5],
+        ]);
+
+        $this->artisan('rayxo:collect-usage')
+            ->expectsOutputToContain('Size of 1 email account stored.')
+            ->assertSuccessful();
+
+        $this->assertSame([9, 2], [$info->fresh()->used_kb, $info->fresh()->message_count]);
+        $this->assertNull($unmeasured->fresh()->used_kb);
+    }
+
     public function test_it_remembers_that_the_server_does_not_enforce_quotas()
     {
         Cache::forever(QuotaService::ENABLED_CACHE_KEY, true);
@@ -112,6 +135,10 @@ class CollectUsageCommandTest extends TestCase
             $mock->shouldReceive('call')
                 ->once()
                 ->with('db.report', [], config('agent.timeout'))
+                ->andThrow(new AgentException('Connection refused'));
+            $mock->shouldReceive('call')
+                ->once()
+                ->with('mail.usage', [], config('agent.timeout'))
                 ->andThrow(new AgentException('Connection refused'));
         });
 
@@ -157,10 +184,15 @@ class CollectUsageCommandTest extends TestCase
     /**
      * @param  array<string, mixed>  $report
      * @param  list<array{name: string, size_bytes: int}>  $databases
+     * @param  list<array{address: string, used_kb: int, messages: int}>  $mailboxes
      */
-    private function agentReports(array $report, array $databases = []): void
+    private function agentReports(array $report, array $databases = [], array $mailboxes = []): void
     {
-        $this->mock(AgentClient::class, function (MockInterface $mock) use ($report, $databases) {
+        $this->mock(AgentClient::class, function (MockInterface $mock) use ($report, $databases, $mailboxes) {
+            $mock->shouldReceive('call')
+                ->once()
+                ->with('mail.usage', [], config('agent.timeout'))
+                ->andReturn(['mailboxes' => $mailboxes]);
             $mock->shouldReceive('call')
                 ->once()
                 ->with('quota.report', [], config('agent.timeout'))
