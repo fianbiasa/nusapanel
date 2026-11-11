@@ -7,6 +7,7 @@ use App\Enums\Role;
 use App\Models\MailAutoreply;
 use App\Models\Mailbox;
 use App\Models\MailFilter;
+use App\Models\MailSpamSetting;
 use App\Models\User;
 use App\Support\SieveScript;
 use Illuminate\Validation\ValidationException;
@@ -54,6 +55,35 @@ class MailRulesService
         $this->apply($mailbox, $actor);
 
         return $autoreply;
+    }
+
+    /**
+     * Save the mailbox's own spam filter: the score from which mail is
+     * spam, what happens to it, and senders that never or always count as
+     * spam (addresses and @domains).
+     *
+     * @param  array{threshold: int, action: string, whitelist: list<string>, blacklist: list<string>}  $data  Already validated.
+     *
+     * @throws ValidationException
+     */
+    public function saveSpamSettings(Mailbox $mailbox, array $data, User $actor): MailSpamSetting
+    {
+        $this->mail->ensureAccountIsActive($mailbox->mailDomain->domain->account, 'threshold');
+
+        $setting = $mailbox->spamSetting()->firstOrNew();
+        $setting->forceFill($data)->save();
+
+        $this->audit->record('mailbox.spam_settings_updated', $mailbox, [
+            'address' => $this->mail->address($mailbox),
+            'threshold' => $data['threshold'],
+            'action' => $data['action'],
+            'whitelist' => count($data['whitelist']),
+            'blacklist' => count($data['blacklist']),
+        ], $actor);
+
+        $this->apply($mailbox, $actor);
+
+        return $setting;
     }
 
     /**
@@ -126,6 +156,7 @@ class MailRulesService
             $this->mail->address($mailbox),
             $mailbox->autoreply()->first(),
             $mailbox->filters()->get(),
+            $mailbox->spamSetting()->first(),
         );
 
         $this->tasks->dispatch('mail.sieve_apply', [
@@ -149,7 +180,7 @@ class MailRulesService
 
         Mailbox::query()
             ->with('mailDomain.domain.account')
-            ->where(fn ($query) => $query->whereHas('autoreply')->orWhereHas('filters'))
+            ->where(fn ($query) => $query->whereHas('autoreply')->orWhereHas('filters')->orWhereHas('spamSetting'))
             ->whereHas('mailDomain.domain.account', fn ($query) => $query
                 ->where('role', Role::User)
                 ->whereIn('status', [AccountStatus::Active, AccountStatus::Suspended]))

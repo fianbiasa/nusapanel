@@ -68,6 +68,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->name('email.dns-check');
         Route::get('email/{mailbox}/rules', [MailboxRulesController::class, 'show'])->name('email.rules');
         Route::put('email/{mailbox}/autoreply', [MailboxRulesController::class, 'updateAutoreply'])->name('email.autoreply.update');
+        Route::put('email/{mailbox}/spam', [MailboxRulesController::class, 'updateSpam'])->name('email.spam.update');
         Route::post('email/{mailbox}/filters', [MailboxRulesController::class, 'storeFilter'])->name('email.filters.store');
         Route::delete('email/filters/{mailFilter}', [MailboxRulesController::class, 'destroyFilter'])->name('email.filters.destroy');
         Route::get('dns', [DnsController::class, 'index'])->name('dns.index');

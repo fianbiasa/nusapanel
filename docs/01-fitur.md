@@ -79,7 +79,7 @@ Pembagian level sama seperti DirectAdmin:
 | Catch-all          | Tolak (bawaan) atau teruskan ke satu alamat                                                            | P2   |
 | Autoresponder      | Balasan otomatis                                                                                       | P2   |
 | Vacation message   | Dengan tanggal mulai dan selesai                                                                       | P2   |
-| Spam filter        | Ambang skor, aksi (pindah ke Junk/hapus), whitelist & blacklist (Rspamd)                               | P2   |
+| Spam filter        | ✅ Per akun email: ambang skor, aksi (Junk/hapus/tandai saja), whitelist & blacklist                   | P2   |
 | Email filter       | Aturan per akun (Sieve)                                                                                | P2   |
 | DKIM / SPF / DMARC | ✅ Dibuat otomatis + indikator status ("Cek DNS" di halaman Email, lewat DNS publik)                   | P2   |
 | MX & mode email    | Email ditangani server ini atau layanan luar (Google, Zoho, dll.)                                      | P2   |

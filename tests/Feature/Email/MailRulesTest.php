@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Services\MailRulesService;
 use App\Services\RebuildService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Inertia\Testing\AssertableInertia as Assert;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -238,5 +239,103 @@ class MailRulesTest extends TestCase
 
         $this->assertSame(2, Task::query()->where('action', 'mail.sieve_apply')->count());
         $this->assertStringContainsString('fileinto :create "Invoices";', Task::query()->where('action', 'mail.sieve_apply')->orderBy('id')->firstOrFail()->payload['script']);
+    }
+
+    public function test_a_mailbox_gets_its_own_spam_filter_ahead_of_everything_else()
+    {
+        $this->actingAs($this->account)
+            ->put(route('email.spam.update', $this->mailbox), [
+                'threshold' => 4,
+                'action' => 'delete',
+                'whitelist' => "Boss@Example.org\n@partner.example",
+                'blacklist' => 'spam.example, bad@x.example spam.example',
+            ])
+            ->assertSessionHasNoErrors()
+            ->assertInertiaFlash('toast.message', 'The spam filter of info@example.com is saved.');
+
+        $setting = $this->mailbox->spamSetting()->sole();
+        $this->assertSame([4, 'delete'], [$setting->threshold, $setting->action]);
+        $this->assertSame(['boss@example.org', '@partner.example'], $setting->whitelist);
+        $this->assertSame(['@spam.example', 'bad@x.example'], $setting->blacklist);
+
+        // A spam filter alone writes a script, spam first.
+        $this->assertSame(
+            "# Written by RAYXO from the Email page; changes made here are lost.\n"
+            ."\n"
+            ."# Spam\n"
+            ."# Senders whose mail is always spam\n"
+            ."if anyof (address :is :all \"from\" [\"bad@x.example\"], address :is :domain \"from\" [\"spam.example\"]) {\n"
+            ."    discard;\n"
+            ."    stop;\n"
+            ."}\n"
+            ."# A spam score of 4 or more\n"
+            ."if allof (header :contains \"X-Spam-Level\" \"****\", not anyof (address :is :all \"from\" [\"boss@example.org\"], address :is :domain \"from\" [\"partner.example\"])) {\n"
+            ."    discard;\n"
+            ."    stop;\n"
+            ."}\n",
+            $this->lastScript(),
+        );
+        $this->assertDatabaseHas(AuditLog::class, ['action' => 'mailbox.spam_settings_updated', 'actor_id' => $this->account->id]);
+
+        // Dovecot runs an empty script before its own instead of the
+        // server's spam script, which other mailboxes keep.
+        Mailbox::factory()->for($this->mailbox->mailDomain)->create(['local_part' => 'sales']);
+        $this->assertSame(
+            ['info@example.com' => '/etc/dovecot/sieve/rayxo-none.sieve', 'sales@example.com' => '/etc/dovecot/sieve/rayxo-spam.sieve'],
+            DB::table('v_mail_mailboxes')->orderBy('address')->pluck('sieve_before', 'address')->all(),
+        );
+
+        $this->actingAs($this->account)
+            ->get(route('email.rules', $this->mailbox))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('spam.custom', true)
+                ->where('spam.threshold', 4)
+                ->where('spam.blacklist', ['@spam.example', 'bad@x.example']));
+    }
+
+    public function test_spam_that_is_only_tagged_stays_in_the_inbox()
+    {
+        $this->actingAs($this->account)
+            ->put(route('email.spam.update', $this->mailbox), ['threshold' => 8, 'action' => 'tag'])
+            ->assertSessionHasNoErrors();
+
+        $script = $this->lastScript();
+        $this->assertStringContainsString("if allof (header :contains \"X-Spam-Level\" \"********\") {\n    keep;\n    stop;\n}", $script);
+        $this->assertStringNotContainsString('fileinto', $script);
+    }
+
+    /**
+     * @return array<string, array{array<string, mixed>, string}>
+     */
+    public static function invalidSpamSettings(): array
+    {
+        return [
+            'threshold zero' => [['threshold' => 0, 'action' => 'junk'], 'threshold'],
+            'threshold too high' => [['threshold' => 31, 'action' => 'junk'], 'threshold'],
+            'unknown action' => [['threshold' => 6, 'action' => 'bounce'], 'action'],
+            'not a sender' => [['threshold' => 6, 'action' => 'junk', 'whitelist' => 'not"valid@'], 'whitelist.0'],
+            'bad domain' => [['threshold' => 6, 'action' => 'junk', 'blacklist' => '@-bad-.example'], 'blacklist.0'],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    #[DataProvider('invalidSpamSettings')]
+    public function test_invalid_spam_settings_are_refused(array $data, string $error)
+    {
+        $this->actingAs($this->account)
+            ->put(route('email.spam.update', $this->mailbox), $data)
+            ->assertSessionHasErrors($error);
+
+        $this->assertNull($this->mailbox->spamSetting()->first());
+        $this->assertSame(0, Task::query()->where('action', 'mail.sieve_apply')->count());
+    }
+
+    public function test_other_accounts_cannot_change_the_spam_filter()
+    {
+        $this->actingAs(User::factory()->create())
+            ->put(route('email.spam.update', $this->mailbox), ['threshold' => 6, 'action' => 'junk'])
+            ->assertNotFound();
     }
 }

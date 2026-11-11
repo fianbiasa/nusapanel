@@ -2107,7 +2107,7 @@ driver = mysql
 connect = host=/run/mysqld/mysqld.sock dbname=rayxo user=$MAIL_DB_USER password=$password
 default_pass_scheme = SHA512-CRYPT
 password_query = SELECT address AS user, password FROM v_mail_mailboxes WHERE address = '%u' AND can_login = 1
-user_query = SELECT home, uid, gid, quota_rule FROM v_mail_mailboxes WHERE address = '%u'
+user_query = SELECT home, uid, gid, quota_rule, sieve_before FROM v_mail_mailboxes WHERE address = '%u'
 iterate_query = SELECT address AS user FROM v_mail_mailboxes
 SQLCONF
     )
@@ -2234,9 +2234,11 @@ protocol lmtp {
   mail_plugins = \$mail_plugins sieve
 }
 
-# Sieve on delivery: the server's script first (spam into Junk), then the
-# mailbox's own (filters and automatic reply from the panel, written by the
-# agent as the account). Forwarded copies and automatic replies go out from
+# Sieve on delivery: the server's spam script first (spam into Junk), then
+# the mailbox's own (filters and automatic reply from the panel, written by
+# the agent as the account). A mailbox with its own spam filter gets an
+# empty script before instead (userdb field sieve_before), and its own
+# script handles spam first. Forwarded copies and automatic replies go out from
 # the mailbox's address: the local sendmail takes no empty sender from
 # hosting accounts, since such mail would escape their daily send limit.
 plugin {
@@ -2261,6 +2263,9 @@ if header :is "X-Spam" "Yes" {
 }
 SIEVE
     quietly sievec /etc/dovecot/sieve/rayxo-spam.sieve || die "skrip Sieve spam ditolak (cek: sievec /etc/dovecot/sieve/rayxo-spam.sieve)"
+    # Run before the script of a mailbox with its own spam filter: nothing.
+    printf '# Written by RAYXO setup.sh on every run: the mailbox handles its own spam.\n' >/etc/dovecot/sieve/rayxo-none.sieve
+    quietly sievec /etc/dovecot/sieve/rayxo-none.sieve || die "skrip Sieve kosong ditolak (cek: sievec /etc/dovecot/sieve/rayxo-none.sieve)"
 
     # Rspamd: DKIM keys of the accounts' domains (written by the agent), no
     # greylisting (it delays first mail by minutes), Redis on localhost.
@@ -2837,6 +2842,19 @@ sync_dns_zones() {
     fi
 }
 
+# Every mailbox's Sieve script is written again, so scripts written by an
+# older release follow the current rules (such as handling spam first).
+# Queued like rebuild_websites.
+apply_mail_rules() {
+    step "Menulis ulang filter email"
+
+    if artisan rayxo:apply-mail-rules >>"$INSTALL_LOG" 2>&1; then
+        info "Filter, balasan otomatis dan filter spam akun email ditulis ulang di latar belakang (lihat Tasks di panel)"
+    else
+        warn "filter email tidak bisa ditulis ulang; jalankan lagi: runuser -u $PANEL_USER -- $PHP_BIN $INSTALL_DIR/current/panel/artisan rayxo:apply-mail-rules"
+    fi
+}
+
 # The mail server gets the daily send limits and which domains belong to
 # which account (the scheduler keeps them current every five minutes).
 # Queued like rebuild_websites.
@@ -3198,6 +3216,7 @@ main() {
     apply_quotas
     sync_dns_zones
     sync_send_limits
+    apply_mail_rules
     # Last, right before the summary, so a failure in an earlier step can never
     # leave an admin whose generated password was not shown.
     create_admin

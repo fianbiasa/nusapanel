@@ -85,6 +85,14 @@ class Mailbox extends Model
     }
 
     /**
+     * @return HasOne<MailSpamSetting, $this>
+     */
+    public function spamSetting(): HasOne
+    {
+        return $this->hasOne(MailSpamSetting::class);
+    }
+
+    /**
      * In the order they run.
      *
      * @return HasMany<MailFilter, $this>

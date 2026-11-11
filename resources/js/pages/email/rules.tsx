@@ -1,5 +1,11 @@
 import { Form, Head, Link } from '@inertiajs/react';
-import { ArrowLeft, Filter, MessageSquareReply, Trash2 } from 'lucide-react';
+import {
+    ArrowLeft,
+    Filter,
+    MessageSquareReply,
+    ShieldAlert,
+    Trash2,
+} from 'lucide-react';
 import { useState } from 'react';
 import { AffixInput } from '@/components/affix-input';
 import InputError from '@/components/input-error';
@@ -28,6 +34,7 @@ import {
 import { Spinner } from '@/components/ui/spinner';
 import { index as emailIndex } from '@/routes/email';
 import { update as updateAutoreply } from '@/routes/email/autoreply';
+import { update as updateSpam } from '@/routes/email/spam';
 import {
     destroy as destroyFilter,
     store as storeFilter,
@@ -51,11 +58,22 @@ type FilterRow = {
     target: string | null;
 };
 
+type SpamSettings = {
+    /** Whether the mailbox has its own filter (else the server's default). */
+    custom: boolean;
+    threshold: number;
+    action: 'junk' | 'delete' | 'tag';
+    whitelist: string[];
+    blacklist: string[];
+    max_senders: number;
+};
+
 type Props = {
     mailbox: { id: number; address: string; ready: boolean };
     autoreply: Autoreply | null;
     filters: FilterRow[];
     max_filters: number;
+    spam: SpamSettings;
 };
 
 const fieldLabels: Record<FilterRow['field'], string> = {
@@ -86,6 +104,7 @@ export default function EmailRules({
     autoreply,
     filters,
     max_filters,
+    spam,
 }: Props) {
     return (
         <>
@@ -101,7 +120,7 @@ export default function EmailRules({
 
             <PageHeader
                 title={<span className="break-all">{mailbox.address}</span>}
-                description="Balasan otomatis dan filter untuk email yang masuk ke akun ini. Spam otomatis masuk ke folder Junk lebih dulu."
+                description="Filter spam, balasan otomatis dan filter untuk email yang masuk ke akun ini. Spam ditangani lebih dulu, jadi tidak pernah dibalas otomatis."
             />
 
             {!mailbox.ready && (
@@ -110,6 +129,8 @@ export default function EmailRules({
                     sini mulai berlaku setelahnya.
                 </p>
             )}
+
+            <SpamPanel mailbox={mailbox} spam={spam} />
 
             <AutoreplyPanel mailbox={mailbox} autoreply={autoreply} />
 
@@ -584,6 +605,166 @@ function FiltersPanel({
                     )}
                 </DialogContent>
             </Dialog>
+        </Panel>
+    );
+}
+
+const spamActions: Record<SpamSettings['action'], string> = {
+    junk: 'Pindahkan ke folder Junk',
+    delete: 'Hapus',
+    tag: 'Tandai saja (tetap di Inbox)',
+};
+
+/**
+ * The mailbox's own spam filter: from which spam score mail is spam, what
+ * happens to it, and senders that never or always count as spam.
+ */
+function SpamPanel({
+    mailbox,
+    spam,
+}: {
+    mailbox: Props['mailbox'];
+    spam: SpamSettings;
+}) {
+    const [action, setAction] = useState<SpamSettings['action']>(spam.action);
+
+    return (
+        <Panel
+            title="Filter spam"
+            description={
+                spam.custom
+                    ? 'Pengaturan spam khusus akun email ini.'
+                    : 'Akun email ini memakai pengaturan bawaan: skor spam 6 atau lebih masuk folder Junk.'
+            }
+        >
+            <Form
+                {...updateSpam.form(mailbox.id)}
+                options={{ preserveScroll: true }}
+                className="grid gap-5"
+            >
+                {({ processing, errors }) => (
+                    <>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="grid gap-2">
+                                <Label htmlFor="spam-threshold">
+                                    Dianggap spam mulai skor
+                                </Label>
+                                <Input
+                                    id="spam-threshold"
+                                    name="threshold"
+                                    type="number"
+                                    min={1}
+                                    max={30}
+                                    defaultValue={spam.threshold}
+                                    className="rounded-xl"
+                                    required
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    Skor dari Rspamd; makin kecil makin ketat.
+                                    Bawaan 6.
+                                </p>
+                                <InputError message={errors.threshold} />
+                            </div>
+                            <div className="grid gap-2">
+                                <Label htmlFor="spam-action">
+                                    Yang dilakukan pada spam
+                                </Label>
+                                <input
+                                    type="hidden"
+                                    name="action"
+                                    value={action}
+                                />
+                                <Select
+                                    value={action}
+                                    onValueChange={(value) =>
+                                        setAction(
+                                            value as SpamSettings['action'],
+                                        )
+                                    }
+                                >
+                                    <SelectTrigger
+                                        id="spam-action"
+                                        className={triggerClass}
+                                    >
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {(
+                                            Object.keys(
+                                                spamActions,
+                                            ) as SpamSettings['action'][]
+                                        ).map((key) => (
+                                            <SelectItem key={key} value={key}>
+                                                {spamActions[key]}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <InputError message={errors.action} />
+                            </div>
+                        </div>
+
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="grid gap-2">
+                                <Label htmlFor="spam-whitelist">
+                                    Bukan spam (whitelist)
+                                </Label>
+                                <textarea
+                                    id="spam-whitelist"
+                                    name="whitelist"
+                                    defaultValue={spam.whitelist.join('\n')}
+                                    placeholder={
+                                        'bos@contoh.com\n@rekanan.co.id'
+                                    }
+                                    className={textareaClass}
+                                />
+                                <InputError
+                                    message={
+                                        errors.whitelist ??
+                                        Object.entries(errors).find(([key]) =>
+                                            key.startsWith('whitelist.'),
+                                        )?.[1]
+                                    }
+                                />
+                            </div>
+                            <div className="grid gap-2">
+                                <Label htmlFor="spam-blacklist">
+                                    Selalu spam (blacklist)
+                                </Label>
+                                <textarea
+                                    id="spam-blacklist"
+                                    name="blacklist"
+                                    defaultValue={spam.blacklist.join('\n')}
+                                    placeholder={
+                                        'iklan@contoh.com\n@spammer.example'
+                                    }
+                                    className={textareaClass}
+                                />
+                                <InputError
+                                    message={
+                                        errors.blacklist ??
+                                        Object.entries(errors).find(([key]) =>
+                                            key.startsWith('blacklist.'),
+                                        )?.[1]
+                                    }
+                                />
+                            </div>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                            Satu pengirim per baris: alamat lengkap, atau
+                            @domain untuk semua alamat di domain itu. Paling
+                            banyak {spam.max_senders} per daftar.
+                        </p>
+
+                        <div>
+                            <Button type="submit" disabled={processing}>
+                                {processing ? <Spinner /> : <ShieldAlert />}
+                                Simpan filter spam
+                            </Button>
+                        </div>
+                    </>
+                )}
+            </Form>
         </Panel>
     );
 }

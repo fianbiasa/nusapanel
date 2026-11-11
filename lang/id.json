@@ -334,5 +334,7 @@
     "The mail could not be tried again: :detail": "Email tidak bisa dicoba kirim lagi: :detail",
     "The mail could not be deleted: :detail": "Email tidak bisa dihapus: :detail",
     "This email account is suspended: it cannot sign in until it is unsuspended.": "Akun email ini dinonaktifkan: tidak bisa login sampai diaktifkan lagi.",
-    "An email account may send to at most :max recipients a day, the limit of the hosting account.": "Akun email paling banyak mengirim ke :max penerima per hari, sesuai batas akun hosting."
+    "An email account may send to at most :max recipients a day, the limit of the hosting account.": "Akun email paling banyak mengirim ke :max penerima per hari, sesuai batas akun hosting.",
+    "The spam filter of :address is saved.": "Filter spam :address disimpan.",
+    ":sender is not an email address or a domain.": ":sender bukan alamat email atau domain."
 }

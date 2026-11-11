@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Enums\MailDomainStatus;
 use App\Http\Requests\StoreMailFilterRequest;
 use App\Http\Requests\UpdateAutoreplyRequest;
+use App\Http\Requests\UpdateSpamSettingsRequest;
 use App\Models\Mailbox;
 use App\Models\MailFilter;
+use App\Models\MailSpamSetting;
 use App\Services\MailRulesService;
 use App\Services\MailService;
 use Illuminate\Http\RedirectResponse;
@@ -54,6 +56,14 @@ class MailboxRulesController extends Controller
                 'target' => $filter->target,
             ])->values(),
             'max_filters' => MailRulesService::MAX_FILTERS,
+            'spam' => [
+                'custom' => $mailbox->spamSetting !== null,
+                'threshold' => $mailbox->spamSetting->threshold ?? 6,
+                'action' => $mailbox->spamSetting->action ?? 'junk',
+                'whitelist' => $mailbox->spamSetting->whitelist ?? [],
+                'blacklist' => $mailbox->spamSetting->blacklist ?? [],
+                'max_senders' => MailSpamSetting::MAX_SENDERS,
+            ],
         ]);
     }
 
@@ -69,6 +79,28 @@ class MailboxRulesController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => $data['enabled']
             ? __('The automatic reply of :address is on.', ['address' => $this->mail->address($mailbox)])
             : __('The automatic reply of :address is off.', ['address' => $this->mail->address($mailbox)])]);
+
+        return back();
+    }
+
+    /**
+     * Save the mailbox's own spam filter.
+     */
+    public function updateSpam(UpdateSpamSettingsRequest $request, Mailbox $mailbox): RedirectResponse
+    {
+        /** @var list<string> $whitelist */
+        $whitelist = $request->validated('whitelist', []);
+        /** @var list<string> $blacklist */
+        $blacklist = $request->validated('blacklist', []);
+
+        $this->rules->saveSpamSettings($mailbox, [
+            'threshold' => $request->integer('threshold'),
+            'action' => $request->string('action')->toString(),
+            'whitelist' => $whitelist,
+            'blacklist' => $blacklist,
+        ], $request->user());
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('The spam filter of :address is saved.', ['address' => $this->mail->address($mailbox)])]);
 
         return back();
     }
