@@ -105,6 +105,13 @@ type Config struct {
 	// MailnamePath holds the server's mail name, the domain of mail its
 	// local users send under their login name.
 	MailnamePath string
+	// SNIDir holds the copies of the certificates Dovecot and Postfix serve
+	// for mail.<domain> (ApplySNI), root only.
+	SNIDir string
+	// DovecotSNIFile is the file dovecot.conf includes with the local_name
+	// blocks; PostfixSNIMap is Postfix's tls_server_sni_maps source.
+	DovecotSNIFile string
+	PostfixSNIMap  string
 	// Run runs a program (doveadm); nil uses runner.Run.
 	Run func(ctx context.Context, program string, args ...string) ([]byte, error)
 	// KeyGroup is the group of the DKIM keys: Rspamd's.
@@ -128,12 +135,15 @@ type Config struct {
 // Remove still has to be set.
 func DefaultConfig() Config {
 	return Config{
-		DKIMDir:      "/var/lib/rspamd/dkim",
-		SelectorMap:  "/etc/rspamd/rayxo/dkim_selectors.map",
-		SendLimitMap: "/etc/rspamd/rayxo/send_limits.map",
-		MailnamePath: "/etc/mailname",
-		KeyGroup:     "_rspamd",
-		EnsurePath:   sysuser.System{}.EnsurePath,
+		DKIMDir:        "/var/lib/rspamd/dkim",
+		SelectorMap:    "/etc/rspamd/rayxo/dkim_selectors.map",
+		SendLimitMap:   "/etc/rspamd/rayxo/send_limits.map",
+		MailnamePath:   "/etc/mailname",
+		SNIDir:         "/etc/rayxo/ssl/mail",
+		DovecotSNIFile: "/etc/dovecot/rayxo-sni.conf",
+		PostfixSNIMap:  "/etc/postfix/rayxo/sni",
+		KeyGroup:       "_rspamd",
+		EnsurePath:     sysuser.System{}.EnsurePath,
 	}
 }
 

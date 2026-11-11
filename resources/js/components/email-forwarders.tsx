@@ -54,6 +54,9 @@ export type MailDomainOption = {
     /** Who takes the domain's mail: this server, or another service. */
     mail_mode: 'local' | 'external';
     mail_provider: 'google' | 'zoho' | 'other' | null;
+    /** The certificate of mail.<domain>: null until it is first asked for. */
+    mail_ssl: 'pending' | 'active' | 'failed' | null;
+    mail_ssl_error: string | null;
 };
 
 const textareaClass =

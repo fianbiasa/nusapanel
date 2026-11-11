@@ -1637,10 +1637,15 @@ install_renewal_hook() {
     cat >/etc/letsencrypt/renewal-hooks/deploy/rayxo-reload.sh <<HOOK
 #!/bin/sh
 # Installed by rayxo setup.sh: reload Nginx, which serves the hostname
-# certificate and those of customer websites. A renewed hostname certificate
-# also goes to Pure-FTPd, which reads key and certificate from one file, and
-# only at start.
+# certificate and those of customer websites, and Dovecot and Postfix,
+# which serve the hostname certificate to mail apps. mail.<domain> of the
+# accounts' domains is served from copies of the certificates, which the
+# agent makes again (mail.sni_refresh). A renewed hostname certificate
+# also goes to Pure-FTPd, which reads key and certificate from one file,
+# and only at start.
 systemctl reload nginx
+systemctl reload dovecot postfix || true
+$INSTALL_DIR/bin/rayxo call mail.sni_refresh >/dev/null 2>&1 || true
 
 if [ "\$RENEWED_LINEAGE" = "/etc/letsencrypt/live/$server_hostname" ] && [ -f $FTP_CERTIFICATE ]; then
     umask 077
@@ -2141,6 +2146,23 @@ MAPS
     # Running before Postfix asks it (below).
     configure_srs
 
+    # SNI for mail.<domain>: rayxod (mail.sni_apply) keeps copies of the
+    # certificates in $CONFIG_DIR/ssl/mail and builds this table from them
+    # with postmap -F, which puts the keys into the table, so it is root's
+    # only (Postfix opens it before dropping privileges). Started empty.
+    install -d -m 0700 -o root -g root "$CONFIG_DIR/ssl/mail"
+    if [[ ! -f "$POSTFIX_MAPS_DIR/sni" ]]; then
+        printf '# Written by rayxod (mail.sni_apply); changes are overwritten.\n' >"$POSTFIX_MAPS_DIR/sni"
+    fi
+    chmod 0600 "$POSTFIX_MAPS_DIR/sni"
+    if [[ ! -f "$POSTFIX_MAPS_DIR/sni.db" ]]; then
+        (
+            umask 077
+            postmap -F "hash:$POSTFIX_MAPS_DIR/sni"
+        )
+    fi
+    chmod 0600 "$POSTFIX_MAPS_DIR/sni.db"
+
     # SRS: an envelope sender of a domain hosted here stays (srs-local maps
     # it to itself); any other gets an SRS address. Envelope recipients that
     # are SRS addresses of this server are turned back. Headers stay as
@@ -2151,6 +2173,7 @@ MAPS
         "sender_canonical_classes = envelope_sender" \
         "recipient_canonical_maps = socketmap:unix:$SRS_SOCKET:reverse" \
         "recipient_canonical_classes = envelope_recipient" \
+        "tls_server_sni_maps = hash:$POSTFIX_MAPS_DIR/sni" \
         "virtual_mailbox_domains = proxy:mysql:$POSTFIX_MAPS_DIR/mail-domains.cf" \
         "virtual_mailbox_maps = proxy:mysql:$POSTFIX_MAPS_DIR/mail-mailboxes.cf" \
         "virtual_alias_maps = proxy:mysql:$POSTFIX_MAPS_DIR/mail-forwarders.cf, proxy:mysql:$POSTFIX_MAPS_DIR/mail-addresses.cf, proxy:mysql:$POSTFIX_MAPS_DIR/mail-catchalls.cf" \
@@ -2348,7 +2371,14 @@ plugin {
   sieve_vacation_send_from_recipient = yes
   sieve_max_redirects = 10
 }
+
+# mail.<domain> of the accounts' domains with its own certificate (SNI),
+# written by rayxod (mail.sni_apply) from copies in $CONFIG_DIR/ssl/mail.
+!include_try /etc/dovecot/rayxo-sni.conf
 CONF
+    if [[ ! -f /etc/dovecot/rayxo-sni.conf ]]; then
+        printf '# Written by rayxod (mail.sni_apply); changes are overwritten.\n' >/etc/dovecot/rayxo-sni.conf
+    fi
 
     install -d -m 0755 /etc/dovecot/sieve
     cat >/etc/dovecot/sieve/rayxo-spam.sieve <<'SIEVE'
@@ -2967,6 +2997,20 @@ sync_send_limits() {
     fi
 }
 
+# mail.<domain> of every domain that takes mail gets a certificate when it
+# never had one asked (such as domains set up before mail certificates
+# existed), and Dovecot and Postfix serve them all again. Queued like
+# rebuild_websites; the scheduler does the same daily.
+sync_mail_ssl() {
+    step "Menyiapkan SSL mail.<domain>"
+
+    if artisan rayxo:sync-mail-ssl >>"$INSTALL_LOG" 2>&1; then
+        info "SSL mail.<domain> diminta dan dipasang di latar belakang (lihat Tasks di panel)"
+    else
+        warn "SSL mail.<domain> tidak bisa disiapkan; jalankan lagi: runuser -u $PANEL_USER -- $PHP_BIN $INSTALL_DIR/current/panel/artisan rayxo:sync-mail-ssl"
+    fi
+}
+
 # Accounts created before quotas existed, or before they were turned on
 # here, get the limits of their package. Queued like rebuild_websites; when
 # quotas are off the agent reports that they could not be applied.
@@ -3325,6 +3369,7 @@ main() {
     sync_dns_zones
     sync_send_limits
     apply_mail_rules
+    sync_mail_ssl
     # Last, right before the summary, so a failure in an earlier step can never
     # leave an admin whose generated password was not shown.
     create_admin

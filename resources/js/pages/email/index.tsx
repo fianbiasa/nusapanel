@@ -19,7 +19,7 @@ import {
     type ForwarderRow,
     type MailDomainOption,
 } from '@/components/email-forwarders';
-import { MailModePanel } from '@/components/email-mode';
+import { MailModePanel, MailServerNamesPanel } from '@/components/email-mode';
 import { GeneratedPasswordInput } from '@/components/generated-password-input';
 import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
@@ -128,6 +128,12 @@ export default function EmailIndex({
     const [domainFilter, setDomainFilter] = useState('all');
     const selectedDomain =
         domains.find((domain) => String(domain.id) === domainFilter) ?? null;
+    // mail.<domain> once its certificate is there, else the server's name.
+    const mailServer =
+        selectedDomain?.mail_ssl === 'active' &&
+        selectedDomain.mail_mode === 'local'
+            ? `mail.${selectedDomain.name}`
+            : server;
     const shownMailboxes =
         selectedDomain === null
             ? mailboxes
@@ -391,14 +397,14 @@ export default function EmailIndex({
                     <dt className="text-muted-foreground">Server masuk</dt>
                     <dd>
                         <span className="font-mono font-semibold break-all">
-                            {server}
+                            {mailServer}
                         </span>{' '}
                         · IMAP port 993 (SSL/TLS) atau POP3 port 995
                     </dd>
                     <dt className="text-muted-foreground">Server keluar</dt>
                     <dd>
                         <span className="font-mono font-semibold break-all">
-                            {server}
+                            {mailServer}
                         </span>{' '}
                         · SMTP port 465 (SSL/TLS) atau 587 (STARTTLS), dengan
                         login
@@ -410,6 +416,11 @@ export default function EmailIndex({
 
             <MailModePanel
                 domains={selectedDomain === null ? domains : [selectedDomain]}
+            />
+
+            <MailServerNamesPanel
+                domains={selectedDomain === null ? domains : [selectedDomain]}
+                server={server}
             />
 
             <MailDnsPanel

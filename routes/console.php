@@ -15,3 +15,4 @@ Schedule::command('rayxo:sync-send-limits')->everyFiveMinutes()->withoutOverlapp
 Schedule::command('rayxo:clean-transfers')->hourly()->withoutOverlapping();
 Schedule::command('model:prune', ['--model' => [WebmailSession::class]])->hourly()->withoutOverlapping();
 Schedule::command('rayxo:recount-ftp-quotas')->dailyAt('03:40')->withoutOverlapping();
+Schedule::command('rayxo:sync-mail-ssl')->dailyAt('04:20')->withoutOverlapping();

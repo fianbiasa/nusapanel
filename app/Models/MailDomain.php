@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\MailDomainMode;
 use App\Enums\MailDomainStatus;
 use App\Enums\MailProvider;
+use App\Enums\SslStatus;
 use Database\Factories\MailDomainFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -24,6 +25,8 @@ use Illuminate\Support\Carbon;
  * @property MailDomainStatus $status
  * @property MailDomainMode $mode Whether this server takes the domain's mail, or another service does.
  * @property MailProvider|null $provider The other service, while the mode is external.
+ * @property SslStatus|null $ssl_status Where the certificate of mail.<domain> stands; null until asked for.
+ * @property string|null $ssl_error Why the last try to get it failed.
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
@@ -41,6 +44,7 @@ class MailDomain extends Model
             'status' => MailDomainStatus::class,
             'mode' => MailDomainMode::class,
             'provider' => MailProvider::class,
+            'ssl_status' => SslStatus::class,
         ];
     }
 

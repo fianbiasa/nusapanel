@@ -11,7 +11,7 @@ func TestMailMethodsAreRegistered(t *testing.T) {
 	registry := rpc.NewRegistry()
 	Register(registry, Config{})
 
-	for _, name := range []string{"mail.domain_apply", "mail.domain_remove", "mail.mailbox_remove", "mail.sieve_apply", "mail.send_limits_apply", "mail.usage", "mail.queue_list", "mail.queue_retry", "mail.queue_delete"} {
+	for _, name := range []string{"mail.domain_apply", "mail.domain_remove", "mail.mailbox_remove", "mail.sieve_apply", "mail.send_limits_apply", "mail.usage", "mail.queue_list", "mail.queue_retry", "mail.queue_delete", "mail.ssl_issue", "mail.sni_apply", "mail.sni_refresh"} {
 		if !slices.Contains(registry.Names(), name) {
 			t.Fatalf("%s is not registered", name)
 		}

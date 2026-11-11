@@ -10,6 +10,7 @@ use App\Services\MailService;
 /**
  * Settle the mail domains the agent prepared: they take mail once their
  * folder and DKIM key exist, and their DNS zone gets the mail records.
+ * Also where the certificate of their mail.<domain> stands.
  */
 class ApplyMailTaskResult
 {
@@ -20,7 +21,7 @@ class ApplyMailTaskResult
         $task = $event->task;
         $name = $task->payload['domain'] ?? null;
 
-        if ($task->action !== 'mail.domain_apply' || $task->user_id === null || ! is_string($name)) {
+        if (! in_array($task->action, ['mail.domain_apply', 'mail.ssl_issue'], true) || $task->user_id === null || ! is_string($name)) {
             return;
         }
 
@@ -31,6 +32,16 @@ class ApplyMailTaskResult
             ?->mailDomain;
 
         if ($mailDomain === null) {
+            return;
+        }
+
+        if ($task->action === 'mail.ssl_issue') {
+            match ($task->status) {
+                TaskStatus::Success => $this->mail->completeMailSsl($mailDomain, $task->actor),
+                TaskStatus::Failed => $this->mail->failMailSsl($mailDomain, $task->error),
+                default => null,
+            };
+
             return;
         }
 

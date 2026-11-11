@@ -1,5 +1,5 @@
 import { Form } from '@inertiajs/react';
-import { Pencil } from 'lucide-react';
+import { Pencil, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
 import type { MailDomainOption } from '@/components/email-forwarders';
 import InputError from '@/components/input-error';
@@ -23,7 +23,9 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
+import { StatusBadge } from '@/components/status-badge';
 import { update as updateMode } from '@/routes/email/mode';
+import { store as storeSsl } from '@/routes/email/ssl';
 
 /** Who takes a domain's mail: this server, or one of the other services. */
 type Receiver = 'local' | 'google' | 'zoho' | 'other';
@@ -232,5 +234,117 @@ function MailModeForm({
                 </>
             )}
         </Form>
+    );
+}
+
+/**
+ * The server name mail apps can use for each domain: mail.<domain> once
+ * its certificate is there (SNI), otherwise the server's own name.
+ */
+export function MailServerNamesPanel({
+    domains,
+    server,
+}: {
+    domains: MailDomainOption[];
+    server: string;
+}) {
+    const shown = domains.filter(
+        (domain) =>
+            domain.mail_domain_id !== null &&
+            domain.mail_status === 'active' &&
+            domain.mail_mode === 'local',
+    );
+
+    if (shown.length === 0) {
+        return null;
+    }
+
+    return (
+        <Panel
+            title="Nama server email"
+            description={`Setelah SSL-nya aktif, aplikasi email bisa memakai mail.<domain> sebagai server masuk dan keluar. Sebelum itu pakai ${server}. Sertifikatnya diperpanjang otomatis.`}
+            flush
+        >
+            <div className="overflow-x-auto">
+                <table className={tableStyles.table}>
+                    <thead className={tableStyles.head}>
+                        <tr>
+                            <th className={tableStyles.th}>Server</th>
+                            <th className={tableStyles.th}>SSL</th>
+                            <th className={tableStyles.th}>
+                                <span className="sr-only">Aksi</span>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                        {shown.map((domain) => (
+                            <tr key={domain.id} className={tableStyles.row}>
+                                <td
+                                    className={`${tableStyles.td} font-mono font-semibold break-all`}
+                                >
+                                    mail.{domain.name}
+                                </td>
+                                <td className={`${tableStyles.td} text-sm`}>
+                                    {domain.mail_ssl === null ? (
+                                        <span className="text-muted-foreground">
+                                            Belum ada
+                                        </span>
+                                    ) : (
+                                        <StatusBadge status={domain.mail_ssl} />
+                                    )}
+                                    {domain.mail_ssl === 'failed' &&
+                                        domain.mail_ssl_error !== null && (
+                                            <p className="mt-1 text-xs break-all text-muted-foreground">
+                                                {domain.mail_ssl_error}
+                                            </p>
+                                        )}
+                                </td>
+                                <td className={tableStyles.td}>
+                                    {(domain.mail_ssl === null ||
+                                        domain.mail_ssl === 'failed') &&
+                                        domain.mail_domain_id !== null && (
+                                            <Form
+                                                {...storeSsl.form(
+                                                    domain.mail_domain_id,
+                                                )}
+                                                options={{
+                                                    preserveScroll: true,
+                                                }}
+                                                className="flex justify-end"
+                                            >
+                                                {({ processing, errors }) => (
+                                                    <div className="grid justify-items-end gap-1">
+                                                        <Button
+                                                            type="submit"
+                                                            variant="secondary"
+                                                            size="sm"
+                                                            disabled={
+                                                                processing
+                                                            }
+                                                        >
+                                                            {processing ? (
+                                                                <Spinner />
+                                                            ) : (
+                                                                <ShieldCheck />
+                                                            )}
+                                                            {domain.mail_ssl ===
+                                                            'failed'
+                                                                ? 'Coba lagi'
+                                                                : 'Pasang SSL'}
+                                                        </Button>
+                                                        <InputError
+                                                            message={errors.ssl}
+                                                        />
+                                                    </div>
+                                                )}
+                                            </Form>
+                                        )}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </Panel>
     );
 }

@@ -3,11 +3,16 @@ package actions
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
+	"slices"
 
 	"rayxo/agent/internal/mail"
 	"rayxo/agent/internal/rpc"
 	"rayxo/agent/internal/sysuser"
 	"rayxo/agent/internal/validate"
+	"rayxo/agent/internal/webserver"
 )
 
 // mailServer is what the mail.* actions need from the server. mail.Manager
@@ -19,6 +24,36 @@ type mailServer interface {
 	ApplySieve(ctx context.Context, account sysuser.User, domain, localPart, script string) error
 	ApplySendLimits(limits mail.SendLimits) error
 	Usage(ctx context.Context) ([]mail.MailboxUsage, error)
+	ApplySNI(ctx context.Context, domains []string, certificates []mail.SNICertificate) error
+	SNIDomains() ([]string, error)
+}
+
+// mailCertificates is what the mail.* actions need for mail.<domain>'s
+// certificate. *webserver.Manager implements it.
+type mailCertificates interface {
+	IssueMailCertificate(ctx context.Context, domain string) (webserver.MailCertificate, error)
+	FindMailCertificate(domain string) (webserver.MailCertificate, error)
+	DeleteMailCertificate(ctx context.Context, domain string) error
+}
+
+// mailSNIParams are the params of mail.sni_apply: every mail domain whose
+// mail.<domain> should have its certificate.
+type mailSNIParams struct {
+	Domains []string `json:"domains"`
+}
+
+func (p mailSNIParams) validate() error {
+	if len(p.Domains) > mail.MaxSNIDomains {
+		return fmt.Errorf("at most %d domains", mail.MaxSNIDomains)
+	}
+
+	for _, domain := range p.Domains {
+		if err := validate.Domain(domain); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // mailDomainParams are the params of mail.domain_apply.
@@ -73,14 +108,16 @@ type mailDomainResult struct {
 
 // mailActions implements the mail.* methods.
 type mailActions struct {
-	accounts accountActions
-	server   mailServer
+	accounts     accountActions
+	server       mailServer
+	certificates mailCertificates
 }
 
 // mailMethods returns the mail.* methods by name. They lock the account
 // like the web.* methods.
-func mailMethods(system accountSystem, server mailServer) map[string]rpc.Method {
-	actions := mailActions{accounts: accountActions{system: system}, server: server}
+func mailMethods(system accountSystem, server mailServer, certificates mailCertificates) map[string]rpc.Method {
+	actions := mailActions{accounts: accountActions{system: system}, server: server, certificates: certificates}
+	sniLock := func(json.RawMessage) (string, error) { return "mail:sni", nil }
 
 	return map[string]rpc.Method{
 		"mail.domain_apply":   {Handler: actions.applyDomain, LockKey: webLockKey[mailDomainParams]},
@@ -104,7 +141,88 @@ func mailMethods(system accountSystem, server mailServer) map[string]rpc.Method 
 		"mail.send_limits_apply": {Handler: actions.applySendLimits, LockKey: func(json.RawMessage) (string, error) {
 			return "mail:send_limits", nil
 		}},
+		"mail.ssl_issue": {Handler: actions.issueCertificate, LockKey: webLockKey[domainParams]},
+		// One set of SNI files for the whole server.
+		"mail.sni_apply":   {Handler: actions.applySNI, LockKey: sniLock},
+		"mail.sni_refresh": {Handler: actions.refreshSNI, LockKey: sniLock},
 	}
+}
+
+// issueCertificate implements mail.ssl_issue: mail.<domain> gets a
+// certificate (one of the domain's that covers it, or its own from Let's
+// Encrypt). Serving it is mail.sni_apply's part.
+func (m mailActions) issueCertificate(ctx context.Context, raw json.RawMessage) (any, error) {
+	params, err := decodeWebParams[domainParams](raw)
+	if err != nil {
+		return nil, err
+	}
+
+	certificate, err := m.certificates.IssueMailCertificate(ctx, params.Domain)
+	if err != nil {
+		if unreachable, ok := errors.AsType[*webserver.UnreachableError](err); ok {
+			return nil, rpc.Errorf(rpc.CodeActionFailed,
+				"%s does not reach this server over HTTP (%s); point its A record to this server, "+
+					"without a proxy such as Cloudflare's, then try again", unreachable.Domain, unreachable.Reason)
+		}
+
+		return nil, webError(err, "mail."+params.Domain)
+	}
+
+	return certificate, nil
+}
+
+// applySNI implements mail.sni_apply: Dovecot and Postfix serve the
+// certificate of each domain's mail.<domain> that has one.
+func (m mailActions) applySNI(ctx context.Context, raw json.RawMessage) (any, error) {
+	var params mailSNIParams
+	if err := rpc.DecodeParams(raw, &params); err != nil {
+		return nil, err
+	}
+
+	if err := params.validate(); err != nil {
+		return nil, rpc.Errorf(rpc.CodeInvalidParams, "invalid params: %v", err)
+	}
+
+	return m.sni(ctx, params.Domains)
+}
+
+// refreshSNI implements mail.sni_refresh: the domains of the last
+// mail.sni_apply again, with their certificates as they are now (certbot's
+// renewal hook asks for it).
+func (m mailActions) refreshSNI(ctx context.Context, raw json.RawMessage) (any, error) {
+	if err := rpc.DecodeParams(raw, &struct{}{}); err != nil {
+		return nil, err
+	}
+
+	domains, err := m.server.SNIDomains()
+	if err != nil {
+		return nil, rpc.Errorf(rpc.CodeActionFailed, "the mail domains with certificates could not be read: %v", err)
+	}
+
+	return m.sni(ctx, domains)
+}
+
+// sni applies the certificates found for domains; the names served are
+// the result.
+func (m mailActions) sni(ctx context.Context, domains []string) (any, error) {
+	certificates := []mail.SNICertificate{}
+	names := []string{}
+
+	for _, domain := range domains {
+		found, err := m.certificates.FindMailCertificate(domain)
+		if err != nil {
+			continue
+		}
+
+		certificates = append(certificates, mail.SNICertificate{Name: found.Name, CertificateFile: found.CertificateFile, KeyFile: found.KeyFile})
+		names = append(names, found.Name)
+	}
+
+	if err := m.server.ApplySNI(ctx, domains, certificates); err != nil {
+		return nil, rpc.Errorf(rpc.CodeActionFailed, "the mail certificates could not be applied: %v", err)
+	}
+
+	return map[string]any{"names": names}, nil
 }
 
 // applySendLimits implements mail.send_limits_apply: the daily send limits
@@ -189,6 +307,19 @@ func (m mailActions) removeDomain(ctx context.Context, raw json.RawMessage) (any
 
 	if err := m.server.RemoveDomain(ctx, owner, params.Domain); err != nil {
 		return nil, rpc.Errorf(rpc.CodeActionFailed, "mail for %s could not be removed: %v", params.Domain, err)
+	}
+
+	// mail.<domain> stops being served and its own certificate goes. A
+	// failure here leaves only a certificate behind, so the mail is still
+	// removed.
+	if domains, err := m.server.SNIDomains(); err == nil && slices.Contains(domains, params.Domain) {
+		if _, err := m.sni(ctx, slices.DeleteFunc(domains, func(domain string) bool { return domain == params.Domain })); err != nil {
+			slog.Warn("mail.<domain> could not stop being served", "domain", params.Domain, "error", err)
+		}
+	}
+
+	if err := m.certificates.DeleteMailCertificate(ctx, params.Domain); err != nil {
+		slog.Warn("the certificate of mail.<domain> could not be deleted", "domain", params.Domain, "error", err)
 	}
 
 	return struct{}{}, nil

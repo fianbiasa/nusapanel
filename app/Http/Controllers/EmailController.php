@@ -87,6 +87,8 @@ class EmailController extends Controller
                 'catchall_target' => $domain->mailDomain?->catchall_target,
                 'mail_mode' => $domain->mailDomain?->mode->value ?? MailDomainMode::Local->value,
                 'mail_provider' => $domain->mailDomain?->provider?->value,
+                'mail_ssl' => $domain->mailDomain?->ssl_status?->value,
+                'mail_ssl_error' => $domain->mailDomain?->ssl_error,
             ], $domains),
             'max_destinations' => MailAddress::MAX_DESTINATIONS,
             'max_quota_mb' => MailService::MAX_QUOTA_MB,

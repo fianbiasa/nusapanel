@@ -10,14 +10,17 @@ use App\Enums\MailDomainMode;
 use App\Enums\MailDomainStatus;
 use App\Enums\MailProvider;
 use App\Enums\Role;
+use App\Enums\SslStatus;
 use App\Listeners\ApplyMailTaskResult;
 use App\Models\Domain;
 use App\Models\Mailbox;
 use App\Models\MailDomain;
+use App\Models\Task;
 use App\Models\User;
 use App\Support\AccountLimits;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -244,6 +247,10 @@ class MailService
         if ($mailDomain->dkim_public_key !== null) {
             $this->dns->applyMailRecords($mailDomain->domain, $mailDomain->dkim_selector, $mailDomain->dkim_public_key, $actor);
         }
+
+        if ($mailDomain->ssl_status === null && $mailDomain->mode !== MailDomainMode::External) {
+            $this->requestMailSsl($mailDomain, $actor);
+        }
     }
 
     /**
@@ -253,6 +260,75 @@ class MailService
     public function failDomainApply(MailDomain $mailDomain): void
     {
         $mailDomain->forceFill(['status' => MailDomainStatus::Failed])->save();
+    }
+
+    /**
+     * Get mail.<domain> a certificate, so mail apps can use it as their
+     * server name (SNI): one of the domain's that covers it, such as its
+     * wildcard, or its own from Let's Encrypt, which needs mail.<domain>
+     * to point at this server. Asked once a domain takes mail, and again
+     * from the Email page after a failure.
+     *
+     * @throws ValidationException
+     */
+    public function requestMailSsl(MailDomain $mailDomain, ?User $actor): void
+    {
+        $domain = $mailDomain->domain;
+
+        if ($mailDomain->status !== MailDomainStatus::Active) {
+            throw ValidationException::withMessages(['ssl' => __('The email of :domain is still being set up.', ['domain' => $domain->name])]);
+        }
+
+        if ($mailDomain->ssl_status === SslStatus::Pending) {
+            return;
+        }
+
+        $mailDomain->forceFill(['ssl_status' => SslStatus::Pending, 'ssl_error' => null])->save();
+
+        $this->tasks->dispatch('mail.ssl_issue', [
+            'username' => $domain->account->username,
+            'domain' => $domain->name,
+        ], $domain->account, $actor);
+    }
+
+    /**
+     * mail.<domain> has its certificate: Dovecot and Postfix serve it.
+     */
+    public function completeMailSsl(MailDomain $mailDomain, ?User $actor): void
+    {
+        $mailDomain->forceFill(['ssl_status' => SslStatus::Active, 'ssl_error' => null])->save();
+
+        $this->syncMailSni($actor);
+    }
+
+    /**
+     * mail.<domain> got no certificate; error says why.
+     */
+    public function failMailSsl(MailDomain $mailDomain, ?string $error): void
+    {
+        $mailDomain->forceFill([
+            'ssl_status' => SslStatus::Failed,
+            'ssl_error' => $error === null ? null : Str::limit($error, 480),
+        ])->save();
+    }
+
+    /**
+     * Have Dovecot and Postfix serve mail.<domain> of every mail domain
+     * with the certificate it has now (mail.sni_apply, for the whole
+     * server). Domains without one keep the hostname's.
+     */
+    public function syncMailSni(?User $actor = null): Task
+    {
+        $domains = MailDomain::query()
+            ->with('domain')
+            ->where('status', MailDomainStatus::Active)
+            ->get()
+            ->map(fn (MailDomain $mailDomain): string => $mailDomain->domain->name)
+            ->sort()
+            ->values()
+            ->all();
+
+        return $this->tasks->dispatch('mail.sni_apply', ['domains' => $domains], null, $actor);
     }
 
     /**

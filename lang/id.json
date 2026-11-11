@@ -342,5 +342,7 @@
     "This server takes mail for :domain again. Point its MX record here if it does not yet.": "Email :domain kembali diterima server ini. Arahkan record MX-nya ke sini kalau belum.",
     "Mail for :domain now goes to :service; its MX and SPF records were changed.": "Email :domain sekarang diterima :service; record MX dan SPF-nya sudah diubah.",
     "Mail for :domain now goes to another service. Set its MX and SPF records there in DNS.": "Email :domain sekarang diterima layanan lain. Atur record MX dan SPF-nya di DNS sesuai petunjuk layanan itu.",
-    "the MX records of your email service, not this server": "record MX layanan email Anda, bukan server ini"
+    "the MX records of your email service, not this server": "record MX layanan email Anda, bukan server ini",
+    "The email of :domain is still being set up.": "Email :domain masih disiapkan.",
+    "A certificate for mail.:domain is being requested.": "Sertifikat SSL untuk mail.:domain sedang diminta."
 }
