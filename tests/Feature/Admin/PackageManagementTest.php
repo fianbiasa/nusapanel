@@ -37,7 +37,7 @@ class PackageManagementTest extends TestCase
                     ->where('limits.domains', 3)
                     ->where('limits.disk_mb', 1024)
                     ->where('limits.inodes', 50000)
-                    ->has('limits', 10)
+                    ->has('limits', 11)
                     ->where('ssl', true)
                     ->where('accounts_count', 2))
                 ->where('packages.1.id', $pro->id)
@@ -88,6 +88,7 @@ class PackageManagementTest extends TestCase
         $this->assertNull($package->inodes);
         $this->assertSame(3, $package->domains);
         $this->assertSame(0, $package->ftp_accounts);
+        $this->assertSame(10, $package->email_forwarders);
         $this->assertNull($package->bandwidth_mb);
         $this->assertNull($package->cron_jobs);
         $this->assertFalse($package->ssl);
@@ -357,6 +358,7 @@ class PackageManagementTest extends TestCase
             'subdomains' => '10',
             'pointers' => '5',
             'email_accounts' => '10',
+            'email_forwarders' => '10',
             'databases' => '5',
             'ftp_accounts' => '0',
             'cron_jobs' => '5',

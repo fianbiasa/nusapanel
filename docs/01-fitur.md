@@ -76,7 +76,7 @@ Pembagian level sama seperti DirectAdmin:
 | ------------------ | ------------------------------------------------------------------------ | ---- |
 | Akun email         | Buat/hapus, password, quota, batas kirim per hari, suspend               | P2   |
 | Forwarder          | Satu alamat ke banyak tujuan                                             | P2   |
-| Catch-all          | Tolak (bounce), teruskan ke alamat, atau buang                           | P2   |
+| Catch-all          | Tolak (bawaan) atau teruskan ke satu alamat                              | P2   |
 | Autoresponder      | Balasan otomatis                                                         | P2   |
 | Vacation message   | Dengan tanggal mulai dan selesai                                         | P2   |
 | Spam filter        | Ambang skor, aksi (pindah ke Junk/hapus), whitelist & blacklist (Rspamd) | P2   |

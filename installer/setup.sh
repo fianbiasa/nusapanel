@@ -1775,9 +1775,14 @@ ALTER USER '$MAIL_DB_USER'@'localhost' IDENTIFIED BY '$password';
 GRANT SELECT ON \`rayxo\`.\`v_mail_domains\` TO '$MAIL_DB_USER'@'localhost';
 GRANT SELECT ON \`rayxo\`.\`v_mail_mailboxes\` TO '$MAIL_DB_USER'@'localhost';
 GRANT SELECT ON \`rayxo\`.\`v_mail_webmail_sessions\` TO '$MAIL_DB_USER'@'localhost';
+GRANT SELECT ON \`rayxo\`.\`v_mail_forwarders\` TO '$MAIL_DB_USER'@'localhost';
+GRANT SELECT ON \`rayxo\`.\`v_mail_catchalls\` TO '$MAIL_DB_USER'@'localhost';
 SQL
 
-    # Postfix's lookups, through proxymap (smtpd runs chrooted).
+    # Postfix's lookups, through proxymap (smtpd runs chrooted). Aliases
+    # are looked up as forwarders, then mailboxes (an address that maps to
+    # itself), then catch-alls: Postfix tries a full address in all of them
+    # before "@<domain>", so a catch-all never takes an existing address.
     install -d -m 0750 -o root -g postfix "$POSTFIX_MAPS_DIR"
     local map query
     while read -r map query; do
@@ -1798,12 +1803,17 @@ MAP
 mail-domains SELECT 1 FROM v_mail_domains WHERE name = '%s'
 mail-mailboxes SELECT 1 FROM v_mail_mailboxes WHERE address = '%s'
 mail-senders SELECT address FROM v_mail_mailboxes WHERE address = '%s'
+mail-forwarders SELECT destination FROM v_mail_forwarders WHERE source = '%s'
+mail-addresses SELECT address FROM v_mail_mailboxes WHERE address = '%s'
+mail-catchalls SELECT destination FROM v_mail_catchalls WHERE source = '%s'
 MAPS
 
     quietly postconf -e \
         "inet_interfaces = all" \
         "virtual_mailbox_domains = proxy:mysql:$POSTFIX_MAPS_DIR/mail-domains.cf" \
         "virtual_mailbox_maps = proxy:mysql:$POSTFIX_MAPS_DIR/mail-mailboxes.cf" \
+        "virtual_alias_maps = proxy:mysql:$POSTFIX_MAPS_DIR/mail-forwarders.cf, proxy:mysql:$POSTFIX_MAPS_DIR/mail-addresses.cf, proxy:mysql:$POSTFIX_MAPS_DIR/mail-catchalls.cf" \
+        "virtual_alias_domains =" \
         "virtual_transport = lmtp:unix:private/dovecot-lmtp" \
         "smtpd_sender_login_maps = proxy:mysql:$POSTFIX_MAPS_DIR/mail-senders.cf" \
         "smtpd_sasl_type = dovecot" \

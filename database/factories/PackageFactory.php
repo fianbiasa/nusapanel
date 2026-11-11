@@ -27,6 +27,7 @@ class PackageFactory extends Factory
             'subdomains' => 10,
             'pointers' => 5,
             'email_accounts' => 10,
+            'email_forwarders' => 10,
             'databases' => 5,
             'ftp_accounts' => 5,
             'cron_jobs' => 5,

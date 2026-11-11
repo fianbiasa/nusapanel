@@ -7,6 +7,7 @@ export type QuotaKey =
     | 'subdomains'
     | 'pointers'
     | 'email_accounts'
+    | 'email_forwarders'
     | 'databases'
     | 'ftp_accounts'
     | 'cron_jobs';

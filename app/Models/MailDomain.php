@@ -18,6 +18,7 @@ use Illuminate\Support\Carbon;
  * @property int $domain_id
  * @property string $dkim_selector
  * @property string|null $dkim_public_key Base64 of the DER public key, for the DKIM DNS record.
+ * @property string|null $catchall_target Where mail for addresses the domain does not have goes; null refuses it.
  * @property MailDomainStatus $status
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
@@ -53,5 +54,13 @@ class MailDomain extends Model
     public function mailboxes(): HasMany
     {
         return $this->hasMany(Mailbox::class);
+    }
+
+    /**
+     * @return HasMany<MailForwarder, $this>
+     */
+    public function forwarders(): HasMany
+    {
+        return $this->hasMany(MailForwarder::class);
     }
 }

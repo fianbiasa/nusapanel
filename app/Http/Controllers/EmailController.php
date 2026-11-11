@@ -7,9 +7,11 @@ use App\Http\Requests\StoreMailboxRequest;
 use App\Http\Requests\UpdateMailboxRequest;
 use App\Models\Domain;
 use App\Models\Mailbox;
+use App\Models\MailForwarder;
 use App\Services\MailService;
 use App\Services\WebmailService;
 use App\Support\AccountLimits;
+use App\Support\MailAddress;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -44,13 +46,37 @@ class EmailController extends Controller
             ])
             ->values();
 
+        $mailboxAddresses = $mailboxes->pluck('address')->all();
+
+        $forwarders = MailForwarder::query()
+            ->with('mailDomain.domain')
+            ->whereHas('mailDomain.domain', fn ($query) => $query->where('user_id', $account->id))
+            ->get()
+            ->sortBy(fn (MailForwarder $forwarder): string => $forwarder->mailDomain->domain->name.' '.$forwarder->local_part)
+            ->map(function (MailForwarder $forwarder) use ($mailboxAddresses): array {
+                $address = $forwarder->local_part.'@'.$forwarder->mailDomain->domain->name;
+
+                return [
+                    'id' => $forwarder->id,
+                    'address' => $address,
+                    'destinations' => $forwarder->destinationList(),
+                    'keeps_copy' => in_array($address, $mailboxAddresses, true),
+                    'ready' => $forwarder->mailDomain->status === MailDomainStatus::Active,
+                ];
+            })
+            ->values();
+
         return Inertia::render('email/index', [
             'mailboxes' => $mailboxes,
+            'forwarders' => $forwarders,
             'domains' => array_map(fn (Domain $domain): array => [
                 'id' => $domain->id,
                 'name' => $domain->name,
                 'mail_status' => $domain->mailDomain?->status->value,
+                'mail_domain_id' => $domain->mailDomain?->id,
+                'catchall_target' => $domain->mailDomain?->catchall_target,
             ], $domains),
+            'max_destinations' => MailAddress::MAX_DESTINATIONS,
             'max_quota_mb' => MailService::MAX_QUOTA_MB,
             'limits' => AccountLimits::for($account)->toArray(),
             'server' => parse_url((string) config('app.url'), PHP_URL_HOST) ?: 'localhost',

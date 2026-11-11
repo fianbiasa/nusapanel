@@ -3,6 +3,12 @@ import { ExternalLink, KeyRound, Mail, Pencil, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { AffixInput } from '@/components/affix-input';
+import {
+    CatchAllPanel,
+    ForwardersPanel,
+    type ForwarderRow,
+    type MailDomainOption,
+} from '@/components/email-forwarders';
 import { GeneratedPasswordInput } from '@/components/generated-password-input';
 import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
@@ -41,16 +47,14 @@ type MailboxRow = {
     created_at: string | null;
 };
 
-type Domain = {
-    id: number;
-    name: string;
-    mail_status: 'pending' | 'active' | 'failed' | null;
-};
+type Domain = MailDomainOption;
 
 type Props = {
     mailboxes: MailboxRow[];
+    forwarders: ForwarderRow[];
     domains: Domain[];
     max_quota_mb: number;
+    max_destinations: number;
     limits: AccountLimits;
     server: string;
     webmail: {
@@ -68,8 +72,10 @@ type Action =
 
 export default function EmailIndex({
     mailboxes,
+    forwarders,
     domains,
     max_quota_mb,
+    max_destinations,
     limits,
     server,
     webmail,
@@ -229,6 +235,16 @@ export default function EmailIndex({
                 )}
             </Panel>
 
+            <ForwardersPanel
+                forwarders={forwarders}
+                domains={domains}
+                maxDestinations={max_destinations}
+                limit={limits.quotas.email_forwarders.limit}
+                used={limits.quotas.email_forwarders.used ?? forwarders.length}
+            />
+
+            <CatchAllPanel domains={domains} />
+
             <Panel
                 title="Cara terhubung"
                 description="Buka webmail di browser, atau pakai aplikasi email seperti Thunderbird, Outlook, atau Mail di ponsel."
@@ -289,7 +305,7 @@ export default function EmailIndex({
                             onSuccess={closeDialog}
                             className="grid gap-4"
                         >
-                            {({ processing }) => (
+                            {({ processing, errors }) => (
                                 <>
                                     <DialogHeader>
                                         <DialogTitle>
@@ -302,6 +318,7 @@ export default function EmailIndex({
                                             ikut dihapus.
                                         </DialogDescription>
                                     </DialogHeader>
+                                    <InputError message={errors.mailbox} />
                                     <DialogFooter className="gap-2">
                                         <DialogClose asChild>
                                             <Button

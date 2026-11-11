@@ -6,6 +6,7 @@ use App\Enums\DatabaseStatus;
 use App\Enums\DomainStatus;
 use App\Enums\DomainType;
 use App\Models\Mailbox;
+use App\Models\MailForwarder;
 use App\Models\Package;
 use App\Models\User;
 use App\Services\QuotaService;
@@ -65,6 +66,9 @@ final class AccountLimits implements Arrayable
                 ->count(),
             'ftp_accounts' => $this->account->ftpAccounts()->count(),
             'email_accounts' => Mailbox::query()
+                ->whereHas('mailDomain.domain', fn ($query) => $query->where('user_id', $this->account->id))
+                ->count(),
+            'email_forwarders' => MailForwarder::query()
                 ->whereHas('mailDomain.domain', fn ($query) => $query->where('user_id', $this->account->id))
                 ->count(),
             'cron_jobs' => $this->account->cronJobs()->count(),

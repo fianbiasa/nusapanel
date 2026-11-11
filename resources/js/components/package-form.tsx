@@ -34,6 +34,7 @@ const quotaFields: Record<
         hint: 'Domain lain yang menampilkan atau mengalihkan ke domain akun.',
     },
     email_accounts: { label: 'Akun email' },
+    email_forwarders: { label: 'Forwarder email' },
     databases: { label: 'Database' },
     ftp_accounts: { label: 'Akun FTP' },
     cron_jobs: { label: 'Cron job' },

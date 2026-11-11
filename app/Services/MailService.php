@@ -140,12 +140,24 @@ class MailService
 
     /**
      * Remove a mailbox and delete its mail, and what webmail kept of it.
+     * A mailbox the domain's catch-all sends to stays until the catch-all
+     * changes, unless a forwarder keeps its address.
+     *
+     * @throws ValidationException
      */
     public function deleteMailbox(Mailbox $mailbox, User $actor): void
     {
-        $domain = $mailbox->mailDomain->domain;
+        $mailDomain = $mailbox->mailDomain;
+        $domain = $mailDomain->domain;
         $account = $domain->account;
         $address = $this->address($mailbox);
+
+        if ($mailDomain->catchall_target === $address
+            && ! $mailDomain->forwarders()->where('local_part', $mailbox->local_part)->exists()) {
+            throw ValidationException::withMessages([
+                'mailbox' => __('The catch-all of :domain sends mail to this address. Change the catch-all first.', ['domain' => $domain->name]),
+            ]);
+        }
 
         DB::transaction(function () use ($mailbox, $domain, $account, $address, $actor): void {
             $this->audit->record('mailbox.deleted', $mailbox, ['address' => $address], $actor);
@@ -289,9 +301,10 @@ class MailService
 
     /**
      * The domain's mail settings, made (and prepared by the agent) when it
-     * has none yet or the last try failed.
+     * has none yet or the last try failed: a domain's first mailbox or
+     * forwarder sets up its mail.
      */
-    private function ensureMailDomain(Domain $domain, User $account, User $actor): MailDomain
+    public function ensureMailDomain(Domain $domain, User $account, User $actor): MailDomain
     {
         $mailDomain = $domain->mailDomain;
 
@@ -319,9 +332,12 @@ class MailService
     }
 
     /**
+     * Refuse changes to the email of an account that is not an active
+     * hosting account, as an error on errorKey.
+     *
      * @throws ValidationException
      */
-    private function ensureAccountIsActive(User $account, string $errorKey): void
+    public function ensureAccountIsActive(User $account, string $errorKey): void
     {
         if (! $account->hasRole(Role::User) || $account->status !== AccountStatus::Active) {
             throw ValidationException::withMessages([
