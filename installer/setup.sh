@@ -1555,9 +1555,11 @@ create_admin() {
         die "admin pertama gagal dibuat"
     }
 
-    # If the environment did not reach the command, it generated its own.
-    if [[ "$output" == *"Generated password (shown only once): "* ]]; then
-        admin_password="$(printf '%s\n' "$output" | sed -n 's/.*Generated password (shown only once): //p' | tr -d '[:space:]')"
+    # If the environment did not reach the command, it generated its own and
+    # printed it alone on the first non-empty line after the label.
+    if [[ "$output" == *"Generated password (shown only once):"* ]]; then
+        admin_password="$(printf '%s\n' "$output" |
+            awk 'found && NF {print; exit} /Generated password \(shown only once\):/ {found = 1}' | tr -d '[:space:]')"
     fi
 
     touch "$CONFIG_DIR/admin-created"
@@ -3013,7 +3015,7 @@ summary() {
     info "Catatan:"
     info "- Pastikan port 80, 443, $PANEL_PORT, 21, ${FTP_PASSIVE_PORTS/ /-} (FTP passive), 53 TCP & UDP (DNS) dan 25, 465, 587, 993, 995 (email) terbuka di firewall / security group provider VPS."
     info "- Cek agent: rayxo ping"
-    info "- Lupa password admin: runuser -u $PANEL_USER -- php$PHP_VERSION $INSTALL_DIR/current/panel/artisan rayxo:reset-password $admin_user"
+    info "- Lupa password admin: rayxo reset-password $admin_user (sebagai root)"
     info "- Log instalasi: $INSTALL_LOG"
 }
 

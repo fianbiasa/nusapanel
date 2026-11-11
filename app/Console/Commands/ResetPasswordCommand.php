@@ -62,7 +62,11 @@ class ResetPasswordCommand extends Command
         $this->components->info("Password for [{$user->username}] reset; existing sessions were signed out.");
 
         if ($generated) {
-            $this->components->warn("New password (shown only once): {$password}");
+            // The password gets a line of its own, exactly as it is: a console
+            // component adds a full stop to a message that does not end in one,
+            // and after a password that full stop looks like part of it.
+            $this->components->warn('New password (shown only once):');
+            $this->line($password);
         }
 
         return self::SUCCESS;

@@ -6,6 +6,7 @@ use App\Enums\AccountStatus;
 use App\Enums\Role;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
@@ -56,16 +57,23 @@ class CreateAdminCommandTest extends TestCase
         $this->assertTrue(Hash::check('env-Strong-pass-456', $admin->password));
     }
 
-    public function test_it_generates_a_password_when_none_is_given()
+    public function test_it_generates_a_password_and_prints_it_exactly_as_it_is()
     {
-        $this->artisan('rayxo:create-admin', [
+        $this->assertSame(0, Artisan::call('rayxo:create-admin', [
             'username' => 'fian',
             'email' => 'fian@example.com',
-        ])
-            ->expectsOutputToContain('Generated password (shown only once)')
-            ->assertSuccessful();
+        ]));
 
-        $this->assertDatabaseHas('users', ['username' => 'fian', 'role' => 'admin']);
+        // setup.sh shows the first non-empty line after the label as the
+        // admin's password, so it must be the password with nothing added.
+        $lines = preg_split('/\R/', Artisan::output());
+        $labelAt = collect($lines)->search(fn (string $line): bool => str_contains($line, 'Generated password (shown only once):'));
+        $this->assertIsInt($labelAt);
+        $printed = (string) collect(array_slice($lines, $labelAt + 1))->first(fn (string $line): bool => trim($line) !== '');
+
+        $admin = User::query()->where('username', 'fian')->sole();
+        $this->assertSame(Role::Admin, $admin->role);
+        $this->assertTrue(Hash::check($printed, $admin->password));
     }
 
     public function test_it_rejects_reserved_and_invalid_usernames()

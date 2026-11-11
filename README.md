@@ -56,7 +56,7 @@ pnpm run build                  # atau `composer run dev` untuk mode pengembanga
 ```
 
 - **SSL & versi PHP:** atur dari aplikasi Herd (Sites → `rayxo`). Setelah mengaktifkan HTTPS, ubah `APP_URL` di `.env` menjadi `https://rayxo.test`.
-- **Admin pertama di server:** `php artisan rayxo:create-admin <username> <email>` (password acak ditampilkan sekali).
+- **Admin pertama di server:** dibuat otomatis oleh `setup.sh` (password acak ditampilkan sekali). Lupa password: `rayxo reset-password admin` sebagai root.
 - **Test & pengecekan:** `php artisan test`, `vendor/bin/pint`, `vendor/bin/phpstan analyse`, `pnpm run check`, `pnpm run types:check`.
 
 ## Agent server (`agent/`, Go)
@@ -102,7 +102,7 @@ Dengan syarat itu terpenuhi, `setup.sh` otomatis memasang **SSL Let's Encrypt** 
 
 Di akhir instalasi muncul alamat panel (`https://<hostname>:2222`), username, dan password admin (hanya ditampilkan sekali, tidak masuk log). `setup.sh` aman dijalankan ulang kalau berhenti di tengah. Pilihan lengkap: `bash setup.sh --help`.
 
-**Email panel** (verifikasi, reset password) dikirim lewat Postfix kirim-saja (hanya mendengar di `127.0.0.1`) dan ditandatangani DKIM oleh OpenDKIM. Di akhir instalasi, `setup.sh` menampilkan rekaman DNS yang perlu dipasang beserta statusnya (✔/✘), dan menyimpannya di `/etc/rayxo/dns-records.txt`:
+**Email panel** (verifikasi, reset password) dikirim lewat Postfix di server itu sendiri (port 587 dengan login `rayxo@<hostname>`) dan ditandatangani DKIM oleh OpenDKIM. Di akhir instalasi, `setup.sh` menampilkan rekaman DNS yang perlu dipasang beserta statusnya (✔/✘), dan menyimpannya di `/etc/rayxo/dns-records.txt`:
 
 | Rekaman | Nama                              | Nilai                                               |
 | ------- | --------------------------------- | --------------------------------------------------- |
@@ -115,7 +115,7 @@ Jalankan `setup.sh` lagi kapan saja untuk mengecek ulang statusnya.
 Lupa password admin? Di server, sebagai root:
 
 ```bash
-runuser -u rayxo -- php8.4 /usr/local/rayxo/current/panel/artisan rayxo:reset-password admin
+rayxo reset-password admin
 ```
 
 Password baru ditampilkan sekali, dan semua session lama akun itu dikeluarkan.

@@ -35,7 +35,7 @@ rayxo/
 **Status** (diperiksa ulang 11 November 2026):
 
 - Panel dikembangkan di Herd (`rayxo.test`); SSL dan versi PHP diatur dari aplikasi Herd. ✅
-- Uji di server bersih ✅, menggantikan rencana VM OrbStack/Multipass dengan snapshot. `installer/test-in-vm.sh` memasang RAYXO di server yang masih bersih lalu memeriksanya dari ujung ke ujung. Servernya bisa VM Ubuntu 24.04 baru dari Lima (di Mac atau di CI); setiap run dimulai dari image bersih, jadi tidak perlu snapshot. Bisa juga VPS uji yang masih bersih lewat `--ssh`, dengan pengecekan DNS A/PTR dan Let's Encrypt sungguhan. Uji pertamanya menemukan tiga bug instalasi baru yang tidak terlihat di VPS yang hanya di-upgrade, dan semuanya sudah diperbaiki:
+- Uji di server bersih ✅, menggantikan rencana VM OrbStack/Multipass dengan snapshot. `installer/test-in-vm.sh` memasang RAYXO di server yang masih bersih lalu memeriksanya dari ujung ke ujung. Servernya VPS uji yang masih bersih (`--ssh`, dengan pengecekan DNS A/PTR dan Let's Encrypt sungguhan; OS-nya di-reinstall sebelum uji bersih berikutnya), dan di CI VM Lima baru di mesin GitHub (selalu dari image bersih, jadi tidak perlu snapshot). Uji pertamanya menemukan tiga bug instalasi baru yang tidak terlihat di VPS yang hanya di-upgrade, dan semuanya sudah diperbaiki:
     - PHP gagal dipasang kalau API Launchpad bermasalah. PHP kini diambil dari `packages.sury.org`, dengan PPA `ondrej/php` sebagai cadangan; kunci keduanya dipatok.
     - Pengecekan paket PHP selalu gagal (SIGPIPE dengan `pipefail`).
     - Ringkasan instalasi yang usang.
@@ -46,8 +46,8 @@ rayxo/
 
 **Selesai kalau:** install di VM bersih → login admin → dashboard menampilkan info sistem dari agent. ✅ Teruji 11 November 2026 dengan `test-in-vm.sh`:
 
-- VM Lima baru (Ubuntu 24.04 arm64): instalasi lolos, admin login, dashboard menampilkan info sistem dari agent, dan tes isolasi lolos.
-- VPS uji amd64 dengan DNS sungguhan: sama, ditambah sertifikat Let's Encrypt yang valid dan semua pemeriksaan `verify_install`.
+- VPS uji (Ubuntu 24.04 amd64, DNS sungguhan): instalasi lolos, sertifikat Let's Encrypt valid, semua pemeriksaan `verify_install` lolos, admin login, dashboard menampilkan info sistem dari agent, dan tes isolasi lolos.
+- VM Lima baru (Ubuntu 24.04 arm64): hasil yang sama, dengan sertifikat self-signed.
 
 ## P1 — Hosting inti
 
@@ -234,7 +234,7 @@ Software manager (setara CustomBuild), app installer & WordPress manager, Git de
 ## Langkah pertama
 
 1. Tetapkan nama final: **RAYXO**. ✅
-2. Siapkan server Ubuntu 24.04 bersih untuk uji (`installer/test-in-vm.sh`: VM Lima atau VPS uji). ✅
+2. Siapkan server Ubuntu 24.04 bersih untuk uji (`installer/test-in-vm.sh`: VPS uji, dan VM Lima di CI). ✅
 3. Scaffold panel Laravel + React (di Herd) dan agent Go. ✅
 4. Socket agent + `system.info`, tampil di dashboard admin. ✅
 5. Installer versi pertama. ✅

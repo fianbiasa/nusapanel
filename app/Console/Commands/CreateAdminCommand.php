@@ -76,7 +76,10 @@ class CreateAdminCommand extends Command
         $this->components->info("Admin account [{$admin->username}] created.");
 
         if ($generated) {
-            $this->components->warn("Generated password (shown only once): {$password}");
+            // On a line of its own, exactly as it is (see rayxo:reset-password);
+            // setup.sh reads it from the line after this one.
+            $this->components->warn('Generated password (shown only once):');
+            $this->line($password);
         }
 
         return self::SUCCESS;

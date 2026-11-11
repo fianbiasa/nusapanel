@@ -168,4 +168,4 @@ Struktur folder user mengikuti DirectAdmin (`domains/<domain>/public_html`, `ima
 
 - Panel dilayani Herd di `rayxo.test`. SSL, versi PHP, dan pengaturan situs lainnya diatur dari aplikasi Herd.
 - Agent hanya bisa jalan di Linux (butuh systemd, `useradd`, `SO_PEERCRED`, dll.). Di Mac, panel memakai `AGENT_DRIVER=fake`, yang mensimulasikan jawaban agent supaya UI bisa dikembangkan tanpa server.
-- Agent Go dikembangkan di Mac dan diuji di Ubuntu: `installer/test-in-vm.sh` memasang RAYXO di server yang masih bersih (VM Lima baru di Mac atau di CI, atau VPS uji lewat `--ssh`), login sebagai admin, memeriksa info sistem dari agent di dashboard, lalu menjalankan tes isolasi. Panel di server memakai `AGENT_DRIVER=socket`.
+- Agent Go dikembangkan di Mac dan diuji di Ubuntu: `installer/test-in-vm.sh` memasang RAYXO di server yang masih bersih (VPS uji lewat `--ssh`, atau VM Lima baru di mesin GitHub pada CI), login sebagai admin, memeriksa info sistem dari agent di dashboard, lalu menjalankan tes isolasi. Panel di server memakai `AGENT_DRIVER=socket`.

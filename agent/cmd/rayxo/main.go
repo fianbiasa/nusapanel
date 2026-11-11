@@ -17,6 +17,7 @@ import (
 	"rayxo/agent/internal/client"
 	"rayxo/agent/internal/dns"
 	"rayxo/agent/internal/rpc"
+	"rayxo/agent/internal/validate"
 	"rayxo/agent/internal/version"
 )
 
@@ -24,14 +25,15 @@ const usage = `Usage:
   rayxo [flags] ping
   rayxo [flags] call <method> [params-json]
   rayxo rebuild
+  rayxo reset-password <username>    (new password for a panel account, e.g. admin)
   rayxo version
   rayxo acme-dns-hook auth|cleanup   (certbot's hook for wildcard certificates)
 
 Flags:
 `
 
-// How "rayxo rebuild" reaches the panel: its artisan, run as the panel's
-// own user, as the installer does.
+// How "rayxo rebuild" and "rayxo reset-password" reach the panel: its
+// artisan, run as the panel's own user, as the installer does.
 const (
 	runuserPath = "/usr/sbin/runuser"
 	panelUser   = "rayxo"
@@ -80,7 +82,25 @@ func run() int {
 			return 2
 		}
 
-		return rebuild()
+		return artisan("rebuild", "rayxo:rebuild", "--no-interaction")
+	case "reset-password":
+		if len(args) != 2 {
+			flags.Usage()
+
+			return 2
+		}
+
+		// The panel's own rule for usernames: only a name reaches artisan,
+		// never an option such as --password.
+		if err := validate.Username(args[1]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+
+			return 2
+		}
+
+		// The panel makes a strong password, shows it once and signs the
+		// account out everywhere.
+		return artisan("reset-password", "rayxo:reset-password", args[1], "--no-interaction")
 	case "acme-dns-hook":
 		if len(args) != 2 || (args[1] != "auth" && args[1] != "cleanup") {
 			flags.Usage()
@@ -142,19 +162,21 @@ func run() int {
 	return 0
 }
 
-// rebuild writes the server's configuration again from the panel's
-// database: the panel's rayxo:rebuild queues every website, disk quota,
-// crontab and FTP folder, and the queue worker and the agent apply them.
-// Like DirectAdmin's rewrite_confs, for configs that were deleted or edited
-// by hand.
-func rebuild() int {
+// artisan runs a panel command as the panel's user and passes its output on.
+// "rayxo rebuild" writes the server's configuration again from the panel's
+// database: rayxo:rebuild queues every website, disk quota, crontab and FTP
+// folder, and the queue worker and the agent apply them (like DirectAdmin's
+// rewrite_confs, for configs that were deleted or edited by hand).
+// "rayxo reset-password" gives a panel account a new password, e.g. a lost
+// admin password.
+func artisan(name string, command ...string) int {
 	if os.Geteuid() != 0 {
-		fmt.Fprintln(os.Stderr, "rayxo rebuild must run as root")
+		fmt.Fprintf(os.Stderr, "rayxo %s must run as root\n", name)
 
 		return 1
 	}
 
-	cmd := exec.Command(runuserPath, "-u", panelUser, "--", phpPath, "artisan", "rayxo:rebuild", "--no-interaction")
+	cmd := exec.Command(runuserPath, append([]string{"-u", panelUser, "--", phpPath, "artisan"}, command...)...)
 	cmd.Dir = panelDir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

@@ -11,8 +11,9 @@
 # 3. the agent's isolation test proves that accounts cannot read each
 #    other's files.
 #
-# By default the server is a new virtual machine made with Lima
-# (https://lima-vm.io; on macOS: brew install lima) from Ubuntu's cloud image,
+# To test by hand, use a fresh test VPS with --ssh (below). Without --ssh the
+# server is a new virtual machine made with Lima (https://lima-vm.io), as the
+# clean-install workflow does on GitHub's machines: from Ubuntu's cloud image,
 # in plain mode: no shared folders, no port forwards, nothing installed beyond
 # the image. An earlier machine of the same name is deleted first, so every
 # run starts clean. It is deleted again when everything passes, unless --keep
@@ -90,7 +91,7 @@ if [[ -n "$ssh_target" ]]; then
     as_root() { ssh "${ssh_options[@]}" "$ssh_target" "$(printf '%q ' "$@")"; }
     copy_in() { scp -q "${ssh_options[@]}" "$@" "$ssh_target:$remote_dir/"; }
 else
-    command -v limactl >/dev/null || die "limactl not found; install Lima first (macOS: brew install lima)"
+    command -v limactl >/dev/null || die "limactl not found: the VM mode is for CI; to test by hand use --ssh root@HOST with a fresh test VPS"
     remote_dir=/tmp
     as_root() { limactl shell --workdir / "$NAME" sudo "$@"; }
     copy_in() { limactl copy "$@" "$NAME:$remote_dir/"; }

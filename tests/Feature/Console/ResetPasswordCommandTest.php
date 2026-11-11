@@ -4,6 +4,7 @@ namespace Tests\Feature\Console;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
@@ -36,16 +37,27 @@ class ResetPasswordCommandTest extends TestCase
         ]);
     }
 
-    public function test_it_generates_a_password_when_none_is_given()
+    public function test_it_generates_a_password_and_prints_it_exactly_as_it_is()
     {
         $user = User::factory()->admin()->create(['username' => 'admin']);
         $oldHash = $user->password;
 
-        $this->artisan('rayxo:reset-password', ['username' => 'admin'])
-            ->expectsOutputToContain('New password (shown only once)')
-            ->assertSuccessful();
+        $this->assertSame(0, Artisan::call('rayxo:reset-password', ['username' => 'admin']));
 
+        // What an admin copies from the terminal must be the password itself,
+        // with nothing added (the console components add a full stop).
+        $printed = $this->lineAfter('New password (shown only once):', Artisan::output());
         $this->assertNotSame($oldHash, $user->fresh()->password);
+        $this->assertTrue(Hash::check($printed, $user->fresh()->password));
+    }
+
+    private function lineAfter(string $label, string $output): string
+    {
+        $lines = preg_split('/\R/', $output);
+        $labelAt = collect($lines)->search(fn (string $line): bool => str_contains($line, $label));
+        $this->assertIsInt($labelAt, "no \"{$label}\" in the output");
+
+        return (string) collect(array_slice($lines, $labelAt + 1))->first(fn (string $line): bool => trim($line) !== '');
     }
 
     public function test_it_fails_for_an_unknown_account()
