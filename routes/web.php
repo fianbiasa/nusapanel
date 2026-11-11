@@ -21,6 +21,7 @@ use App\Http\Controllers\FtpAccountController;
 use App\Http\Controllers\MailboxRulesController;
 use App\Http\Controllers\MailDnsCheckController;
 use App\Http\Controllers\MailForwarderController;
+use App\Http\Controllers\MailModeController;
 use App\Http\Controllers\PhpMyAdminController;
 use App\Http\Controllers\PointerController;
 use App\Http\Controllers\SftpPasswordController;
@@ -63,6 +64,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('email/forwarders/{mailForwarder}', [MailForwarderController::class, 'update'])->name('email.forwarders.update');
         Route::delete('email/forwarders/{mailForwarder}', [MailForwarderController::class, 'destroy'])->name('email.forwarders.destroy');
         Route::put('email/catch-all/{mailDomain}', CatchAllController::class)->name('email.catch-all.update');
+        Route::put('email/mode/{domain}', MailModeController::class)->name('email.mode.update');
         Route::get('email/dns-check/{mailDomain}', MailDnsCheckController::class)
             ->middleware('throttle:20,1')
             ->name('email.dns-check');

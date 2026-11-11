@@ -6,7 +6,9 @@ use App\Enums\AccountStatus;
 use App\Enums\DomainStatus;
 use App\Enums\DomainType;
 use App\Enums\MailboxStatus;
+use App\Enums\MailDomainMode;
 use App\Enums\MailDomainStatus;
+use App\Enums\MailProvider;
 use App\Enums\Role;
 use App\Listeners\ApplyMailTaskResult;
 use App\Models\Domain;
@@ -254,6 +256,59 @@ class MailService
     }
 
     /**
+     * Have this server take a domain's mail (local), or another service
+     * (external). Postfix then sends the domain's mail, also from this
+     * server's websites and accounts, to the service's MX, while the
+     * domain's mailboxes can still sign in so old mail can be moved. For
+     * Google Workspace and Zoho the domain's zone gets the service's MX and
+     * SPF records. A domain without mail settings gets them first, so this
+     * server still DKIM-signs its websites' mail.
+     *
+     * @param  MailProvider|null  $provider  The service, for external; ignored for local.
+     * @return bool Whether the domain's DNS zone was changed.
+     *
+     * @throws ValidationException
+     */
+    public function setDomainMode(Domain $domain, MailDomainMode $mode, ?MailProvider $provider, User $actor): bool
+    {
+        $account = $domain->account;
+
+        $this->ensureAccountIsActive($account, 'mode');
+
+        if (! collect($this->domainsOf($account))->contains('id', $domain->id)) {
+            throw ValidationException::withMessages(['mode' => __('Choose a domain of this account.')]);
+        }
+
+        $provider = $mode === MailDomainMode::External ? $provider : null;
+
+        if ($mode === MailDomainMode::External && $provider === null) {
+            throw ValidationException::withMessages(['provider' => __('Choose where the mail goes.')]);
+        }
+
+        return DB::transaction(function () use ($domain, $account, $mode, $provider, $actor): bool {
+            $mailDomain = $domain->mailDomain;
+
+            // A domain without mail settings already leaves its mail to its MX.
+            if ($mailDomain === null && $mode === MailDomainMode::Local) {
+                return false;
+            }
+
+            $mailDomain ??= $this->ensureMailDomain($domain, $account, $actor);
+            $from = $mailDomain->mode === MailDomainMode::External ? $mailDomain->provider : null;
+
+            $mailDomain->forceFill(['mode' => $mode, 'provider' => $provider])->save();
+
+            $this->audit->record('mail_domain.mode_updated', $domain, [
+                'domain' => $domain->name,
+                'mode' => $mode->value,
+                'provider' => $provider?->value,
+            ], $actor);
+
+            return $this->dns->useMailProvider($domain, $from, $provider, $actor);
+        });
+    }
+
+    /**
      * Stop taking mail for a domain that is being deleted: its DKIM key and
      * mail go from the server, its mailboxes from the panel, and what
      * webmail kept of them.
@@ -360,7 +415,7 @@ class MailService
 
         if ($mailDomain === null) {
             $mailDomain = new MailDomain;
-            $mailDomain->forceFill(['domain_id' => $domain->id, 'dkim_selector' => self::SELECTOR, 'status' => MailDomainStatus::Pending])->save();
+            $mailDomain->forceFill(['domain_id' => $domain->id, 'dkim_selector' => self::SELECTOR, 'status' => MailDomainStatus::Pending, 'mode' => MailDomainMode::Local])->save();
 
             $this->audit->record('mail_domain.enabled', $domain, ['domain' => $domain->name], $actor);
             $this->dispatchApply($mailDomain, $domain, $account, $actor);

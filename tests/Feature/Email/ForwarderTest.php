@@ -3,6 +3,7 @@
 namespace Tests\Feature\Email;
 
 use App\Enums\AccountStatus;
+use App\Enums\MailboxStatus;
 use App\Enums\MailDomainStatus;
 use App\Enums\TaskStatus;
 use App\Events\AgentTaskFinished;
@@ -94,6 +95,18 @@ class ForwarderTest extends TestCase
                 ->where('forwarders.0.keeps_copy', true)
                 ->where('domains.0.mail_domain_id', $mailDomain->id)
                 ->where('domains.0.catchall_target', null));
+    }
+
+    public function test_a_suspended_mailbox_still_gets_its_forwarders_copy()
+    {
+        $mailDomain = MailDomain::factory()->for($this->domain)->create();
+        Mailbox::factory()->for($mailDomain)->create(['local_part' => 'info', 'status' => MailboxStatus::Suspended]);
+        MailForwarder::factory()->for($mailDomain)->create(['local_part' => 'info', 'destinations' => 'budi@gmail.com']);
+
+        $this->assertSame(
+            'info@example.com,budi@gmail.com',
+            DB::table('v_mail_forwarders')->where('source', 'info@example.com')->value('destination'),
+        );
     }
 
     /**

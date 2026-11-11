@@ -1,5 +1,5 @@
 import { Form } from '@inertiajs/react';
-import { Forward, Inbox, Pencil, Trash2 } from 'lucide-react';
+import { Cloud, Forward, Inbox, Pencil, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { AffixInput } from '@/components/affix-input';
 import InputError from '@/components/input-error';
@@ -40,6 +40,8 @@ export type ForwarderRow = {
     keeps_copy: boolean;
     /** Whether its domain takes mail yet (the agent prepared it). */
     ready: boolean;
+    /** Whether another service takes its domain's mail, so it does nothing. */
+    external: boolean;
 };
 
 export type MailDomainOption = {
@@ -49,6 +51,9 @@ export type MailDomainOption = {
     /** Null until the domain's first mailbox or forwarder. */
     mail_domain_id: number | null;
     catchall_target: string | null;
+    /** Who takes the domain's mail: this server, or another service. */
+    mail_mode: 'local' | 'external';
+    mail_provider: 'google' | 'zoho' | 'other' | null;
 };
 
 const textareaClass =
@@ -157,6 +162,13 @@ export function ForwardersPanel({
                                                 <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
                                                     <Spinner /> Email domain
                                                     sedang disiapkan
+                                                </p>
+                                            )}
+                                            {forwarder.external && (
+                                                <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                                                    <Cloud className="size-3.5" />
+                                                    Tidak berlaku: email domain
+                                                    ini diterima layanan lain
                                                 </p>
                                             )}
                                         </td>
@@ -518,7 +530,9 @@ export function CatchAllPanel({ domains }: { domains: MailDomainOption[] }) {
                                     <td
                                         className={`${tableStyles.td} text-sm break-all text-muted-foreground`}
                                     >
-                                        {domain.catchall_target === null ? (
+                                        {domain.mail_mode === 'external' ? (
+                                            'Tidak berlaku: email domain ini diterima layanan lain'
+                                        ) : domain.catchall_target === null ? (
                                             'Ditolak'
                                         ) : (
                                             <>

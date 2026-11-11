@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\MailDomainMode;
 use App\Models\MailDomain;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Cache;
@@ -10,10 +11,12 @@ use Illuminate\Support\Facades\Http;
 /**
  * Whether the world sees a mail domain's DNS records as this server needs
  * them: MX to this server, SPF allowing it, the DKIM key it signs with and
- * a DMARC policy. Asked through DNS over HTTPS (Cloudflare, then Google), as
- * setup.sh does, so no stale local cache answers. Domains whose DNS is
- * elsewhere (such as Cloudflare) need these records added there by hand,
- * which is what this check shows. Results are kept five minutes.
+ * a DMARC policy; for a domain whose mail another service takes, MX to
+ * that service and SPF allowing it too. Asked through DNS over HTTPS
+ * (Cloudflare, then Google), as setup.sh does, so no stale local cache
+ * answers. Domains whose DNS is elsewhere (such as Cloudflare) need these
+ * records added there by hand, which is what this check shows. Results
+ * are kept five minutes.
  */
 class MailDnsCheckService
 {
@@ -65,6 +68,10 @@ class MailDnsCheckService
      */
     private function checkMx(MailDomain $mailDomain): array
     {
+        if ($mailDomain->mode === MailDomainMode::External) {
+            return $this->checkExternalMx($mailDomain);
+        }
+
         $domain = $mailDomain->domain->name;
         $ip = (string) config('hosting.public_ip');
         $result = $this->result('mx', $domain, 'MX', "10 mail.{$domain} (A {$ip})");
@@ -97,7 +104,8 @@ class MailDnsCheckService
     {
         $domain = $mailDomain->domain->name;
         $ip = (string) config('hosting.public_ip');
-        $result = $this->result('spf', $domain, 'TXT', "v=spf1 a mx ip4:{$ip} ~all");
+        $include = $mailDomain->mode === MailDomainMode::External ? $mailDomain->provider?->spfInclude() : null;
+        $result = $this->result('spf', $domain, 'TXT', 'v=spf1 a mx ip4:'.$ip.($include !== null ? " {$include}" : '').' ~all');
 
         $answers = $this->lookup($domain, 'TXT');
         if ($answers === null) {
@@ -119,7 +127,55 @@ class MailDnsCheckService
         $terms = preg_split('/\s+/', strtolower($spf[0])) ?: [];
         $allows = in_array("ip4:{$ip}", $terms, true) || array_intersect(['a', '+a', 'mx', '+mx'], $terms) !== [];
 
+        if ($include !== null && ! in_array($include, $terms, true)) {
+            $allows = false;
+        }
+
         return [...$result, 'status' => $allows ? 'ok' : 'wrong'];
+    }
+
+    /**
+     * The MX records of a domain whose mail another service takes: those
+     * of Google Workspace or Zoho when that is the service, and none that
+     * lead back to this server.
+     *
+     * @return array{key: string, name: string, type: string, status: string, found: list<string>, expected: string}
+     */
+    private function checkExternalMx(MailDomain $mailDomain): array
+    {
+        $domain = $mailDomain->domain->name;
+        $ip = (string) config('hosting.public_ip');
+        $exchangers = $mailDomain->provider?->exchangers() ?? [];
+        $expected = $exchangers === []
+            ? __('the MX records of your email service, not this server')
+            : implode(', ', array_map(fn (array $exchanger): string => "{$exchanger['priority']} {$exchanger['host']}", $exchangers));
+        $result = $this->result('mx', $domain, 'MX', $expected);
+
+        $answers = $this->lookup($domain, 'MX');
+        if ($answers === null) {
+            return [...$result, 'status' => 'unknown'];
+        }
+
+        $hosts = array_map(fn (string $answer): string => strtolower(rtrim((string) preg_replace('/^\d+\s+/', '', $answer), '.')), $answers);
+        $result['found'] = $hosts;
+
+        if ($hosts === []) {
+            return [...$result, 'status' => 'missing'];
+        }
+
+        $wanted = array_column($exchangers, 'host');
+
+        if (array_diff($wanted, $hosts) !== []) {
+            return [...$result, 'status' => 'wrong'];
+        }
+
+        foreach (array_diff($hosts, $wanted) as $host) {
+            if (in_array($ip, $this->lookup($host, 'A') ?? [], true)) {
+                return [...$result, 'status' => 'wrong'];
+            }
+        }
+
+        return [...$result, 'status' => 'ok'];
     }
 
     /**

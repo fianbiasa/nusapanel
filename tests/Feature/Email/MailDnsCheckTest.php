@@ -2,6 +2,8 @@
 
 namespace Tests\Feature\Email;
 
+use App\Enums\MailDomainMode;
+use App\Enums\MailProvider;
 use App\Models\Domain;
 use App\Models\MailDomain;
 use App\Models\User;
@@ -89,6 +91,47 @@ class MailDnsCheckTest extends TestCase
         ]);
 
         $this->assertSame(['mx' => 'wrong', 'spf' => 'wrong', 'dkim' => 'wrong', 'dmarc' => 'missing'], $this->statuses());
+    }
+
+    public function test_a_domain_whose_mail_google_takes_needs_googles_mx_and_spf_term()
+    {
+        $this->mailDomain->forceFill(['mode' => MailDomainMode::External, 'provider' => MailProvider::Google])->save();
+        $this->dnsAnswers([
+            'example.com MX' => ['1 smtp.google.com.'],
+            'example.com TXT' => ['"v=spf1 a mx ip4:203.0.113.10 include:_spf.google.com ~all"'],
+        ]);
+
+        $statuses = $this->statuses();
+
+        $this->assertSame(['ok', 'ok'], [$statuses['mx'], $statuses['spf']]);
+    }
+
+    public function test_a_domain_whose_mail_google_takes_is_wrong_while_mail_still_comes_here()
+    {
+        $this->mailDomain->forceFill(['mode' => MailDomainMode::External, 'provider' => MailProvider::Google])->save();
+        $this->dnsAnswers([
+            'example.com MX' => ['1 smtp.google.com.', '10 mail.example.com.'],
+            'mail.example.com A' => ['203.0.113.10'],
+            'example.com TXT' => ['"v=spf1 a mx ip4:203.0.113.10 ~all"'],
+        ]);
+
+        $statuses = $this->statuses();
+
+        $this->assertSame(['wrong', 'wrong'], [$statuses['mx'], $statuses['spf']]);
+    }
+
+    public function test_a_domain_whose_mail_another_service_takes_needs_mx_away_from_here()
+    {
+        $this->mailDomain->forceFill(['mode' => MailDomainMode::External, 'provider' => MailProvider::Other])->save();
+        $this->dnsAnswers([
+            'example.com MX' => ['0 example-com.mail.protection.outlook.com.'],
+            'example-com.mail.protection.outlook.com A' => ['198.51.100.7'],
+            'example.com TXT' => ['"v=spf1 a mx ip4:203.0.113.10 include:spf.protection.outlook.com ~all"'],
+        ]);
+
+        $statuses = $this->statuses();
+
+        $this->assertSame(['ok', 'ok'], [$statuses['mx'], $statuses['spf']]);
     }
 
     public function test_two_spf_records_are_wrong_even_if_one_allows_the_server()

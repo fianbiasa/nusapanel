@@ -1,5 +1,6 @@
 import { Form, Head, Link, useHttp } from '@inertiajs/react';
 import {
+    Cloud,
     ExternalLink,
     Filter,
     KeyRound,
@@ -18,6 +19,7 @@ import {
     type ForwarderRow,
     type MailDomainOption,
 } from '@/components/email-forwarders';
+import { MailModePanel } from '@/components/email-mode';
 import { GeneratedPasswordInput } from '@/components/generated-password-input';
 import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
@@ -70,6 +72,8 @@ type MailboxRow = {
     suspended: boolean;
     /** Whether its domain takes mail yet (the agent prepared it). */
     ready: boolean;
+    /** Whether another service takes its domain's mail; it can still sign in. */
+    external: boolean;
     created_at: string | null;
 };
 
@@ -249,6 +253,13 @@ export default function EmailIndex({
                                                     sedang disiapkan
                                                 </p>
                                             )}
+                                            {mailbox.external && (
+                                                <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                                                    <Cloud className="size-3.5" />
+                                                    Email baru ke domain ini
+                                                    diterima layanan lain
+                                                </p>
+                                            )}
                                             {mailbox.suspended && (
                                                 <div className="mt-1">
                                                     <StatusBadge
@@ -396,6 +407,10 @@ export default function EmailIndex({
                     <dd>Alamat email lengkap dan password-nya.</dd>
                 </dl>
             </Panel>
+
+            <MailModePanel
+                domains={selectedDomain === null ? domains : [selectedDomain]}
+            />
 
             <MailDnsPanel
                 domains={domains.filter(

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\MailboxStatus;
+use App\Enums\MailDomainMode;
 use App\Enums\MailDomainStatus;
 use App\Http\Requests\StoreMailboxRequest;
 use App\Http\Requests\UpdateMailboxRequest;
@@ -48,6 +49,7 @@ class EmailController extends Controller
                 'message_count' => $mailbox->message_count,
                 'suspended' => $mailbox->status === MailboxStatus::Suspended,
                 'ready' => $mailbox->mailDomain->status === MailDomainStatus::Active,
+                'external' => $mailbox->mailDomain->mode === MailDomainMode::External,
                 'created_at' => $mailbox->created_at?->toIso8601String(),
             ])
             ->values();
@@ -69,6 +71,7 @@ class EmailController extends Controller
                     'destinations' => $forwarder->destinationList(),
                     'keeps_copy' => in_array($address, $mailboxAddresses, true),
                     'ready' => $forwarder->mailDomain->status === MailDomainStatus::Active,
+                    'external' => $forwarder->mailDomain->mode === MailDomainMode::External,
                 ];
             })
             ->values();
@@ -82,6 +85,8 @@ class EmailController extends Controller
                 'mail_status' => $domain->mailDomain?->status->value,
                 'mail_domain_id' => $domain->mailDomain?->id,
                 'catchall_target' => $domain->mailDomain?->catchall_target,
+                'mail_mode' => $domain->mailDomain?->mode->value ?? MailDomainMode::Local->value,
+                'mail_provider' => $domain->mailDomain?->provider?->value,
             ], $domains),
             'max_destinations' => MailAddress::MAX_DESTINATIONS,
             'max_quota_mb' => MailService::MAX_QUOTA_MB,

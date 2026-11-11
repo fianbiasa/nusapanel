@@ -5,6 +5,8 @@ namespace App\Services;
 use App\Enums\AccountStatus;
 use App\Enums\DomainStatus;
 use App\Enums\DomainType;
+use App\Enums\MailDomainMode;
+use App\Enums\MailProvider;
 use App\Enums\Role;
 use App\Enums\TaskStatus;
 use App\Models\DnsRecord;
@@ -243,8 +245,9 @@ class DnsService
 
     /**
      * Put a mail domain's records into its zone: the DKIM key (replacing an
-     * older one of the selector), a DMARC policy and an MX record when the
-     * zone has none of its own yet, so customers' changes to those stay.
+     * older one of the selector), a DMARC policy and, while this server
+     * takes the domain's mail, an MX record when the zone has none of its
+     * own yet, so customers' changes to those stay.
      */
     public function applyMailRecords(Domain $domain, string $selector, string $publicKey, ?User $actor): void
     {
@@ -254,7 +257,9 @@ class DnsService
             return;
         }
 
-        DB::transaction(function () use ($zone, $domain, $selector, $publicKey, $actor): void {
+        $external = $domain->mailDomain()->where('mode', MailDomainMode::External)->exists();
+
+        DB::transaction(function () use ($zone, $domain, $selector, $publicKey, $external, $actor): void {
             $dkim = "{$selector}._domainkey.{$domain->name}";
             $zone->records()->where('name', $dkim)->where('type', 'TXT')->delete();
             $zone->records()->create($this->record($dkim, 'TXT', "v=DKIM1; k=rsa; p={$publicKey}"));
@@ -263,7 +268,7 @@ class DnsService
                 $zone->records()->create($this->record("_dmarc.{$domain->name}", 'TXT', 'v=DMARC1; p=none'));
             }
 
-            if (! $zone->records()->where('name', $domain->name)->where('type', 'MX')->exists()) {
+            if (! $external && ! $zone->records()->where('name', $domain->name)->where('type', 'MX')->exists()) {
                 $zone->records()->create($this->record($domain->name, 'MX', "mail.{$domain->name}", 10));
 
                 $ip = $this->publicIp();
@@ -277,6 +282,135 @@ class DnsService
                 $this->sync($zone, $actor);
             }
         });
+    }
+
+    /**
+     * Point a domain's mail at another service, or back at this server, in
+     * its zone. The panel only takes back what it set: the MX records and
+     * SPF term of Google Workspace or Zoho. Going to one of those, the
+     * domain's MX records become the service's and its SPF record lets the
+     * service send too (this server still may, for websites' mail). Coming
+     * back here, a domain left without MX records gets mail.<domain> again.
+     * Any other service's records are the customer's to set.
+     *
+     * @param  MailProvider|null  $from  The service mail went to; null is this server.
+     * @param  MailProvider|null  $to  The service mail goes to now; null is this server.
+     * @return bool Whether the zone was changed.
+     */
+    public function useMailProvider(Domain $domain, ?MailProvider $from, ?MailProvider $to, ?User $actor): bool
+    {
+        $zone = DnsZone::query()->with('account')->where('domain_id', $domain->id)->first();
+
+        if ($zone === null || $from === $to) {
+            return false;
+        }
+
+        return DB::transaction(function () use ($zone, $domain, $from, $to, $actor): bool {
+            $name = $domain->name;
+            $exchangers = fn () => $zone->records()->where('name', $name)->where('type', 'MX');
+            $changed = false;
+
+            if ($from?->managesDns()) {
+                $hosts = array_column($from->exchangers(), 'host');
+
+                foreach ($exchangers()->get() as $record) {
+                    if (in_array(strtolower(rtrim($record->content, '.')), $hosts, true)) {
+                        $record->delete();
+                        $changed = true;
+                    }
+                }
+
+                $changed = $this->editSpf($zone, $name, fn (array $terms): array => array_values(array_diff($terms, [(string) $from->spfInclude()]))) || $changed;
+            }
+
+            if ($to?->managesDns()) {
+                $exchangers()->delete();
+
+                foreach ($to->exchangers() as $exchanger) {
+                    $zone->records()->create($this->record($name, 'MX', $exchanger['host'], $exchanger['priority']));
+                }
+
+                $this->editSpf($zone, $name, fn (array $terms): array => $this->withSpfTerm($terms, (string) $to->spfInclude()), create: true);
+                $changed = true;
+            } elseif ($to === null && ! $exchangers()->exists()) {
+                $zone->records()->create($this->record($name, 'MX', "mail.{$name}", 10));
+
+                $ip = $this->publicIp();
+
+                if ($ip !== null && ! $zone->records()->where('name', "mail.{$name}")->exists()) {
+                    $zone->records()->create($this->record("mail.{$name}", 'A', $ip));
+                }
+
+                $changed = true;
+            }
+
+            if ($changed && $zone->account->status !== AccountStatus::Pending) {
+                $this->sync($zone, $actor);
+            }
+
+            return $changed;
+        });
+    }
+
+    /**
+     * Change the terms of the SPF records at name with edit; with create, a
+     * name without one gets one that lets this server send.
+     *
+     * @param  callable(list<string>): list<string>  $edit
+     * @return bool Whether a record changed.
+     */
+    private function editSpf(DnsZone $zone, string $name, callable $edit, bool $create = false): bool
+    {
+        $records = $zone->records()->where('name', $name)->where('type', 'TXT')->get()
+            ->filter(fn (DnsRecord $record): bool => preg_match('/^v=spf1(\s|$)/i', $record->content) === 1);
+
+        if ($records->isEmpty()) {
+            if (! $create) {
+                return false;
+            }
+
+            $ip = $this->publicIp();
+            $terms = $edit(['v=spf1', 'a', 'mx', ...($ip !== null ? ["ip4:{$ip}"] : []), '~all']);
+            $zone->records()->create($this->record($name, 'TXT', implode(' ', $terms)));
+
+            return true;
+        }
+
+        $changed = false;
+
+        foreach ($records as $record) {
+            $content = implode(' ', $edit(preg_split('/\s+/', trim($record->content)) ?: []));
+
+            if ($content !== $record->content) {
+                $record->forceFill(['content' => $content])->save();
+                $changed = true;
+            }
+        }
+
+        return $changed;
+    }
+
+    /**
+     * SPF terms with term added before the closing all (or redirect), once.
+     *
+     * @param  list<string>  $terms
+     * @return list<string>
+     */
+    private function withSpfTerm(array $terms, string $term): array
+    {
+        if (in_array(strtolower($term), array_map('strtolower', $terms), true)) {
+            return $terms;
+        }
+
+        foreach ($terms as $index => $existing) {
+            if (preg_match('/^([+?~-]?all|redirect=.*)$/i', $existing) === 1) {
+                array_splice($terms, $index, 0, [$term]);
+
+                return $terms;
+            }
+        }
+
+        return [...$terms, $term];
     }
 
     /**

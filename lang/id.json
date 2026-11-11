@@ -336,5 +336,11 @@
     "This email account is suspended: it cannot sign in until it is unsuspended.": "Akun email ini dinonaktifkan: tidak bisa login sampai diaktifkan lagi.",
     "An email account may send to at most :max recipients a day, the limit of the hosting account.": "Akun email paling banyak mengirim ke :max penerima per hari, sesuai batas akun hosting.",
     "The spam filter of :address is saved.": "Filter spam :address disimpan.",
-    ":sender is not an email address or a domain.": ":sender bukan alamat email atau domain."
+    ":sender is not an email address or a domain.": ":sender bukan alamat email atau domain.",
+    "Choose where the mail goes.": "Pilih ke mana email domain ini dikirim.",
+    "This server takes mail for :domain again, and its MX record points here again.": "Email :domain kembali diterima server ini, dan record MX-nya kembali mengarah ke sini.",
+    "This server takes mail for :domain again. Point its MX record here if it does not yet.": "Email :domain kembali diterima server ini. Arahkan record MX-nya ke sini kalau belum.",
+    "Mail for :domain now goes to :service; its MX and SPF records were changed.": "Email :domain sekarang diterima :service; record MX dan SPF-nya sudah diubah.",
+    "Mail for :domain now goes to another service. Set its MX and SPF records there in DNS.": "Email :domain sekarang diterima layanan lain. Atur record MX dan SPF-nya di DNS sesuai petunjuk layanan itu.",
+    "the MX records of your email service, not this server": "record MX layanan email Anda, bukan server ini"
 }

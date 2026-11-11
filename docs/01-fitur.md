@@ -82,7 +82,7 @@ Pembagian level sama seperti DirectAdmin:
 | Spam filter        | ✅ Per akun email: ambang skor, aksi (Junk/hapus/tandai saja), whitelist & blacklist                   | P2   |
 | Email filter       | Aturan per akun (Sieve)                                                                                | P2   |
 | DKIM / SPF / DMARC | ✅ Dibuat otomatis + indikator status ("Cek DNS" di halaman Email, lewat DNS publik)                   | P2   |
-| MX & mode email    | Email ditangani server ini atau layanan luar (Google, Zoho, dll.)                                      | P2   |
+| MX & mode email    | ✅ Per domain: server ini, Google Workspace, Zoho Mail (MX & SPF diatur otomatis), atau layanan lain   | P2   |
 | Webmail            | Roundcube dengan SSO dari panel                                                                        | P2   |
 | Pemakaian email    | ✅ Ukuran dan jumlah pesan per akun email, diukur tiap 15 menit                                        | P2   |
 | Konfigurasi klien  | Autoconfig (Thunderbird) & autodiscover (Outlook)                                                      | P3   |
