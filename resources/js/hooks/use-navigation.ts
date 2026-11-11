@@ -9,6 +9,7 @@ import {
     House,
     Milestone,
     ListChecks,
+    Network,
     Package,
     ScrollText,
     Settings,
@@ -18,6 +19,7 @@ import {
 import { dashboard } from '@/routes';
 import { index as cronJobsIndex } from '@/routes/cron-jobs';
 import { index as databasesIndex } from '@/routes/databases';
+import { index as dnsIndex } from '@/routes/dns';
 import { index as accountsIndex } from '@/routes/admin/accounts';
 import { index as auditLogsIndex } from '@/routes/admin/audit-logs';
 import { index as packagesIndex } from '@/routes/admin/packages';
@@ -118,6 +120,11 @@ export function useNavigation(): {
             icon: Globe,
         };
 
+        const dns: NavItem = {
+            title: 'DNS',
+            href: dnsIndex(),
+            icon: Network,
+        };
         const databases: NavItem = {
             title: 'Databases',
             href: databasesIndex(),
@@ -149,6 +156,7 @@ export function useNavigation(): {
             items: [
                 dashboardItem,
                 domains,
+                dns,
                 files,
                 databases,
                 ftp,

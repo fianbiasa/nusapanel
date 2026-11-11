@@ -34,7 +34,7 @@ class RebuildCommandTest extends TestCase
         User::factory()->admin()->create();
 
         $this->artisan('rayxo:rebuild')
-            ->expectsOutputToContain('Queued: 2 websites, 2 disk quotas, 2 crontabs, 2 FTP folders.')
+            ->expectsOutputToContain('Queued: 2 websites, 2 disk quotas, 2 crontabs, 2 FTP folders, 2 DNS zones.')
             ->assertSuccessful();
 
         $this->assertEqualsCanonicalizing(
@@ -42,6 +42,7 @@ class RebuildCommandTest extends TestCase
             Task::query()->where('action', 'account.set_quota')->get()->pluck('payload.username')->all(),
         );
         $this->assertSame(2, Task::query()->where('action', 'web.apply_domain')->count());
+        $this->assertEqualsCanonicalizing(['budi', 'sari'], Task::query()->where('action', 'dns.sync_zone')->get()->pluck('payload.username')->all());
 
         $crontabs = Task::query()
             ->where('action', 'cron.apply')

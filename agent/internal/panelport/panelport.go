@@ -111,12 +111,12 @@ func New(cfg Config) *Manager {
 
 // Reserved reports whether port may not become the panel's: below 1024,
 // or used by another service of the server (MariaDB, Apache behind Nginx,
-// OpenDKIM, FTP's passive ports).
+// PowerDNS's API, OpenDKIM, FTP's passive ports).
 func Reserved(port int) bool {
 	switch {
 	case port < 1024 || port > 65535:
 		return true
-	case port == 3306 || port == 8080 || port == 8891:
+	case port == 3306 || port == 8080 || port == 8081 || port == 8891:
 		return true
 	case port >= 35000 && port <= 35999:
 		return true

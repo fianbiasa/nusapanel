@@ -120,6 +120,16 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     }
 
     /**
+     * The DNS zones of this hosting account.
+     *
+     * @return HasMany<DnsZone, $this>
+     */
+    public function dnsZones(): HasMany
+    {
+        return $this->hasMany(DnsZone::class);
+    }
+
+    /**
      * The MariaDB databases of this hosting account.
      *
      * @return HasMany<Database, $this>

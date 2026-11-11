@@ -119,11 +119,11 @@ class ServiceManagementTest extends TestCase
         $this->actingAs($admin)
             ->post(route('admin.services.rebuild'))
             ->assertSessionHasNoErrors()
-            ->assertInertiaFlash('toast.message', 'Rewriting 1 websites, 1 quotas, 1 crontabs and 0 FTP folders. Follow them under Tasks.');
+            ->assertInertiaFlash('toast.message', 'Rewriting 1 websites, 1 quotas, 1 crontabs, 0 FTP folders and 1 DNS zones. Follow them under Tasks.');
 
-        $this->assertSame(3, Task::query()->where('actor_id', $admin->id)->count());
+        $this->assertSame(4, Task::query()->where('actor_id', $admin->id)->count());
         $this->assertSame(
-            ['websites' => 1, 'quotas' => 1, 'crontabs' => 1, 'ftp_folders' => 0],
+            ['websites' => 1, 'quotas' => 1, 'crontabs' => 1, 'ftp_folders' => 0, 'dns_zones' => 1],
             AuditLog::query()->where('action', 'server.rebuilt')->where('actor_id', $admin->id)->sole()->changes,
         );
     }

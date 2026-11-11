@@ -162,11 +162,11 @@ Private key **tidak** disimpan di database, hanya di `/etc/rayxo/ssl/` dengan mo
 
 Record disimpan di panel lalu disinkronkan ke PowerDNS oleh agent (sesuai prinsip "database panel = sumber kebenaran").
 
-| Tabel           | Kolom penting                                                                                                         |
-| --------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `dns_zones`     | user_id, domain_id (null; zone bisa dibuat admin tanpa domain web), name (unique), dnssec_enabled, serial             |
-| `dns_records`   | zone_id, name, type, content, ttl, priority, disabled                                                                 |
-| `dns_templates` | owner_id (null = default), name, type, content (placeholder `{domain}`, `{ip}`, `{ns1}`, `{ns2}`, ...), ttl, priority |
+| Tabel           | Kolom penting                                                                                                                                                                                                                                                                                     |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dns_zones`     | user_id, domain_id (domain atau pointer-nya; null kalau domainnya terhapus), name (unique). Serial dikelola PowerDNS; DNSSEC menyusul (P6)                                                                                                                                                        |
+| `dns_records`   | dns_zone_id, name (absolut tanpa titik di akhir), type, content (bentuk biasa, TXT tanpa kutip), ttl, priority (MX/SRV)                                                                                                                                                                           |
+| `dns_templates` | menyusul (P2 tahap 3): owner_id (null = default), name, type, content (placeholder `{domain}`, `{ip}`, `{ns1}`, `{ns2}`, ...), ttl, priority. Sampai itu, template bawaan ada di kode (`DnsService`): A `@`/`www`/`mail`/`ftp` ke IP server, MX 10 `mail.<zone>`, SPF `v=spf1 a mx ip4:<ip> ~all` |
 
 ---
 

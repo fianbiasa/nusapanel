@@ -19,7 +19,7 @@ class RebuildCommand extends Command
     /**
      * @var string
      */
-    protected $description = 'Queue the configuration of every website, quota, crontab and FTP folder again, from the database';
+    protected $description = 'Queue the configuration of every website, quota, crontab, FTP folder and DNS zone again, from the database';
 
     public function handle(RebuildService $rebuild): int
     {
@@ -30,6 +30,7 @@ class RebuildCommand extends Command
             "{$queued['quotas']} disk quotas",
             "{$queued['crontabs']} crontabs",
             "{$queued['ftp_folders']} FTP folders",
+            "{$queued['dns_zones']} DNS zones",
         ]).'. The queue worker applies them in the background; see Tasks in the panel.');
 
         return self::SUCCESS;

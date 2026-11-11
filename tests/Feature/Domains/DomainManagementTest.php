@@ -84,9 +84,7 @@ class DomainManagementTest extends TestCase
         $this->assertFalse($domain->is_primary);
         $this->assertSame(DomainStatus::Pending, $domain->status);
 
-        $task = Task::query()->sole();
-
-        $this->assertSame('web.apply_domain', $task->action);
+        $task = Task::query()->where('action', 'web.apply_domain')->sole();
         $this->assertSame([
             'username' => 'budi',
             'domain' => 'example.com',
@@ -115,7 +113,8 @@ class DomainManagementTest extends TestCase
             ->assertSessionHasNoErrors();
 
         $this->assertSame('xn--bcher-kva.de', Domain::query()->sole()->name);
-        $this->assertSame('xn--bcher-kva.de', Task::query()->sole()->payload['domain']);
+        $this->assertSame('xn--bcher-kva.de', Task::query()->where('action', 'web.apply_domain')->sole()->payload['domain']);
+        $this->assertSame('xn--bcher-kva.de', Task::query()->where('action', 'dns.sync_zone')->sole()->payload['zone']);
     }
 
     /**

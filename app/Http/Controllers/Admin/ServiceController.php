@@ -85,7 +85,7 @@ class ServiceController extends Controller
     }
 
     /**
-     * Write every website, quota, crontab and FTP folder again from the
+     * Write every website, quota, crontab, FTP folder and DNS zone again from the
      * database, as "rayxo rebuild" does on the server.
      */
     public function rebuild(Request $request, RebuildService $rebuild): RedirectResponse
@@ -94,11 +94,12 @@ class ServiceController extends Controller
 
         $this->audit->record('server.rebuilt', null, $queued);
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Rewriting :websites websites, :quotas quotas, :crontabs crontabs and :ftp FTP folders. Follow them under Tasks.', [
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Rewriting :websites websites, :quotas quotas, :crontabs crontabs, :ftp FTP folders and :zones DNS zones. Follow them under Tasks.', [
             'websites' => $queued['websites'],
             'quotas' => $queued['quotas'],
             'crontabs' => $queued['crontabs'],
             'ftp' => $queued['ftp_folders'],
+            'zones' => $queued['dns_zones'],
         ])]);
 
         return back();

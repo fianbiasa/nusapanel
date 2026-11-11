@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Carbon;
 
 /**
@@ -174,6 +175,17 @@ class Domain extends Model
     public function children(): HasMany
     {
         return $this->hasMany(self::class, 'parent_id');
+    }
+
+    /**
+     * The DNS zone of a domain or pointer; subdomains have their records in
+     * the zone of their domain.
+     *
+     * @return HasOne<DnsZone, $this>
+     */
+    public function dnsZone(): HasOne
+    {
+        return $this->hasOne(DnsZone::class);
     }
 
     /**

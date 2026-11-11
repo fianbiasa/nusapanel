@@ -61,6 +61,11 @@ readonly FTP_CERTIFICATE="/etc/ssl/private/pure-ftpd.pem"
 readonly SFTP_GROUP="rayxo-sftp"
 readonly SFTP_SSHD_CONF="/etc/ssh/sshd_config.d/rayxo-sftp.conf"
 readonly DKIM_SELECTOR="rayxo"
+# PowerDNS serves the zones of hosting accounts from its own database; the
+# agent changes them through PowerDNS's API with this key (root only).
+readonly DNS_API_KEY_FILE="$CONFIG_DIR/pdns-api-key"
+readonly DNS_API_PORT="8081"
+readonly PDNS_CONF="/etc/powerdns/pdns.d/rayxo.conf"
 readonly DNS_REPORT="$CONFIG_DIR/dns-records.txt"
 readonly RELEASE_REPO="fianbiasa/rayxo"
 # Public DNS over HTTPS, asked in this order. A resolver's cache can still
@@ -528,7 +533,7 @@ preflight() {
     # A server we already started installing on is allowed to have our own packages.
     if [[ ! -f "$CONFIG_DIR/.setup-started" && $force -eq 0 ]]; then
         local package
-        for package in apache2 nginx mysql-server mariadb-server "php$PHP_VERSION-fpm"; do
+        for package in apache2 nginx mysql-server mariadb-server "php$PHP_VERSION-fpm" bind9 pdns-server; do
             if dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q "install ok installed"; then
                 die "server tidak bersih: paket $package sudah terpasang. Pakai server baru (disarankan) atau tambahkan --force"
             fi
@@ -869,14 +874,19 @@ DEBCONF
     # Apache would start on port 80, which Nginx owns, and fail the install.
     # It stays stopped until configure_web has moved it to 127.0.0.1:8080.
     # Pure-FTPd would start with Debian's defaults (PAM logins, no TLS); it
-    # stays stopped until configure_ftp has set it up.
+    # stays stopped until configure_ftp has set it up. PowerDNS would start
+    # on every address of port 53, where systemd-resolved may already listen
+    # on 127.0.0.53; it stays stopped until configure_dns has set it up.
     block_service_starts
     quietly "${apt[@]}" install apache2 pure-ftpd-mysql
+    # Without the bind backend PowerDNS recommends: its settings stop
+    # PowerDNS from starting when only the MySQL backend is launched.
+    quietly "${apt[@]}" install --no-install-recommends pdns-server pdns-backend-mysql
     remove_policy_rc
 
     # cron runs the cron jobs of hosting accounts (the agent writes their crontabs).
     quietly systemctl enable --now mariadb nginx cron "php$PHP_VERSION-fpm"
-    info "Nginx, Apache, MariaDB, Postfix, Pure-FTPd dan PHP $PHP_VERSION terpasang"
+    info "Nginx, Apache, MariaDB, Postfix, Pure-FTPd, PowerDNS dan PHP $PHP_VERSION terpasang"
 }
 
 # The site PHP versions: those of an earlier install plus --php-versions, or
@@ -1604,6 +1614,96 @@ configure_sftp() {
 # 127.0.0.1:8080 behind it so .htaccess works, PHP in a pool per account.
 # The agent writes one Nginx and one Apache file per domain into the
 # directories created here.
+# The addresses PowerDNS answers on: 127.0.0.1 and every global address of
+# this server, one per line. Never the wildcard: systemd-resolved listens on
+# 127.0.0.53:53 on many servers, and would keep PowerDNS from starting.
+dns_listen_addresses() {
+    printf '127.0.0.1\n'
+    ip -o addr show scope global | awk '{split($4, a, "/"); print a[1]}'
+}
+
+# DNS for the zones of hosting accounts. PowerDNS Authoritative serves them
+# from its own database, pdns, which only PowerDNS's system user can open
+# (MariaDB's unix_socket login, no password). The panel's database stays the
+# source of truth: the agent writes each zone through PowerDNS's HTTP API on
+# 127.0.0.1 with a key only root can read, and the panel syncs every zone
+# again after this step (sync_dns_zones).
+configure_dns() {
+    step "Mengatur DNS (PowerDNS)"
+
+    [[ -x /usr/sbin/pdns_server ]] || die "PowerDNS tidak terpasang (paket pdns-server)"
+
+    # The bind backend came along with an early build of this step; its
+    # settings (bind.conf) stop PowerDNS from starting without it.
+    if dpkg-query -W -f='${Status}' pdns-backend-bind 2>/dev/null | grep -q "install ok installed"; then
+        quietly apt-get -y -q -o DPkg::Lock::Timeout=300 purge pdns-backend-bind
+    fi
+
+    mariadb <<SQL
+CREATE DATABASE IF NOT EXISTS \`pdns\` CHARACTER SET utf8mb4;
+CREATE USER IF NOT EXISTS 'pdns'@'localhost' IDENTIFIED VIA unix_socket;
+GRANT SELECT, INSERT, UPDATE, DELETE ON \`pdns\`.* TO 'pdns'@'localhost';
+SQL
+
+    # PowerDNS's own schema, on a new database only.
+    if [[ -z "$(mariadb -N -e "SELECT 1 FROM information_schema.tables WHERE table_schema = 'pdns' AND table_name = 'domains'")" ]]; then
+        mariadb pdns </usr/share/pdns-backend-mysql/schema/schema.mysql.sql
+        info "Database DNS (pdns) dibuat"
+    fi
+
+    # The API key is made once and kept, so the agent never loses it.
+    if [[ ! -s "$DNS_API_KEY_FILE" ]]; then
+        (
+            umask 077
+            openssl rand -hex 32 >"$DNS_API_KEY_FILE"
+        )
+    fi
+    chmod 0600 "$DNS_API_KEY_FILE"
+
+    local addresses
+    addresses="$(dns_listen_addresses | paste -sd, -)"
+
+    (
+        umask 027
+        cat >"$PDNS_CONF.new" <<CONF
+# Written by RAYXO setup.sh on every run; changes made here are lost.
+launch=gmysql
+gmysql-socket=/run/mysqld/mysqld.sock
+gmysql-user=pdns
+gmysql-password=
+gmysql-dbname=pdns
+local-address=$addresses
+local-port=53
+api=yes
+api-key=$(cat "$DNS_API_KEY_FILE")
+webserver=yes
+webserver-address=127.0.0.1
+webserver-port=$DNS_API_PORT
+webserver-allow-from=127.0.0.1/32
+default-ttl=3600
+version-string=anonymous
+CONF
+    )
+    chown root:pdns "$PDNS_CONF.new"
+    mv -f "$PDNS_CONF.new" "$PDNS_CONF"
+
+    quietly systemctl enable pdns
+    if ! systemctl restart pdns; then
+        die "PowerDNS tidak bisa berjalan; mungkin port 53 dipakai program lain (cek: journalctl -u pdns, ss -lnup 'sport = :53')"
+    fi
+
+    local attempt
+    for attempt in $(seq 1 20); do
+        if curl -sf -o /dev/null -H "X-API-Key: $(cat "$DNS_API_KEY_FILE")" "http://127.0.0.1:$DNS_API_PORT/api/v1/servers/localhost"; then
+            info "DNS aktif di port 53 (${addresses//,/, }); API hanya di 127.0.0.1:$DNS_API_PORT"
+            return
+        fi
+        sleep 0.5
+    done
+
+    die "API PowerDNS tidak menjawab (cek: journalctl -u pdns)"
+}
+
 configure_web() {
     step "Mengatur web server untuk website customer (Nginx -> Apache 127.0.0.1:8080)"
 
@@ -1934,6 +2034,19 @@ rebuild_websites() {
     fi
 }
 
+# Every domain gets its DNS zone (from the template when it has none yet,
+# e.g. after an upgrade from a release without DNS) and every zone is
+# written to PowerDNS again. Queued like rebuild_websites.
+sync_dns_zones() {
+    step "Menyamakan zone DNS"
+
+    if artisan rayxo:sync-dns >>"$INSTALL_LOG" 2>&1; then
+        info "Semua zone DNS ditulis ulang di latar belakang (lihat Tasks di panel)"
+    else
+        warn "zone DNS tidak bisa disamakan; jalankan lagi: runuser -u $PANEL_USER -- $PHP_BIN $INSTALL_DIR/current/panel/artisan rayxo:sync-dns"
+    fi
+}
+
 # Accounts created before quotas existed, or before they were turned on
 # here, get the limits of their package. Queued like rebuild_websites; when
 # quotas are off the agent reports that they could not be applied.
@@ -2036,6 +2149,7 @@ verify_install() {
     # FTP must switch to TLS with the hostname certificate, and refuse a
     # login sent before that. fd 4: fd 3 is the terminal.
     systemctl is-active --quiet pure-ftpd-mysql || die "Pure-FTPd tidak berjalan (cek: journalctl -u pure-ftpd-mysql)"
+    systemctl is-active --quiet pdns || die "PowerDNS tidak berjalan (cek: journalctl -u pdns)"
     if ! timeout 15 openssl s_client -connect 127.0.0.1:21 -starttls ftp -servername "$server_hostname" \
         </dev/null 2>/dev/null | grep -q "BEGIN CERTIFICATE"; then
         die "FTP di port 21 tidak bisa beralih ke TLS (cek: journalctl -u pure-ftpd-mysql)"
@@ -2157,7 +2271,7 @@ summary() {
 
     printf '\n'
     info "Catatan:"
-    info "- Pastikan port 80, 443, $PANEL_PORT, 21 dan ${FTP_PASSIVE_PORTS/ /-} (FTP passive) terbuka di firewall / security group provider VPS."
+    info "- Pastikan port 80, 443, $PANEL_PORT, 21, ${FTP_PASSIVE_PORTS/ /-} (FTP passive) dan 53 TCP & UDP (DNS) terbuka di firewall / security group provider VPS."
     info "- Cek agent: rayxo ping"
     info "- Lupa password admin: runuser -u $PANEL_USER -- php$PHP_VERSION $INSTALL_DIR/current/panel/artisan rayxo:reset-password $admin_user"
     info "- Log instalasi: $INSTALL_LOG"
@@ -2207,6 +2321,7 @@ main() {
     configure_phpmyadmin
     configure_ftp
     configure_sftp
+    configure_dns
     configure_web
     configure_quota
     configure_logrotate
@@ -2214,6 +2329,7 @@ main() {
     verify_install
     rebuild_websites
     apply_quotas
+    sync_dns_zones
     # Last, right before the summary, so a failure in an earlier step can never
     # leave an admin whose generated password was not shown.
     create_admin

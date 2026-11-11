@@ -2,6 +2,7 @@ import { Form, Head, router, usePoll } from '@inertiajs/react';
 import {
     CheckCircle2,
     Clock,
+    Network,
     PencilLine,
     ShieldAlert,
     ShieldCheck,
@@ -41,6 +42,7 @@ import { formatDateTime, formatRelative } from '@/lib/format';
 import {
     hostname as updateHostname,
     hostnameCertificate,
+    nameservers as updateNameservers,
     phpUploads,
     port as tryPort,
     timezone as updateTimezone,
@@ -92,6 +94,8 @@ type Props = {
     certificate_request: CertificateRequest;
     timezones: string[];
     php_uploads: { limit: string; default: string; sizes: string[] };
+    nameservers: string[];
+    public_ip: string | null;
 };
 
 export default function ServerSettings({
@@ -100,6 +104,8 @@ export default function ServerSettings({
     certificate_request,
     timezones,
     php_uploads,
+    nameservers,
+    public_ip,
 }: Props) {
     const { start, stop } = usePoll(
         5_000,
@@ -127,7 +133,7 @@ export default function ServerSettings({
 
             <PageHeader
                 title="Pengaturan Server"
-                description="Hostname dan SSL panel, zona waktu server, dan ukuran upload yang boleh dipakai website."
+                description="Hostname dan SSL panel, zona waktu server, ukuran upload yang boleh dipakai website, dan nameserver DNS."
             />
 
             {error !== null && (
@@ -173,6 +179,8 @@ export default function ServerSettings({
                 )}
                 <UploadPanel uploads={php_uploads} />
             </div>
+
+            <NameserverPanel current={nameservers} publicIp={public_ip} />
         </>
     );
 }
@@ -776,6 +784,105 @@ function UploadPanel({
                             >
                                 {processing ? <Spinner /> : <Upload />}
                                 Simpan batas upload
+                            </Button>
+                        </div>
+                    </>
+                )}
+            </Form>
+        </Panel>
+    );
+}
+
+/**
+ * The nameservers every DNS zone of this server names. They must resolve
+ * to this server, which the admin sets up at the registrar.
+ */
+function NameserverPanel({
+    current,
+    publicIp,
+}: {
+    current: string[];
+    publicIp: string | null;
+}) {
+    const [ns1, setNs1] = useState(current[0] ?? '');
+    const [ns2, setNs2] = useState(current[1] ?? '');
+    const isUnchanged =
+        ns1 === (current[0] ?? '') && ns2 === (current[1] ?? '');
+
+    return (
+        <Panel
+            title="Nameserver"
+            description="Dicantumkan di setiap zone DNS server ini. Arahkan nameserver domain customer ke nama-nama ini; menyimpan perubahan menulis ulang semua zone."
+        >
+            <Form
+                {...updateNameservers.form()}
+                options={{ preserveScroll: true }}
+                className="grid gap-4"
+            >
+                {({ processing, errors }) => (
+                    <>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <Field
+                                id="ns1"
+                                label="Nameserver 1"
+                                error={errors.ns1}
+                            >
+                                <Input
+                                    id="ns1"
+                                    name="ns1"
+                                    value={ns1}
+                                    onChange={(event) =>
+                                        setNs1(event.target.value)
+                                    }
+                                    required
+                                    autoComplete="off"
+                                    spellCheck={false}
+                                    className="font-mono"
+                                    aria-invalid={errors.ns1 ? true : undefined}
+                                />
+                            </Field>
+                            <Field
+                                id="ns2"
+                                label="Nameserver 2"
+                                error={errors.ns2}
+                            >
+                                <Input
+                                    id="ns2"
+                                    name="ns2"
+                                    value={ns2}
+                                    onChange={(event) =>
+                                        setNs2(event.target.value)
+                                    }
+                                    autoComplete="off"
+                                    spellCheck={false}
+                                    placeholder="Opsional"
+                                    className="font-mono"
+                                    aria-invalid={errors.ns2 ? true : undefined}
+                                />
+                            </Field>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                            Buat A record untuk setiap nameserver
+                            {publicIp !== null && (
+                                <>
+                                    {' '}
+                                    yang mengarah ke{' '}
+                                    <span className="font-mono">
+                                        {publicIp}
+                                    </span>
+                                </>
+                            )}
+                            . Kalau nameserver memakai domain yang zonenya juga
+                            di server ini, daftarkan juga sebagai glue record di
+                            registrar domain itu.
+                        </p>
+                        <div>
+                            <Button
+                                type="submit"
+                                disabled={processing || isUnchanged}
+                            >
+                                {processing ? <Spinner /> : <Network />}
+                                Simpan nameserver
                             </Button>
                         </div>
                     </>

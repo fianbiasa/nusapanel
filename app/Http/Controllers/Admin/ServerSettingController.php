@@ -5,9 +5,11 @@ namespace App\Http\Controllers\Admin;
 use App\Agent\AgentException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\TryPanelPortRequest;
+use App\Http\Requests\Admin\UpdateNameserversRequest;
 use App\Http\Requests\Admin\UpdatePhpUploadLimitsRequest;
 use App\Http\Requests\Admin\UpdateServerHostnameRequest;
 use App\Http\Requests\Admin\UpdateServerTimezoneRequest;
+use App\Services\DnsService;
 use App\Services\DomainService;
 use App\Services\ServerSettingsService;
 use App\Support\PhpSettings;
@@ -28,6 +30,7 @@ class ServerSettingController extends Controller
     public function __construct(
         private ServerSettingsService $settings,
         private DomainService $domains,
+        private DnsService $dns,
     ) {}
 
     public function index(): Response
@@ -52,7 +55,27 @@ class ServerSettingController extends Controller
                 'default' => $this->settings->phpUploadDefault(),
                 'sizes' => PhpSettings::SIZES,
             ],
+            'nameservers' => $this->dns->nameservers(),
+            'public_ip' => config('hosting.public_ip') ?: null,
         ]);
+    }
+
+    /**
+     * Change the nameservers every DNS zone names, and write every zone
+     * again.
+     */
+    public function updateNameservers(UpdateNameserversRequest $request): RedirectResponse
+    {
+        $nameservers = array_values(array_filter([
+            $request->string('ns1')->toString(),
+            $request->filled('ns2') ? $request->string('ns2')->toString() : null,
+        ]));
+
+        $queued = $this->dns->setNameservers($nameservers, $request->user());
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('The nameservers are saved; :count DNS zones are being rewritten.', ['count' => $queued])]);
+
+        return back();
     }
 
     /**

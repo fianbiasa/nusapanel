@@ -30,6 +30,7 @@ class AccountService
         private AuditLogger $audit,
         private DomainService $domains,
         private QuotaService $quotas,
+        private DnsService $dns,
     ) {}
 
     /**
@@ -139,6 +140,7 @@ class AccountService
         DB::transaction(function () use ($account, $actor): void {
             $account->forceFill(['status' => AccountStatus::Deleting])->save();
 
+            $this->dns->removeAccount($account, $actor);
             $this->tasks->dispatch('account.delete', ['username' => $account->username], $account, $actor);
 
             $this->audit->record('account.deleted', $account, ['username' => $account->username], $actor);

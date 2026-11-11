@@ -8,6 +8,7 @@ import (
 
 	"rayxo/agent/internal/clock"
 	"rayxo/agent/internal/database"
+	"rayxo/agent/internal/dns"
 	"rayxo/agent/internal/files"
 	"rayxo/agent/internal/panelport"
 	"rayxo/agent/internal/quota"
@@ -71,6 +72,10 @@ func Register(registry *rpc.Registry, config Config) {
 	}
 
 	for name, method := range cronMethods(sysuser.System{}) {
+		registry.Register(name, method)
+	}
+
+	for name, method := range dnsMethods(dns.New(dns.DefaultConfig())) {
 		registry.Register(name, method)
 	}
 

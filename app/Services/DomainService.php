@@ -41,6 +41,7 @@ class DomainService
         private TaskDispatcher $tasks,
         private AuditLogger $audit,
         private ServerSettingsService $serverSettings,
+        private DnsService $dns,
     ) {}
 
     /**
@@ -145,6 +146,8 @@ class DomainService
                     $this->dispatchApply($domain, $account, $actor);
                 }
 
+                $this->dns->addDomain($domain, $actor);
+
                 $this->audit->record($type->value.'.created', $domain, array_filter([
                     'domain' => $domain->name,
                     'parent' => $parent?->name,
@@ -237,6 +240,7 @@ class DomainService
         DB::transaction(function () use ($domain, $account, $actor): void {
             $parent = $domain->parent;
 
+            $this->dns->removeDomain($domain, $actor);
             $domain->delete();
 
             if ($parent?->status === DomainStatus::Deleting && ! $parent->children()->exists()) {
@@ -273,7 +277,7 @@ class DomainService
 
     /**
      * Queue the set-up of domains that were added while the account was
-     * still being created.
+     * still being created, and send the account's DNS zones.
      */
     public function dispatchPendingDomains(User $account, ?User $actor): void
     {
@@ -281,6 +285,8 @@ class DomainService
             ->where('status', DomainStatus::Pending)
             ->orderBy('id')
             ->each(fn (Domain $domain) => $this->dispatchApply($domain, $account, $actor));
+
+        $this->dns->syncAccount($account, $actor);
     }
 
     /**

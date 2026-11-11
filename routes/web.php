@@ -10,6 +10,7 @@ use App\Http\Controllers\CronJobController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DatabaseController;
 use App\Http\Controllers\DatabaseUserController;
+use App\Http\Controllers\DnsController;
 use App\Http\Controllers\DomainController;
 use App\Http\Controllers\FileManagerController;
 use App\Http\Controllers\FtpAccountController;
@@ -45,6 +46,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('database-users', [DatabaseUserController::class, 'store'])->name('database-users.store');
         Route::put('database-users/{databaseUser}', [DatabaseUserController::class, 'update'])->name('database-users.update');
         Route::delete('database-users/{databaseUser}', [DatabaseUserController::class, 'destroy'])->name('database-users.destroy');
+        Route::get('dns', [DnsController::class, 'index'])->name('dns.index');
+        Route::post('dns/{dnsZone}/records', [DnsController::class, 'store'])->name('dns.records.store');
+        Route::put('dns/records/{dnsRecord}', [DnsController::class, 'update'])->name('dns.records.update');
+        Route::delete('dns/records/{dnsRecord}', [DnsController::class, 'destroy'])->name('dns.records.destroy');
+        Route::post('dns/{dnsZone}/reset', [DnsController::class, 'reset'])->name('dns.reset');
         Route::get('cron-jobs', [CronJobController::class, 'index'])->name('cron-jobs.index');
         Route::post('cron-jobs', [CronJobController::class, 'store'])->name('cron-jobs.store');
         Route::put('cron-jobs/email', [CronJobController::class, 'updateEmail'])->name('cron-jobs.email.update');
@@ -124,6 +130,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('server-settings/php-uploads', [ServerSettingController::class, 'updatePhpUploads'])
             ->middleware('throttle:10,1,server-uploads')
             ->name('server-settings.php-uploads');
+        Route::put('server-settings/nameservers', [ServerSettingController::class, 'updateNameservers'])
+            ->middleware('throttle:10,1,server-nameservers')
+            ->name('server-settings.nameservers');
         Route::post('services/rebuild', [ServiceController::class, 'rebuild'])
             ->middleware('throttle:6,1')
             ->name('services.rebuild');

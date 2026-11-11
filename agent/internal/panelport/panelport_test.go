@@ -122,6 +122,7 @@ func TestOpenRefusesPortsThatCannotBeThePanels(t *testing.T) {
 		{80, ErrReservedPort},
 		{3306, ErrReservedPort},
 		{8080, ErrReservedPort},
+		{8081, ErrReservedPort},
 		{35500, ErrReservedPort},
 		{70000, ErrReservedPort},
 		{2222, ErrSamePort},

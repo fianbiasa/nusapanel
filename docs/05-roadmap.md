@@ -141,6 +141,14 @@ Semua fitur P1 sudah ada. Yang dipindah ke fase lain: CGI dan batas disk & bandw
 
 ## P2 — DNS & email
 
+**Status:**
+
+- DNS tahap 1 ✅: `setup.sh` memasang PowerDNS Authoritative dengan database `pdns` sendiri (login unix_socket tanpa password), API hanya di 127.0.0.1 dengan kunci root saja, menjawab di IP server dan 127.0.0.1 saja (tidak bentrok dengan systemd-resolved) dan menolak domain yang tidak dikelolanya. Setiap domain dan pointer otomatis mendapat zone dari template (A `@`/`www`/`mail`/`ftp`, MX, SPF), subdomain menambah record ke zone induknya, zone ikut terhapus bersama domain atau akunnya, dan `rayxo rebuild` serta setiap upgrade menulis ulang semua zone. Nameserver diatur admin di Pengaturan Server (bawaan `ns1`/`ns2` dari domain hostname). Teruji dari internet: subdomain yang didelegasikan dijawab server lewat Google dan Cloudflare, termasuk lewat UDP.
+- DNS tahap 2 ✅: halaman DNS untuk customer: lihat record setiap zone, tambah/ubah/hapus record A, AAAA, CNAME, MX, TXT, SRV, CAA dan NS (untuk subdomain), dengan TTL dan prioritas; validasi sama dengan agent, CNAME tidak boleh bersama record lain, paling banyak 1000 record per zone; reset zone ke record bawaan. Teruji di VPS: setiap jenis record, wildcard, ubah, hapus dan reset dijawab benar oleh server dan Google.
+- Menyusul DNS tahap 3: halaman admin semua zone, template DNS yang bisa diubah admin, dan SSL wildcard lewat DNS-01.
+
+**Cakupan:**
+
 - PowerDNS, template DNS, DNS management, nameserver default, SSL wildcard.
 - Postfix + Dovecot + Rspamd + Roundcube.
 - Akun email, forwarder, catch-all, autoresponder, vacation, filter, spam filter.
