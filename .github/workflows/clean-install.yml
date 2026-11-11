@@ -51,7 +51,25 @@ jobs:
           go-version-file: agent/go.mod
           cache-dependency-path: agent/go.sum
 
-      # QEMU with KVM, and Lima's release checked against its attestation.
+      # The runner's apt asks Azure's Ubuntu mirror first, whose name does not
+      # always resolve there, and then every download times out; QEMU comes
+      # from Ubuntu's own archive instead, tried again a few times. Setup Lima
+      # then finds it installed.
+      - name: Install QEMU
+        run: |
+          sudo sed -i 's/azure\.archive\.ubuntu\.com/archive.ubuntu.com/g' \
+            /etc/apt/apt-mirrors.txt /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+          for attempt in 1 2 3; do
+            if sudo apt-get update -qq &&
+              sudo apt-get install -qqy --no-install-recommends ovmf qemu-system-x86 qemu-utils; then
+              exit 0
+            fi
+            echo "::warning::installing QEMU failed (attempt $attempt of 3)"
+            sleep 30
+          done
+          exit 1
+
+      # KVM, and Lima's release checked against its attestation.
       - name: Setup Lima
         uses: lima-vm/lima-actions/setup@55627e31b78637bf254a8b2a14da8ea7d12564e5 # v1.1.0
         with:
