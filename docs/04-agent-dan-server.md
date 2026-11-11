@@ -168,7 +168,7 @@ Setiap akun juga punya **user pemilik** bernama persis `<username>` (tanpa akhir
 | `mail.quota_usage`                                 | Lewat `doveadm quota get`                                                                                                                                                                                                                                                                                                                                                        | P2   |
 | `mail.queue_list` / `queue_flush` / `queue_delete` |                                                                                                                                                                                                                                                                                                                                                                                  | P2   |
 | `mail.ratelimit_apply`                             | Batas kirim per akun/domain di Rspamd                                                                                                                                                                                                                                                                                                                                            | P2   |
-| `mail.webmail_sso`                                 | Token sekali pakai untuk Roundcube                                                                                                                                                                                                                                                                                                                                               | P2   |
+| `mail.webmail_sso`                                 | ✅ tanpa agent: panel membuat sesi webmail (token acak, disimpan SHA-256-nya di `webmail_sessions`) dan mengirim tiket bersegel ke plugin `rayxo_sso` Roundcube; Dovecot menerima token itu dari 127.0.0.1 saja lewat view `v_mail_webmail_sessions`                                                                                                                             | P2   |
 
 ### fs (file manager, semuanya sebagai user)
 
@@ -269,6 +269,8 @@ Setiap aksi dijalankan oleh proses pembantu (`rayxod files-helper`) yang berjala
 ├── releases/<versi>/                   satu folder per rilis (isi paket)
 │   ├── panel/                          aplikasi Laravel (vendor & aset sudah jadi)
 │   ├── phpmyadmin/                     phpMyAdmin (versi & SHA-256 dipatok di build-release.sh) + rayxo-sso.php
+│   ├── roundcube/                      Roundcube (versi & SHA-256 dipatok di build-release.sh) + plugins/rayxo_sso
+│   ├── webmail -> roundcube/public_html   yang disajikan Nginx di /webmail/ (hanya index.php & static.php)
 │   │   ├── .env -> /etc/rayxo/panel.env
 │   │   └── storage -> /var/lib/rayxo/storage
 │   ├── bin/rayxod, bin/rayxo
@@ -293,14 +295,18 @@ Setiap aksi dijalankan oleh proses pembantu (`rayxod files-helper`) yang berjala
 /etc/nginx/rayxo/<user>/suspended.inc        hanya ada selama akun di-suspend (halaman 503)
 /etc/nginx/conf.d/rayxo-sites.conf           include semua vhost di atas
 /etc/nginx/sites-enabled/rayxo-default.conf  default server: port 80 → 404, port 443 → handshake ditolak (host tak dikenal & IP)
-/etc/nginx/sites-enabled/rayxo-phpmyadmin.conf  https://<hostname>/phpmyadmin/ (port 443; selain /phpmyadmin/ diarahkan ke panel)
+/etc/nginx/sites-enabled/rayxo-phpmyadmin.conf  https://<hostname>/phpmyadmin/ dan /webmail/ (port 443; selain itu diarahkan ke panel)
 /etc/php/8.4/fpm/pool.d/rayxo-phpmyadmin.conf  pool phpMyAdmin (user rayxo-pma, socket /run/php/rayxo-phpmyadmin.sock)
 /etc/rayxo-pma/                          0750 root:rayxo-pma: config.inc.php, blowfish.key, sso.key (= PHPMYADMIN_SSO_KEY panel)
+/etc/php/8.4/fpm/pool.d/rayxo-webmail.conf  pool Roundcube (user rayxo-webmail, socket /run/php/rayxo-webmail.sock)
+/etc/rayxo-webmail/                      0750 root:rayxo-webmail: config.inc.php, db.key (password database roundcube, diganti tiap setup.sh), des.key, sso.key (= WEBMAIL_SSO_KEY panel)
+/etc/dovecot/rayxo-webmail-sql.conf.ext  passdb pertama Dovecot: token sesi webmail (view v_mail_webmail_sessions), hanya dari 127.0.0.1/::1
 /etc/pure-ftpd/db/mysql.conf            0600 root: koneksi Pure-FTPd ke view v_ftp_users (user rayxo-ftp, password diganti tiap setup.sh)
 /etc/pure-ftpd/conf/, auth/30mysql      opsi Pure-FTPd (wrapper Debian); hanya backend MySQL, PAM & akun sistem dimatikan
 /etc/ssl/private/pure-ftpd.pem          0600 root: kunci + sertifikat hostname untuk FTPS (diperbarui hook perpanjangan Let's Encrypt)
 /etc/ssh/sshd_config.d/rayxo-sftp.conf  `Match Group rayxo-sftp`: ForceCommand internal-sftp -u 022, tanpa forwarding/TTY/tunnel; root & user lain tidak berubah
 /var/lib/rayxo-pma/{tmp,sessions,log}/   milik rayxo-pma: file sementara, sesi (berisi password sesi) & log PHP phpMyAdmin
+/var/lib/rayxo-webmail/{tmp,log}/        milik rayxo-webmail: file sementara & log PHP Roundcube (log Roundcube sendiri ke syslog, facility mail)
 /etc/apache2/rayxo/<user>/<domain>.conf      vhost Apache (127.0.0.1:8080), ditulis rayxod
 /etc/apache2/conf-available/rayxo.conf       mod_remoteip, HTTPS dari proxy, aturan /home
 /etc/systemd/system/rayxo-php<versi>@.service     unit template pool PHP-FPM, ditulis rayxod
@@ -353,6 +359,6 @@ Setiap aksi dijalankan oleh proses pembantu (`rayxod files-helper`) yang berjala
 | `rayxo-queue.service`                | Queue worker Laravel                                                                                                                     |
 | `rayxo-scheduler.timer`              | Menjalankan `schedule:run` Laravel tiap menit (ukur pemakaian tiap 15 menit, akhiri sesi phpMyAdmin tiap 5 menit)                        |
 | `pure-ftpd-mysql.service`            | FTP untuk akun hosting: login dari view `v_ftp_users`, chroot ke folder login, berjalan sebagai uid akun, wajib TLS, passive 35000–35999 |
-| `php8.4-fpm.service`                 | Pool PHP-FPM panel (`rayxo`) dan phpMyAdmin (`rayxo-phpmyadmin`, user `rayxo-pma`)                                                       |
+| `php8.4-fpm.service`                 | Pool PHP-FPM panel (`rayxo`), phpMyAdmin (`rayxo-phpmyadmin`, user `rayxo-pma`) dan webmail (`rayxo-webmail`, user `rayxo-webmail`)      |
 | `rayxo-php<versi>@<user>.service`    | PHP-FPM per user (contoh: `rayxo-php84@budi.service`)                                                                                    |
 | `rayxo.slice` → `rayxo-<user>.slice` | Batas resource per user                                                                                                                  |

@@ -49,6 +49,13 @@ readonly ACME_DIR="/var/www/rayxo-acme"
 readonly PMA_USER="rayxo-pma"
 readonly PMA_CONFIG_DIR="/etc/rayxo-pma"
 readonly PMA_DATA_DIR="/var/lib/rayxo-pma"
+# Webmail (Roundcube) runs as its own user too, with its own MariaDB user and
+# database. These paths are also in installer/files/php-fpm-webmail.conf,
+# roundcube-config.inc.php and roundcube-rayxo_sso.php.
+readonly WEBMAIL_USER="rayxo-webmail"
+readonly WEBMAIL_CONFIG_DIR="/etc/rayxo-webmail"
+readonly WEBMAIL_DATA_DIR="/var/lib/rayxo-webmail"
+readonly WEBMAIL_DB="roundcube"
 # Pure-FTPd reads FTP logins from the panel's database as this MariaDB user,
 # which may only read the v_ftp_users view. The hyphen keeps it out of the
 # names customers can give their database users (<username>_<name>).
@@ -830,6 +837,16 @@ create_layout() {
     install -d -m 0750 -o root -g "$PMA_USER" "$PMA_CONFIG_DIR" "$PMA_DATA_DIR"
     install -d -m 0700 -o "$PMA_USER" -g "$PMA_USER" "$PMA_DATA_DIR/tmp" "$PMA_DATA_DIR/sessions" "$PMA_DATA_DIR/log"
 
+    if ! id -u "$WEBMAIL_USER" >/dev/null 2>&1; then
+        useradd --system --user-group --home-dir "$WEBMAIL_DATA_DIR" --no-create-home \
+            --shell /usr/sbin/nologin "$WEBMAIL_USER"
+        info "User sistem $WEBMAIL_USER (webmail) dibuat"
+    fi
+
+    # The same for Roundcube: it may only write its temporary files and log.
+    install -d -m 0750 -o root -g "$WEBMAIL_USER" "$WEBMAIL_CONFIG_DIR" "$WEBMAIL_DATA_DIR"
+    install -d -m 0700 -o "$WEBMAIL_USER" -g "$WEBMAIL_USER" "$WEBMAIL_DATA_DIR/tmp" "$WEBMAIL_DATA_DIR/log"
+
     touch "$CONFIG_DIR/.setup-started"
 }
 
@@ -1110,6 +1127,18 @@ add_phpmyadmin_env() {
     fi
 }
 
+# Where webmail is, and the key the panel seals its sign-on tickets with
+# (configure_webmail gives Roundcube the same key).
+add_webmail_env() {
+    add_env_value WEBMAIL_URL "https://$server_hostname/webmail/"
+
+    if [[ -z "$(env_value WEBMAIL_SSO_KEY)" ]]; then
+        local key
+        key="$(openssl rand -base64 32)"
+        add_env_value WEBMAIL_SSO_KEY "$key"
+    fi
+}
+
 write_env() {
     if [[ -f "$ENV_FILE" ]]; then
         info "Memakai konfigurasi yang sudah ada: $ENV_FILE"
@@ -1120,6 +1149,8 @@ write_env() {
         add_public_ip_env
         # Installs from before phpMyAdmin.
         add_phpmyadmin_env
+        # Installs from before webmail.
+        add_webmail_env
         # Installs from before the file manager.
         add_env_value RAYXO_TRANSFER_DIR "$DATA_DIR/transfer"
         # The panel's own addresses follow a new hostname or port.
@@ -1127,6 +1158,7 @@ write_env() {
         follow_env_value APP_URL "https://$old_host:$previous_panel_port" "https://$server_hostname:$PANEL_PORT"
         if [[ "$old_host" != "$server_hostname" ]]; then
             follow_env_value PHPMYADMIN_URL "https://$old_host/phpmyadmin/" "https://$server_hostname/phpmyadmin/"
+            follow_env_value WEBMAIL_URL "https://$old_host/webmail/" "https://$server_hostname/webmail/"
             follow_env_value MAIL_FROM_ADDRESS "rayxo@$old_host" "rayxo@$server_hostname"
         fi
         return
@@ -1184,6 +1216,7 @@ ENV
     chmod 0640 "$ENV_FILE"
     add_public_ip_env
     add_phpmyadmin_env
+    add_webmail_env
     add_env_value RAYXO_TRANSFER_DIR "$DATA_DIR/transfer"
     info "Konfigurasi ditulis ke $ENV_FILE"
 }
@@ -1439,6 +1472,7 @@ configure_php_fpm() {
     local pool_dir="/etc/php/$PHP_VERSION/fpm/pool.d"
     render "$release_dir/config/php-fpm-panel.conf" "$pool_dir/rayxo.conf"
     render "$release_dir/config/php-fpm-phpmyadmin.conf" "$pool_dir/rayxo-phpmyadmin.conf"
+    render "$release_dir/config/php-fpm-webmail.conf" "$pool_dir/rayxo-webmail.conf"
 
     if [[ -f "$pool_dir/www.conf" ]]; then
         mv "$pool_dir/www.conf" "$pool_dir/www.conf.disabled"
@@ -1447,7 +1481,7 @@ configure_php_fpm() {
 
     quietly "php-fpm$PHP_VERSION" -t
     systemctl restart "php$PHP_VERSION-fpm"
-    info "Pool \"rayxo\" dan \"rayxo-phpmyadmin\" aktif (fungsi exec dimatikan)"
+    info "Pool \"rayxo\", \"rayxo-phpmyadmin\" dan \"rayxo-webmail\" aktif (fungsi exec dimatikan)"
 }
 
 configure_nginx() {
@@ -1740,6 +1774,7 @@ CREATE USER IF NOT EXISTS '$MAIL_DB_USER'@'localhost' IDENTIFIED BY '$password';
 ALTER USER '$MAIL_DB_USER'@'localhost' IDENTIFIED BY '$password';
 GRANT SELECT ON \`rayxo\`.\`v_mail_domains\` TO '$MAIL_DB_USER'@'localhost';
 GRANT SELECT ON \`rayxo\`.\`v_mail_mailboxes\` TO '$MAIL_DB_USER'@'localhost';
+GRANT SELECT ON \`rayxo\`.\`v_mail_webmail_sessions\` TO '$MAIL_DB_USER'@'localhost';
 SQL
 
     # Postfix's lookups, through proxymap (smtpd runs chrooted).
@@ -1821,6 +1856,21 @@ SQLCONF
     chgrp dovecot /etc/dovecot/rayxo-sql.conf.ext.new
     mv -f /etc/dovecot/rayxo-sql.conf.ext.new /etc/dovecot/rayxo-sql.conf.ext
 
+    # Webmail sessions the panel opened: Roundcube signs in with the
+    # session's token as the password. Only from this server, where
+    # Roundcube runs; %w is the password as typed, compared by its SHA-256.
+    (
+        umask 027
+        cat >/etc/dovecot/rayxo-webmail-sql.conf.ext.new <<SQLCONF
+# Written by RAYXO setup.sh on every run; changes made here are lost.
+driver = mysql
+connect = host=/run/mysqld/mysqld.sock dbname=rayxo user=$MAIL_DB_USER password=$password
+password_query = SELECT address AS user, NULL AS password, 'Y' AS nopassword, '127.0.0.1,::1' AS allow_nets FROM v_mail_webmail_sessions WHERE address = '%u' AND token_hash = SHA2('%w', 256) LIMIT 1
+SQLCONF
+    )
+    chgrp dovecot /etc/dovecot/rayxo-webmail-sql.conf.ext.new
+    mv -f /etc/dovecot/rayxo-webmail-sql.conf.ext.new /etc/dovecot/rayxo-webmail-sql.conf.ext
+
     # The whole Dovecot configuration, without Debian's conf.d: system users
     # never sign in to IMAP, only the panel's mailboxes do.
     cat >/etc/dovecot/dovecot.conf <<CONF
@@ -1837,6 +1887,13 @@ auth_username_format = %Lu
 first_valid_uid = 1000
 mail_location = maildir:~/Maildir
 mail_plugins = \$mail_plugins quota
+
+# A webmail session's token first (cheap, and Roundcube signs in on every
+# request), then the mailbox's own password.
+passdb {
+  driver = sql
+  args = /etc/dovecot/rayxo-webmail-sql.conf.ext
+}
 
 passdb {
   driver = sql
@@ -1926,6 +1983,62 @@ CONF
     quietly postfix check
     systemctl restart postfix
     info "Email akun hosting aktif: SMTP 25, kirim lewat 587/465, IMAP 993, POP3 995"
+}
+
+# Webmail at https://<hostname>/webmail/: Roundcube from the release's
+# roundcube/ folder (served by configure_phpmyadmin's site), its own
+# database and MariaDB user, and its configuration and keys in
+# $WEBMAIL_CONFIG_DIR, readable by rayxo-webmail only. The panel may read
+# and delete Roundcube's users, to clear what it kept of a deleted mailbox.
+configure_webmail() {
+    step "Mengatur webmail (https://$server_hostname/webmail/)"
+
+    local sso_key password
+    sso_key="$(env_value WEBMAIL_SSO_KEY)"
+    [[ -n "$sso_key" ]] || die "WEBMAIL_SSO_KEY tidak ada di $ENV_FILE"
+
+    # A new database password on every run; it only lives in db.key.
+    password="$(openssl rand -hex 24)"
+
+    mariadb <<SQL
+CREATE DATABASE IF NOT EXISTS \`$WEBMAIL_DB\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS '$WEBMAIL_USER'@'localhost' IDENTIFIED BY '$password';
+ALTER USER '$WEBMAIL_USER'@'localhost' IDENTIFIED BY '$password';
+GRANT ALL PRIVILEGES ON \`$WEBMAIL_DB\`.* TO '$WEBMAIL_USER'@'localhost';
+SQL
+
+    # Written by the shell itself (printf is a builtin), so the keys never
+    # show up on a command line. Roundcube encrypts the IMAP password in
+    # its sessions with des.key (24 characters), which therefore stays.
+    (
+        umask 027
+        printf '%s\n' "$password" >"$WEBMAIL_CONFIG_DIR/db.key"
+        if [[ ! -s "$WEBMAIL_CONFIG_DIR/des.key" ]]; then
+            openssl rand -base64 18 >"$WEBMAIL_CONFIG_DIR/des.key"
+        fi
+        printf '%s\n' "$sso_key" >"$WEBMAIL_CONFIG_DIR/sso.key"
+    )
+    render "$release_dir/config/roundcube-config.inc.php" "$WEBMAIL_CONFIG_DIR/config.inc.php"
+    local file
+    for file in db.key des.key sso.key config.inc.php; do
+        chown "root:$WEBMAIL_USER" "$WEBMAIL_CONFIG_DIR/$file"
+        chmod 0640 "$WEBMAIL_CONFIG_DIR/$file"
+    done
+
+    # Roundcube's tables: made on the first run, brought up to the
+    # release's version on later ones.
+    if ! (cd / && runuser -u "$WEBMAIL_USER" -- "$PHP_BIN" "$release_dir/roundcube/bin/initdb.sh" \
+        --dir="$release_dir/roundcube/SQL" --update) >>"$INSTALL_LOG" 2>&1; then
+        die "database webmail tidak bisa disiapkan (cek: $INSTALL_LOG)"
+    fi
+
+    mariadb <<SQL
+GRANT SELECT, DELETE ON \`$WEBMAIL_DB\`.\`users\` TO 'rayxo'@'localhost';
+GRANT SELECT, DELETE ON \`$WEBMAIL_DB\`.\`users\` TO 'rayxo'@'127.0.0.1';
+SQL
+
+    systemctl reload "php$PHP_VERSION-fpm"
+    info "Webmail siap; customer membukanya dari halaman Email di panel (login otomatis) atau dengan password"
 }
 
 configure_web() {
@@ -2415,6 +2528,16 @@ PYTHON
         die "phpMyAdmin tidak berjalan seperti seharusnya (HTTP $status; cek: $LOG_DIR/phpmyadmin-error.log dan $PMA_DATA_DIR/log/)"
     info "phpMyAdmin aktif di https://$server_hostname/phpmyadmin/"
 
+    # Roundcube's login form, and its stylesheet through static.php.
+    local login_page
+    login_page="$(curl -sk --resolve "$server_hostname:443:127.0.0.1" "https://$server_hostname/webmail/" 2>/dev/null || true)"
+    [[ "$login_page" == *rcmloginuser* ]] ||
+        die "Webmail tidak berjalan seperti seharusnya (cek: $LOG_DIR/phpmyadmin-error.log, $WEBMAIL_DATA_DIR/log/ dan journalctl -t roundcube)"
+    status="$(curl -sk -o /dev/null -w '%{http_code}' --resolve "$server_hostname:443:127.0.0.1" \
+        "https://$server_hostname/webmail/static.php/skins/elastic/styles/styles.min.css" || true)"
+    [[ "$status" == 200 ]] || die "Tampilan webmail tidak bisa dimuat (HTTP $status; cek: $LOG_DIR/phpmyadmin-error.log)"
+    info "Webmail aktif di https://$server_hostname/webmail/"
+
     printf '%s\n' "$version" >"$CONFIG_DIR/installed"
 
     if [[ -n "$stale_release" ]]; then
@@ -2471,6 +2594,7 @@ summary() {
     printf '\n%s✔ RAYXO %s terpasang%s\n\n' "$green" "$version" "$reset"
     info "Panel    : https://$server_hostname:$PANEL_PORT"
     info "phpMyAdmin: dibuka customer dari halaman Databases (https://$server_hostname/phpmyadmin/)"
+    info "Webmail  : https://$server_hostname/webmail/ (juga dari halaman Email)"
     info "Username : $admin_user"
 
     # Shown on the terminal only (file descriptor 3), never written to the log.
@@ -2564,6 +2688,7 @@ main() {
     configure_sftp
     configure_dns
     configure_mailboxes
+    configure_webmail
     configure_web
     configure_quota
     configure_logrotate

@@ -72,6 +72,7 @@ export const auditActionLabels: Record<string, string> = {
     'mailbox.created': 'Akun email dibuat',
     'mailbox.updated': 'Akun email diubah',
     'mailbox.deleted': 'Akun email dihapus',
+    'mailbox.webmail_opened': 'Webmail dibuka',
     'server.php_uploads_changed': 'Batas upload PHP diubah',
     'server.hostname_ssl_requested': 'SSL hostname diminta',
     'server.hostname_change_started': 'Penggantian hostname dimulai',

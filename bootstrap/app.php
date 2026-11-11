@@ -18,9 +18,9 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        // rayxo_pma_binding is read by phpMyAdmin's sign-on script, which
-        // cannot decrypt Laravel cookies.
-        $middleware->encryptCookies(except: ['appearance', 'sidebar_state', 'rayxo_pma_binding']);
+        // The binding cookies are read by phpMyAdmin's sign-on script and
+        // Roundcube's sign-on plugin, which cannot decrypt Laravel cookies.
+        $middleware->encryptCookies(except: ['appearance', 'sidebar_state', 'rayxo_pma_binding', 'rayxo_webmail_binding']);
 
         $middleware->web(append: [
             HandleAppearance::class,

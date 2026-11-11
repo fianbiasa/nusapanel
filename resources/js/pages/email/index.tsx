@@ -1,6 +1,7 @@
-import { Form, Head } from '@inertiajs/react';
-import { KeyRound, Mail, Pencil, Trash2 } from 'lucide-react';
+import { Form, Head, useHttp } from '@inertiajs/react';
+import { ExternalLink, KeyRound, Mail, Pencil, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { AffixInput } from '@/components/affix-input';
 import { GeneratedPasswordInput } from '@/components/generated-password-input';
 import InputError from '@/components/input-error';
@@ -26,7 +27,8 @@ import {
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { formatMegabytes } from '@/lib/format';
-import { destroy, store, update } from '@/routes/email';
+import { openSignOnTab, postSignOnTicket } from '@/lib/sign-on';
+import { destroy, store, update, webmail as openWebmail } from '@/routes/email';
 import type { AccountLimits } from '@/types';
 
 type MailboxRow = {
@@ -51,6 +53,13 @@ type Props = {
     max_quota_mb: number;
     limits: AccountLimits;
     server: string;
+    webmail: {
+        /** Whether Roundcube is set up on this server. */
+        available: boolean;
+        url: string | null;
+        /** How long a webmail session opened from here lasts. */
+        session_hours: number;
+    };
 };
 
 type Action =
@@ -63,6 +72,7 @@ export default function EmailIndex({
     max_quota_mb,
     limits,
     server,
+    webmail,
 }: Props) {
     const [action, setAction] = useState<Action | null>(null);
     const [dialogOpen, setDialogOpen] = useState(false);
@@ -84,7 +94,7 @@ export default function EmailIndex({
 
             <PageHeader
                 title="Email"
-                description="Akun email untuk domain kamu, dibaca lewat aplikasi email (IMAP/POP3) dan dikirim lewat SMTP."
+                description="Akun email untuk domain kamu, dibuka lewat webmail atau aplikasi email (IMAP/POP3 dan SMTP)."
             />
 
             <Panel
@@ -174,7 +184,15 @@ export default function EmailIndex({
                                                   )}
                                         </td>
                                         <td className={tableStyles.td}>
-                                            <div className="flex justify-end gap-1">
+                                            <div className="flex items-center justify-end gap-1">
+                                                {webmail.available && (
+                                                    <WebmailButton
+                                                        mailbox={mailbox}
+                                                        sessionHours={
+                                                            webmail.session_hours
+                                                        }
+                                                    />
+                                                )}
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
@@ -213,9 +231,26 @@ export default function EmailIndex({
 
             <Panel
                 title="Cara terhubung"
-                description="Pakai aplikasi email seperti Thunderbird, Outlook, atau Mail di ponsel."
+                description="Buka webmail di browser, atau pakai aplikasi email seperti Thunderbird, Outlook, atau Mail di ponsel."
             >
                 <dl className="grid gap-x-8 gap-y-3 text-sm sm:grid-cols-[auto_1fr]">
+                    {webmail.available && webmail.url !== null && (
+                        <>
+                            <dt className="text-muted-foreground">Webmail</dt>
+                            <dd>
+                                <a
+                                    href={webmail.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="font-mono font-semibold break-all underline-offset-4 hover:underline"
+                                >
+                                    {webmail.url}
+                                </a>{' '}
+                                · masuk dengan alamat email dan password-nya,
+                                atau lewat tombol Webmail di atas tanpa password
+                            </dd>
+                        </>
+                    )}
                     <dt className="text-muted-foreground">Server masuk</dt>
                     <dd>
                         <span className="font-mono font-semibold break-all">
@@ -488,6 +523,68 @@ function EditMailboxForm({
                 </>
             )}
         </Form>
+    );
+}
+
+type WebmailTicket = { url: string; ticket: string };
+
+/**
+ * Opens webmail in a new tab, signed in to the mailbox without its
+ * password (see lib/sign-on).
+ */
+function WebmailButton({
+    mailbox,
+    sessionHours,
+}: {
+    mailbox: MailboxRow;
+    sessionHours: number;
+}) {
+    const http = useHttp<Record<string, never>, WebmailTicket>({});
+
+    const open = async () => {
+        const tab = openSignOnTab('Webmail', 'Membuka webmail…');
+
+        let response: WebmailTicket | undefined;
+
+        try {
+            response = await http.post(openWebmail.url(mailbox.id), {
+                onError: (errors) => {
+                    const message = Object.values(errors)[0];
+
+                    if (message) {
+                        toast.error(message);
+                    }
+                },
+            });
+        } catch {
+            toast.error('Webmail tidak bisa dibuka. Coba lagi sebentar lagi.');
+        }
+
+        if (!response) {
+            tab?.close();
+
+            return;
+        }
+
+        postSignOnTicket(tab, response.url, '_rayxo_ticket', response.ticket);
+    };
+
+    return (
+        <Button
+            variant="outline"
+            size="sm"
+            disabled={!mailbox.ready || http.processing}
+            onClick={open}
+            aria-label={`Buka webmail ${mailbox.address}`}
+            title={
+                mailbox.ready
+                    ? `Masuk otomatis tanpa password; berlaku ${sessionHours} jam`
+                    : 'Email domain sedang disiapkan'
+            }
+        >
+            {http.processing ? <Spinner /> : <ExternalLink />}
+            Webmail
+        </Button>
     );
 }
 

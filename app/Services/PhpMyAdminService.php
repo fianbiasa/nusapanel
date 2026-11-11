@@ -9,6 +9,7 @@ use App\Enums\DatabaseStatus;
 use App\Enums\Role;
 use App\Models\DatabaseUser;
 use App\Models\User;
+use App\Support\SignOnTicket;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
@@ -132,7 +133,7 @@ class PhpMyAdminService
 
         return [
             'url' => $url.'rayxo-sso.php',
-            'ticket' => $this->seal($key, [
+            'ticket' => SignOnTicket::seal($key, [
                 'user' => $account->username,
                 'password' => $password,
                 'binding' => $binding,
@@ -179,20 +180,6 @@ class PhpMyAdminService
         return $closed;
     }
 
-    /**
-     * Seal $payload with $key (XSalsa20-Poly1305) as URL-safe base64 of the
-     * nonce followed by the box, as the sign-on script expects it.
-     *
-     * @param  array<string, mixed>  $payload
-     */
-    private function seal(string $key, array $payload): string
-    {
-        $nonce = random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
-        $box = sodium_crypto_secretbox(json_encode($payload, JSON_THROW_ON_ERROR), $nonce, $key);
-
-        return sodium_bin2base64($nonce.$box, SODIUM_BASE64_VARIANT_URLSAFE_NO_PADDING);
-    }
-
     private function lockKey(User $account): string
     {
         return 'phpmyadmin-session:'.$account->getKey();
@@ -217,8 +204,6 @@ class PhpMyAdminService
      */
     private static function key(): ?string
     {
-        $key = base64_decode((string) config('hosting.phpmyadmin.sso_key'), true);
-
-        return is_string($key) && strlen($key) === SODIUM_CRYPTO_SECRETBOX_KEYBYTES ? $key : null;
+        return SignOnTicket::key(config('hosting.phpmyadmin.sso_key'));
     }
 }

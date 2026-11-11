@@ -31,6 +31,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { formatBytes, formatDateTime } from '@/lib/format';
+import { openSignOnTab, postSignOnTicket } from '@/lib/sign-on';
 import {
     destroy as destroyUser,
     store as storeUser,
@@ -425,9 +426,7 @@ type PhpMyAdminTicket = { url: string; ticket: string };
 
 /**
  * Opens phpMyAdmin in a new tab, signed in to all of the account's
- * databases. Browsers only allow opening a tab during the click, so the tab
- * opens first; once the panel returns a ticket, the tab posts it to
- * phpMyAdmin itself, after its link back to the panel is cut.
+ * databases (see lib/sign-on).
  */
 function PhpMyAdminButton({
     hasDatabases,
@@ -439,12 +438,7 @@ function PhpMyAdminButton({
     const http = useHttp<Record<string, never>, PhpMyAdminTicket>({});
 
     const open = async () => {
-        const tab = window.open('', '_blank');
-
-        if (tab) {
-            tab.document.title = 'phpMyAdmin';
-            tab.document.body.textContent = 'Membuka phpMyAdmin…';
-        }
+        const tab = openSignOnTab('phpMyAdmin', 'Membuka phpMyAdmin…');
 
         let response: PhpMyAdminTicket | undefined;
 
@@ -470,24 +464,7 @@ function PhpMyAdminButton({
             return;
         }
 
-        // Without a tab (pop-ups blocked), phpMyAdmin opens here instead.
-        const target = tab ?? window;
-        const form = target.document.createElement('form');
-        const ticket = target.document.createElement('input');
-
-        form.method = 'post';
-        form.action = response.url;
-        ticket.type = 'hidden';
-        ticket.name = 'ticket';
-        ticket.value = response.ticket;
-        form.append(ticket);
-        target.document.body.append(form);
-
-        if (tab) {
-            tab.opener = null;
-        }
-
-        form.submit();
+        postSignOnTicket(tab, response.url, 'ticket', response.ticket);
     };
 
     return (

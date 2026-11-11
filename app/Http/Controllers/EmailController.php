@@ -8,6 +8,7 @@ use App\Http\Requests\UpdateMailboxRequest;
 use App\Models\Domain;
 use App\Models\Mailbox;
 use App\Services\MailService;
+use App\Services\WebmailService;
 use App\Support\AccountLimits;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -53,6 +54,11 @@ class EmailController extends Controller
             'max_quota_mb' => MailService::MAX_QUOTA_MB,
             'limits' => AccountLimits::for($account)->toArray(),
             'server' => parse_url((string) config('app.url'), PHP_URL_HOST) ?: 'localhost',
+            'webmail' => [
+                'available' => WebmailService::isAvailable(),
+                'url' => WebmailService::url(),
+                'session_hours' => WebmailService::sessionHours(),
+            ],
         ]);
     }
 

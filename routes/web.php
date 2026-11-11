@@ -21,6 +21,7 @@ use App\Http\Controllers\PointerController;
 use App\Http\Controllers\SftpPasswordController;
 use App\Http\Controllers\SubdomainController;
 use App\Http\Controllers\UrlRedirectController;
+use App\Http\Controllers\WebmailController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard')->name('home');
@@ -52,6 +53,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('email', [EmailController::class, 'store'])->name('email.store');
         Route::put('email/{mailbox}', [EmailController::class, 'update'])->name('email.update');
         Route::delete('email/{mailbox}', [EmailController::class, 'destroy'])->name('email.destroy');
+        Route::post('email/{mailbox}/webmail', WebmailController::class)->middleware('throttle:10,1')->name('email.webmail');
         Route::get('dns', [DnsController::class, 'index'])->name('dns.index');
         Route::post('dns/{dnsZone}/records', [DnsController::class, 'store'])->name('dns.records.store');
         Route::put('dns/records/{dnsRecord}', [DnsController::class, 'update'])->name('dns.records.update');

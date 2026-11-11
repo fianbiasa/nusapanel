@@ -64,6 +64,23 @@ return [
             ]) : [],
         ],
 
+        // Roundcube's database, on the panel's MariaDB server: the panel may
+        // only read and delete its users (setup.sh), to clear what webmail
+        // kept of a mailbox that is deleted.
+        'webmail' => [
+            'driver' => 'mariadb',
+            'host' => env('DB_HOST', '127.0.0.1'),
+            'port' => env('DB_PORT', '3306'),
+            'database' => env('WEBMAIL_DB_DATABASE', 'roundcube'),
+            'username' => env('DB_USERNAME', 'root'),
+            'password' => env('DB_PASSWORD', ''),
+            'unix_socket' => env('DB_SOCKET', ''),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'strict' => true,
+        ],
+
         'mariadb' => [
             'driver' => 'mariadb',
             'url' => env('DB_URL'),

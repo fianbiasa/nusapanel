@@ -43,6 +43,7 @@ class MailService
         private TaskDispatcher $tasks,
         private AuditLogger $audit,
         private DnsService $dns,
+        private WebmailService $webmail,
     ) {}
 
     /**
@@ -105,7 +106,8 @@ class MailService
 
     /**
      * Give a mailbox a new password (null keeps it) and quota (null is no
-     * limit). Dovecot checks both at the next sign-in and delivery.
+     * limit). Dovecot checks both at the next sign-in and delivery; a new
+     * password also ends the webmail sessions opened from the panel.
      *
      * @throws ValidationException
      */
@@ -129,19 +131,24 @@ class MailService
 
         $mailbox->save();
 
+        if ($password !== null) {
+            $this->webmail->endSessions($mailbox);
+        }
+
         $this->audit->record('mailbox.updated', $mailbox, ['address' => $this->address($mailbox), ...$changes], $actor);
     }
 
     /**
-     * Remove a mailbox and delete its mail.
+     * Remove a mailbox and delete its mail, and what webmail kept of it.
      */
     public function deleteMailbox(Mailbox $mailbox, User $actor): void
     {
         $domain = $mailbox->mailDomain->domain;
         $account = $domain->account;
+        $address = $this->address($mailbox);
 
-        DB::transaction(function () use ($mailbox, $domain, $account, $actor): void {
-            $this->audit->record('mailbox.deleted', $mailbox, ['address' => $this->address($mailbox)], $actor);
+        DB::transaction(function () use ($mailbox, $domain, $account, $address, $actor): void {
+            $this->audit->record('mailbox.deleted', $mailbox, ['address' => $address], $actor);
 
             $mailbox->delete();
 
@@ -151,6 +158,8 @@ class MailService
                 'local_part' => $mailbox->local_part,
             ], $account, $actor);
         });
+
+        $this->webmail->forget([$address]);
     }
 
     /**
@@ -184,7 +193,8 @@ class MailService
 
     /**
      * Stop taking mail for a domain that is being deleted: its DKIM key and
-     * mail go from the server, its mailboxes from the panel.
+     * mail go from the server, its mailboxes from the panel, and what
+     * webmail kept of them.
      */
     public function removeDomain(Domain $domain, ?User $actor): void
     {
@@ -194,30 +204,41 @@ class MailService
             return;
         }
 
+        $addresses = $this->addressesOf($mailDomain);
+
         $this->tasks->dispatch('mail.domain_remove', [
             'username' => $domain->account->username,
             'domain' => $domain->name,
         ], $domain->account, $actor);
 
         $mailDomain->delete();
+
+        $this->webmail->forget($addresses);
     }
 
     /**
      * Remove the DKIM keys of every mail domain of an account that is being
-     * deleted; its mail goes with its home.
+     * deleted, and what webmail kept of its mailboxes; its mail goes with
+     * its home.
      */
     public function removeAccount(User $account, ?User $actor): void
     {
+        $addresses = [];
+
         MailDomain::query()
             ->with('domain')
             ->whereHas('domain', fn ($query) => $query->where('user_id', $account->id))
             ->orderBy('id')
-            ->each(function (MailDomain $mailDomain) use ($account, $actor): void {
+            ->each(function (MailDomain $mailDomain) use ($account, $actor, &$addresses): void {
+                $addresses = [...$addresses, ...$this->addressesOf($mailDomain)];
+
                 $this->tasks->dispatch('mail.domain_remove', [
                     'username' => $account->username,
                     'domain' => $mailDomain->domain->name,
                 ], $account, $actor);
             });
+
+        $this->webmail->forget($addresses);
     }
 
     /**
@@ -250,6 +271,20 @@ class MailService
     public function address(Mailbox $mailbox): string
     {
         return $mailbox->local_part.'@'.$mailbox->mailDomain->domain->name;
+    }
+
+    /**
+     * The addresses of the mail domain's mailboxes.
+     *
+     * @return list<string>
+     */
+    private function addressesOf(MailDomain $mailDomain): array
+    {
+        return array_values($mailDomain->mailboxes()
+            ->orderBy('id')
+            ->pluck('local_part')
+            ->map(fn (string $localPart): string => $localPart.'@'.$mailDomain->domain->name)
+            ->all());
     }
 
     /**

@@ -49,6 +49,28 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Webmail
+    |--------------------------------------------------------------------------
+    |
+    | Where Roundcube is (https://<hostname>/webmail/) and the key its
+    | sign-on tickets are sealed with (32 bytes, base64), both written by the
+    | installer; Roundcube has the same key. Without them the Email page does
+    | not offer webmail. A session opened from the panel lasts
+    | "session_hours"; signing in with the mailbox's password works too.
+    | Roundcube keeps each mailbox's settings and contacts in the database
+    | of "connection", which the panel clears when a mailbox goes.
+    |
+    */
+
+    'webmail' => [
+        'url' => env('WEBMAIL_URL'),
+        'sso_key' => env('WEBMAIL_SSO_KEY'),
+        'session_hours' => (int) env('WEBMAIL_SESSION_HOURS', 12),
+        'connection' => 'webmail',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | File manager
     |--------------------------------------------------------------------------
     |

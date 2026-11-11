@@ -11,8 +11,8 @@
 #
 # The package contains everything a server needs to run the panel: Laravel
 # with production dependencies already installed, the React front end already
-# built, the Go agent already compiled, and phpMyAdmin. Servers never need
-# Composer, Node.js or Go.
+# built, the Go agent already compiled, phpMyAdmin and Roundcube (webmail).
+# Servers never need Composer, Node.js or Go.
 #
 # Builds from the working tree, minus anything ignored by Git. Runs on macOS
 # (bash 3.2) and Linux.
@@ -31,6 +31,14 @@ PMA_VERSION="5.2.3"
 PMA_SHA256="12ba1c425fa4071abbd4e7668c9ebdeac0b0755a467a6d6d5026122bb47c102b"
 PMA_NAME="phpMyAdmin-$PMA_VERSION-all-languages"
 PMA_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/rayxo"
+
+# Roundcube is pinned the same way: a new version needs the SHA-256 of
+# roundcubemail-<version>-complete.tar.gz from
+# https://github.com/roundcube/roundcubemail/releases, after checking its
+# .asc signature (key F3E4 C04B B3DB 5D42 15C4 5F7F 5AB2 BAA1 41C4 F7D5).
+RC_VERSION="1.7.6"
+RC_SHA256="0168085bf0bfeeb5d4eca3b9730effbe610dbdb380a68567d292fec51f09db36"
+RC_NAME="roundcubemail-$RC_VERSION-complete"
 
 if [[ ! "$VERSION" =~ ^[0-9A-Za-z][0-9A-Za-z._-]*$ ]]; then
     echo "Invalid version: $VERSION" >&2
@@ -129,6 +137,31 @@ printf '%s\n' '<?php' '' '// rayxo: setup.sh writes the configuration there.' \
     "require '/etc/rayxo-pma/config.inc.php';" >"$PMA/config.inc.php"
 cp "$SRC/installer/files/phpmyadmin-sso.php" "$PMA/rayxo-sso.php"
 
+echo "==> Preparing Roundcube $RC_VERSION"
+RC_TARBALL="$PMA_CACHE/$RC_NAME.tar.gz"
+if [[ ! -f "$RC_TARBALL" || "$(sha256 "$RC_TARBALL")" != "$RC_SHA256" ]]; then
+    curl -fsSL --proto '=https' --tlsv1.2 --retry 3 -o "$RC_TARBALL.part" \
+        "https://github.com/roundcube/roundcubemail/releases/download/$RC_VERSION/$RC_NAME.tar.gz"
+    mv "$RC_TARBALL.part" "$RC_TARBALL"
+fi
+if [[ "$(sha256 "$RC_TARBALL")" != "$RC_SHA256" ]]; then
+    echo "Roundcube $RC_VERSION does not match its pinned SHA-256" >&2
+    exit 1
+fi
+
+RC="$WORK/roundcube"
+mkdir -p "$RC"
+tar -xzf "$RC_TARBALL" -C "$RC" --strip-components 1
+# Not needed to run it: the installer (which shows configuration) and the
+# development files. Its logs and temp folders are elsewhere on a server.
+rm -rf "$RC/installer" "$RC/public_html/installer.php" "$RC/logs" "$RC/temp" \
+    "$RC/composer.json" "$RC/composer.lock" "$RC/Makefile"
+# setup.sh writes the real configuration outside the release.
+printf '%s\n' '<?php' '' '// rayxo: setup.sh writes the configuration there.' \
+    "require '/etc/rayxo-webmail/config.inc.php';" >"$RC/config/config.inc.php"
+mkdir -p "$RC/plugins/rayxo_sso"
+cp "$SRC/installer/files/roundcube-rayxo_sso.php" "$RC/plugins/rayxo_sso/rayxo_sso.php"
+
 # The published setup.sh installs exactly this version by default.
 stamp_setup() {
     sed -e "s/^RAYXO_VERSION=\"\"\$/RAYXO_VERSION=\"$VERSION\"/" "$SRC/installer/setup.sh" >"$1"
@@ -162,6 +195,10 @@ for arch in $ARCHES; do
     rm -f "$stage/panel/public/hot"
 
     cp -R "$PMA" "$stage/phpmyadmin"
+    # Nginx serves /webmail/ from webmail/, which is only Roundcube's
+    # public_html (index.php and static.php).
+    cp -R "$RC" "$stage/roundcube"
+    ln -s roundcube/public_html "$stage/webmail"
     cp "$SRC/agent/bin/linux-$arch/rayxod" "$SRC/agent/bin/linux-$arch/rayxo" "$stage/bin/"
     cp "$SRC/agent/packaging/rayxod.service" "$stage/systemd/"
     cp "$SRC"/installer/files/*.service "$SRC"/installer/files/*.timer "$stage/systemd/"
@@ -169,6 +206,7 @@ for arch in $ARCHES; do
         "$SRC/installer/files/nginx-default.conf" "$SRC/installer/files/apache-rayxo.conf" \
         "$SRC/installer/files/php-fpm-panel.conf" "$SRC/installer/files/php-fpm-phpmyadmin.conf" \
         "$SRC/installer/files/nginx-phpmyadmin.conf" "$SRC/installer/files/phpmyadmin-config.inc.php" \
+        "$SRC/installer/files/php-fpm-webmail.conf" "$SRC/installer/files/roundcube-config.inc.php" \
         "$SRC/installer/files/pure-ftpd-mysql.conf" "$SRC/installer/files/sshd-sftp.conf" \
         "$SRC/installer/files/logrotate.conf" "$stage/config/"
     stamp_setup "$stage/setup.sh"
