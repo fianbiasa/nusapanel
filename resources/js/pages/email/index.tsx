@@ -5,6 +5,7 @@ import {
     KeyRound,
     Mail,
     Pencil,
+    RefreshCw,
     Trash2,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -51,6 +52,7 @@ import {
     store,
     update,
     webmail as openWebmail,
+    dnsCheck,
 } from '@/routes/email';
 import type { AccountLimits } from '@/types';
 
@@ -394,6 +396,14 @@ export default function EmailIndex({
                     <dd>Alamat email lengkap dan password-nya.</dd>
                 </dl>
             </Panel>
+
+            <MailDnsPanel
+                domains={domains.filter(
+                    (domain) =>
+                        domain.mail_status === 'active' &&
+                        domain.mail_domain_id !== null,
+                )}
+            />
 
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
                 <DialogContent className="rounded-2xl">
@@ -833,6 +843,124 @@ function QuotaField({
                 Kosongkan untuk tanpa batas; tetap terhitung di kuota disk akun.
             </p>
             <InputError message={error} />
+        </div>
+    );
+}
+
+type DnsRecordCheck = {
+    key: string;
+    name: string;
+    type: string;
+    status: 'ok' | 'missing' | 'wrong' | 'unknown';
+    found: string[];
+    expected: string;
+};
+
+type DnsCheck = { checked_at: string; records: DnsRecordCheck[] };
+
+const dnsStatuses: Record<
+    DnsRecordCheck['status'],
+    { status: string; label: string }
+> = {
+    ok: { status: 'active', label: 'Benar' },
+    missing: { status: 'failed', label: 'Belum ada' },
+    wrong: { status: 'suspended', label: 'Tidak cocok' },
+    unknown: { status: 'cancelled', label: 'Tidak terjawab' },
+};
+
+/**
+ * Whether public DNS has each mail domain's records as this server needs
+ * them. Domains whose DNS is elsewhere (such as Cloudflare) need these
+ * records added there; the expected values can be copied from here.
+ */
+function MailDnsPanel({ domains }: { domains: Domain[] }) {
+    if (domains.length === 0) {
+        return null;
+    }
+
+    return (
+        <Panel
+            title="Status DNS email"
+            description="Apakah DNS publik sudah berisi record MX, SPF, DKIM dan DMARC seperti yang dibutuhkan server ini. Kalau DNS domain dikelola di tempat lain (misalnya Cloudflare), salin nilai yang belum benar ke sana."
+        >
+            <div className="grid gap-4">
+                {domains.map((domain) => (
+                    <MailDnsDomain key={domain.id} domain={domain} />
+                ))}
+            </div>
+        </Panel>
+    );
+}
+
+function MailDnsDomain({ domain }: { domain: Domain }) {
+    const http = useHttp<Record<string, never>, DnsCheck>({});
+    const [result, setResult] = useState<DnsCheck | null>(null);
+
+    const check = async () => {
+        if (domain.mail_domain_id === null) {
+            return;
+        }
+
+        try {
+            const response = await http.get(
+                dnsCheck.url(domain.mail_domain_id, { query: { fresh: 1 } }),
+            );
+
+            if (response) {
+                setResult(response);
+            }
+        } catch {
+            toast.error(
+                'DNS tidak bisa dicek sekarang. Coba lagi sebentar lagi.',
+            );
+        }
+    };
+
+    return (
+        <div className="rounded-xl border p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-mono font-semibold">{domain.name}</span>
+                <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={http.processing}
+                    onClick={check}
+                >
+                    {http.processing ? <Spinner /> : <RefreshCw />}
+                    Cek DNS
+                </Button>
+            </div>
+            {result !== null && (
+                <ul className="mt-3 grid gap-3 text-sm">
+                    {result.records.map((record) => (
+                        <li key={record.key} className="grid gap-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-semibold uppercase">
+                                    {record.key}
+                                </span>
+                                <StatusBadge
+                                    status={dnsStatuses[record.status].status}
+                                    label={dnsStatuses[record.status].label}
+                                />
+                                <span className="font-mono text-xs break-all text-muted-foreground">
+                                    {record.type} {record.name}
+                                </span>
+                            </div>
+                            {record.status !== 'ok' && (
+                                <p className="font-mono text-xs break-all">
+                                    Seharusnya: {record.expected}
+                                </p>
+                            )}
+                            {record.status === 'wrong' &&
+                                record.found.length > 0 && (
+                                    <p className="font-mono text-xs break-all text-muted-foreground">
+                                        Sekarang: {record.found.join(' | ')}
+                                    </p>
+                                )}
+                        </li>
+                    ))}
+                </ul>
+            )}
         </div>
     );
 }

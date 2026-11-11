@@ -81,7 +81,7 @@ Pembagian level sama seperti DirectAdmin:
 | Vacation message   | Dengan tanggal mulai dan selesai                                                                       | P2   |
 | Spam filter        | Ambang skor, aksi (pindah ke Junk/hapus), whitelist & blacklist (Rspamd)                               | P2   |
 | Email filter       | Aturan per akun (Sieve)                                                                                | P2   |
-| DKIM / SPF / DMARC | Dibuat otomatis + indikator status                                                                     | P2   |
+| DKIM / SPF / DMARC | ✅ Dibuat otomatis + indikator status ("Cek DNS" di halaman Email, lewat DNS publik)                   | P2   |
 | MX & mode email    | Email ditangani server ini atau layanan luar (Google, Zoho, dll.)                                      | P2   |
 | Webmail            | Roundcube dengan SSO dari panel                                                                        | P2   |
 | Pemakaian email    | ✅ Ukuran dan jumlah pesan per akun email, diukur tiap 15 menit                                        | P2   |

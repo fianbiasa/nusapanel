@@ -19,6 +19,7 @@ use App\Http\Controllers\EmailController;
 use App\Http\Controllers\FileManagerController;
 use App\Http\Controllers\FtpAccountController;
 use App\Http\Controllers\MailboxRulesController;
+use App\Http\Controllers\MailDnsCheckController;
 use App\Http\Controllers\MailForwarderController;
 use App\Http\Controllers\PhpMyAdminController;
 use App\Http\Controllers\PointerController;
@@ -62,6 +63,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('email/forwarders/{mailForwarder}', [MailForwarderController::class, 'update'])->name('email.forwarders.update');
         Route::delete('email/forwarders/{mailForwarder}', [MailForwarderController::class, 'destroy'])->name('email.forwarders.destroy');
         Route::put('email/catch-all/{mailDomain}', CatchAllController::class)->name('email.catch-all.update');
+        Route::get('email/dns-check/{mailDomain}', MailDnsCheckController::class)
+            ->middleware('throttle:20,1')
+            ->name('email.dns-check');
         Route::get('email/{mailbox}/rules', [MailboxRulesController::class, 'show'])->name('email.rules');
         Route::put('email/{mailbox}/autoreply', [MailboxRulesController::class, 'updateAutoreply'])->name('email.autoreply.update');
         Route::post('email/{mailbox}/filters', [MailboxRulesController::class, 'storeFilter'])->name('email.filters.store');
