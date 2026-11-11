@@ -41,6 +41,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property string|null $suspend_reason
  * @property Carbon|null $phpmyadmin_expires_at When the open phpMyAdmin session ends; null while none is open.
  * @property Carbon|null $sftp_password_set_at When the SFTP password was last set; null while the account has none.
+ * @property string|null $cron_email Where cron mails the output of the account's jobs; null mails nothing.
  * @property Carbon|null $last_login_at
  * @property string|null $two_factor_secret
  * @property string|null $two_factor_recovery_codes

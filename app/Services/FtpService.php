@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Agent\AgentClient;
+use App\Agent\AgentException;
 use App\Enums\AccountStatus;
 use App\Enums\DomainStatus;
 use App\Enums\DomainType;
@@ -24,6 +26,12 @@ use Illuminate\Validation\ValidationException;
  * the next sign-in. Only a login's folder needs the agent, which creates it
  * as the account's; the login is ready once that is done
  * ({@see ApplyFtpTaskResult}).
+ *
+ * A login may have an FTP quota, which Pure-FTPd enforces with a .ftpquota
+ * file in its folder. Pure-FTPd only counts what passes through it, so the
+ * agent counts the folder when a quota is given and every night
+ * ({@see self::recountQuotas()}), which takes in files that arrived through
+ * the file manager, SFTP or the website itself.
  */
 class FtpService
 {
@@ -32,9 +40,15 @@ class FtpService
      */
     public const MAX_LOGIN = 128;
 
+    /**
+     * The largest FTP quota, in megabytes (1 TB).
+     */
+    public const MAX_QUOTA_MB = 1_048_576;
+
     public function __construct(
         private TaskDispatcher $tasks,
         private AuditLogger $audit,
+        private AgentClient $agent,
     ) {}
 
     /**
@@ -43,10 +57,11 @@ class FtpService
      *
      * @param  string  $name  Already validated.
      * @param  string  $directory  Relative to the home, already validated; "" is the whole home.
+     * @param  int|null  $quotaMb  Already validated; null is no limit.
      *
      * @throws ValidationException
      */
-    public function create(User $account, string $name, int $domainId, string $directory, string $password, User $actor): FtpAccount
+    public function create(User $account, string $name, int $domainId, string $directory, string $password, ?int $quotaMb, User $actor): FtpAccount
     {
         $this->ensureAccountIsActive($account, 'name');
 
@@ -60,13 +75,14 @@ class FtpService
         }
 
         try {
-            return DB::transaction(function () use ($account, $domain, $login, $directory, $password, $actor): FtpAccount {
+            return DB::transaction(function () use ($account, $domain, $login, $directory, $password, $quotaMb, $actor): FtpAccount {
                 $this->ensureLimitIsNotReached($account, $actor);
 
                 $ftpAccount = $account->ftpAccounts()->make(['login' => $login, 'directory' => $directory]);
                 $ftpAccount->forceFill([
                     'domain_id' => $domain->id,
                     'password_hash' => FtpAccount::hashPassword($password),
+                    'quota_mb' => $quotaMb,
                     'status' => FtpAccountStatus::Pending,
                 ])->save();
 
@@ -75,6 +91,7 @@ class FtpService
                 $this->audit->record('ftp_account.created', $ftpAccount, [
                     'login' => $login,
                     'directory' => $ftpAccount->displayDirectory(),
+                    'quota_mb' => $quotaMb,
                 ], $actor);
 
                 return $ftpAccount;
@@ -87,12 +104,13 @@ class FtpService
     }
 
     /**
-     * Give the login a new password (null keeps it) and folder. A new
-     * folder, or one that failed before, is prepared again by the agent.
+     * Give the login a new password (null keeps it), folder and FTP quota
+     * (null is no limit). A new folder, or one that failed before, is
+     * prepared again by the agent; a new quota has the folder counted.
      *
      * @throws ValidationException
      */
-    public function update(FtpAccount $ftpAccount, ?string $password, string $directory, User $actor): void
+    public function update(FtpAccount $ftpAccount, ?string $password, string $directory, ?int $quotaMb, User $actor): void
     {
         $account = $ftpAccount->account;
 
@@ -104,7 +122,7 @@ class FtpService
             ]);
         }
 
-        DB::transaction(function () use ($ftpAccount, $account, $password, $directory, $actor): void {
+        DB::transaction(function () use ($ftpAccount, $account, $password, $directory, $quotaMb, $actor): void {
             $changes = [];
 
             if ($password !== null) {
@@ -112,11 +130,21 @@ class FtpService
                 $changes['password'] = 'changed';
             }
 
+            $isQuotaChanged = $quotaMb !== $ftpAccount->quota_mb;
+
+            if ($isQuotaChanged) {
+                $ftpAccount->quota_mb = $quotaMb;
+                $changes['quota_mb'] = $quotaMb;
+            }
+
             if ($directory !== $ftpAccount->directory || $ftpAccount->status === FtpAccountStatus::Failed) {
                 $ftpAccount->directory = $directory;
                 $ftpAccount->status = FtpAccountStatus::Pending;
                 $changes['directory'] = $ftpAccount->displayDirectory();
 
+                $this->prepareFolder($ftpAccount, $account, $actor);
+            } elseif ($isQuotaChanged && $quotaMb !== null) {
+                // The login keeps signing in while its folder is counted.
                 $this->prepareFolder($ftpAccount, $account, $actor);
             }
 
@@ -174,11 +202,58 @@ class FtpService
         return $queued;
     }
 
+    /**
+     * Count again the folder of every ready login with an FTP quota, of
+     * active accounts, so the quota sees files that did not come through
+     * FTP and frees the room of files deleted elsewhere. Asks the agent
+     * directly, folder by folder; one that fails is reported and skipped.
+     * Used by rayxo:recount-ftp-quotas.
+     *
+     * @return array{counted: int, failed: int}
+     */
+    public function recountQuotas(): array
+    {
+        $counted = 0;
+        $failed = 0;
+        $folders = FtpAccount::query()
+            ->toBase()
+            ->join('users', 'users.id', '=', 'ftp_accounts.user_id')
+            ->whereNotNull('ftp_accounts.quota_mb')
+            ->where('ftp_accounts.status', FtpAccountStatus::Active)
+            ->where('users.status', AccountStatus::Active)
+            ->where('users.role', Role::User)
+            ->distinct()
+            ->orderBy('users.username')
+            ->orderBy('ftp_accounts.directory')
+            ->get(['users.username', 'ftp_accounts.directory']);
+
+        foreach ($folders as $folder) {
+            try {
+                $this->agent->call('ftp.ensure_dir', [
+                    'username' => $folder->username,
+                    'directory' => $folder->directory,
+                    'quota' => true,
+                ], (int) config('agent.task_timeout'));
+                $counted++;
+            } catch (AgentException $exception) {
+                report($exception);
+                $failed++;
+            }
+        }
+
+        return ['counted' => $counted, 'failed' => $failed];
+    }
+
+    /**
+     * Have the agent make the login's folder, and count it when the login
+     * has an FTP quota.
+     */
     private function prepareFolder(FtpAccount $ftpAccount, User $account, ?User $actor): void
     {
         $this->tasks->dispatch('ftp.ensure_dir', [
             'username' => $account->username,
             'directory' => $ftpAccount->directory,
+            ...($ftpAccount->quota_mb === null ? [] : ['quota' => true]),
         ], $account, $actor);
     }
 

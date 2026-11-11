@@ -6,6 +6,7 @@ Estimasi untuk **satu developer full-time dibantu AI**. Kalau dikerjakan paruh w
 | ---- | ------------------------ | ------------- | ------------------------------------------------------------------------------- |
 | P0   | Fondasi                  | 1–2 minggu    | Panel & agent tersambung, sistem task, audit log, installer awal                |
 | P1   | Hosting inti             | 5–7 minggu    | Bisa hosting website: akun, domain, PHP, SSL, database, FTP, file manager, cron |
+| PB   | Dua bahasa               | 1–2 minggu    | UI Indonesia & English, bahasa default server; bisa dikerjakan setelah P1       |
 | P2   | DNS & email              | 5–7 minggu    | DNS & email lengkap                                                             |
 | P3   | Reseller, statistik, API | 4–6 minggu    | Siap dipakai banyak user & reseller                                             |
 | P4   | Backup, migrasi, WHMCS   | 4–6 minggu    | Bisa memindahkan pelanggan & jualan otomatis                                    |
@@ -99,7 +100,19 @@ Pekerjaan:
 
 - pengaturan server tahap 3 ✅: port panel bisa diganti dari Pengaturan Server tanpa risiko terkunci. Port baru dibuka dulu berdampingan dengan port lama selama 5 menit; admin membuka panel lewat port baru dan mengonfirmasi di sana (bukti port itu tembus firewall), lalu `setup.sh --reconfigure --panel-port <port>` menulis semua config untuk port itu dan mengingatnya. Port yang tidak dikonfirmasi tepat waktu, atau yang setup.sh-nya gagal, ditutup lagi otomatis.
 
-Semua fitur P1 sudah ada; bahasa default menyusul bersama UI dua bahasa. SSL mail menyusul bersama email (P2).
+- pilihan www ✅: setiap domain bisa dibuka dengan dan tanpa `www.` (bawaan), atau dipaksa ke salah satunya (301, path dan query ikut), dari menu domain di halaman Domains; pointer redirect tidak punya pilihan ini karena sudah mengalihkan semuanya. Teruji di VPS.
+
+- PHP aktif/mati per website ✅: website tanpa PHP tidak punya pool PHP-FPM (pool lamanya dihapus), Apache melayani `index.html` dan menolak file `.php`/`.phtml`/`.phar` dengan 403 alih-alih menampilkan kodenya; pointer alias ikut domainnya. Teruji di VPS.
+
+- folder website subdomain ✅: subdomain bisa dilayani dari folder lain di dalam `domains/` (misalnya `domains/<domain>/public_html/blog`), dicek di panel dan agent (tanpa `..`, tanpa folder tersembunyi, bukan `tmp/` atau `.trash/`), dan folder yang belum ada dibuat milik akun. Teruji di VPS.
+
+- kuota per login FTP ✅: login FTP bisa diberi batas MB (kosong berarti tanpa batas); Pure-FTPd membacanya dari view `v_ftp_users` dan menyimpan pemakaian di `.ftpquota` folder login, yang tidak bisa dihapus lewat FTP dan ditolak Nginx (403). Saat kuota dipasang, agent menghitung isi folder dulu dengan `pure-quotacheck`, dan setiap malam semua folder berkuota dihitung ulang supaya file dari file manager, SFTP atau website ikut terhitung. Teruji di VPS: upload melewati kuota ditolak, login tanpa kuota tidak terpengaruh, dan setelah file dihapus di luar FTP, hitung ulang membuka ruangnya lagi.
+
+- email output cron ✅: halaman Cron Jobs punya satu alamat email per akun (`MAILTO`), yang dicek ketat di panel dan agent (alamat biasa saja, tanpa tanda kutip, spasi, `%`, atau tanda minus di depan). Cron hanya mengirim email kalau job menghasilkan output; `>/dev/null 2>&1` membuat satu job diam. Teruji di VPS: email dikirim lewat Postfix lokal dan ditandatangani DKIM hostname.
+
+- aksi massal akun ✅: admin mencentang akun di daftar akun lalu suspend (dengan alasan), buka suspend, hapus (konfirmasi ketik HAPUS) atau ganti paket sekaligus, paling banyak 100 akun. Setiap akun melewati pemeriksaan yang sama seperti aksi satu akun; akun yang tidak cocok (admin, akun sendiri, status yang salah) dilewati dan disebut beserta alasannya. Teruji di VPS dengan dua akun sementara: suspend massal lalu hapus massal tanpa sisa.
+
+Semua fitur P1 sudah ada. Yang dipindah ke fase lain: CGI dan batas disk & bandwidth per domain (P3), UI dua bahasa beserta bahasa default (PB). SSL mail menyusul bersama email (P2).
 
 **Cakupan:**
 
@@ -118,6 +131,13 @@ Semua fitur P1 sudah ada; bahasa default menyusul bersama UI dua bahasa. SSL mai
 - suspend, unsuspend, dan hapus akun bersih tanpa sisa; ✅ teruji di VPS: tidak ada sisa home, vhost, pool PHP, unit systemd, crontab, maupun user/database MariaDB dari 19 akun yang sudah dihapus;
 - `rayxo rebuild` menghasilkan config yang identik; ✅ teruji di VPS: dua kali berturut-turut, checksum config, crontab, kuota dan izin folder sama persis;
 - user A terbukti tidak bisa membaca file user B (diuji otomatis). ✅ `make isolation`, dijalankan di VPS: semua jalur ditolak.
+
+## PB — Dua bahasa
+
+- Semua teks UI panel lewat terjemahan (Indonesia & English), pilihan bahasa per user, bahasa default server di Pengaturan Server.
+- Pesan dari server (validasi, toast) mengikuti bahasa user.
+
+**Selesai kalau:** setiap halaman bisa dipakai penuh dalam kedua bahasa, dan tes otomatis menolak teks UI tanpa terjemahan.
 
 ## P2 — DNS & email
 
@@ -138,7 +158,8 @@ Semua fitur P1 sudah ada; bahasa default menyusul bersama UI dua bahasa. SSL mai
 - Manajemen IP, pindah pemilik, pesan massal, tiket.
 - Bandwidth, statistik harian & grafik, GoAccess, log viewer, batas resource (cgroups).
 - REST API + login keys, notifikasi email & Telegram.
-- SSH jail & SSH keys, error page, protected directory, hotlink, MIME.
+- SSH jail & SSH keys, error page, protected directory, hotlink, MIME, CGI per domain.
+- Batas disk & bandwidth per domain.
 - Process monitor, file editor sistem, template config kustom.
 
 **Selesai kalau:** reseller bisa membuat dan mengelola user dalam batasnya, dan terbukti tidak bisa menyentuh akun di luar miliknya (test otorisasi otomatis untuk setiap endpoint).

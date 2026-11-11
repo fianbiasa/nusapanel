@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\BulkAccountAction;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\BulkAccountActionRequest;
 use App\Http\Requests\Admin\StoreAccountRequest;
 use App\Models\Package;
 use App\Models\User;
@@ -160,6 +162,62 @@ class AccountController extends Controller
         Inertia::flash('toast', [
             'type' => 'success',
             'message' => __('Account :username is being deleted.', ['username' => $account->username]),
+        ]);
+
+        return back();
+    }
+
+    /**
+     * Suspend, unsuspend, delete or move to another package several accounts
+     * at once. Accounts the action does not fit are skipped and named in the
+     * message, with the reason.
+     */
+    public function bulk(BulkAccountActionRequest $request): RedirectResponse
+    {
+        $action = BulkAccountAction::from($request->string('action')->toString());
+        $package = $action === BulkAccountAction::Package && $request->filled('package_id')
+            ? Package::query()->findOrFail($request->integer('package_id'))
+            : null;
+
+        /** @var list<int> $ids */
+        $ids = array_map(intval(...), $request->array('ids'));
+
+        ['done' => $done, 'skipped' => $skipped] = $this->accounts->bulk(
+            $action,
+            $ids,
+            $request->filled('reason') ? $request->string('reason')->toString() : null,
+            $package,
+            $request->user(),
+        );
+
+        $replace = ['count' => count($done)];
+        $messages = [];
+
+        if ($done !== []) {
+            $messages[] = match ($action) {
+                BulkAccountAction::Suspend => __('Accounts suspended: :count.', $replace),
+                BulkAccountAction::Unsuspend => __('Accounts unsuspended: :count.', $replace),
+                BulkAccountAction::Delete => __('Accounts being deleted: :count.', $replace),
+                BulkAccountAction::Package => $package === null
+                    ? __('Accounts taken off packages: :count.', $replace)
+                    : __('Accounts moved to the :package package: :count.', [...$replace, 'package' => $package->name]),
+            };
+        }
+
+        if ($skipped !== []) {
+            $reasons = collect($skipped)->map(fn (string $reason, string $username): string => "{$username} ({$reason})");
+
+            $messages[] = __('Skipped: :accounts', ['accounts' => $reasons->take(5)->implode('; ')])
+                .($reasons->count() > 5 ? ' '.__('and :count more.', ['count' => $reasons->count() - 5]) : '');
+        }
+
+        Inertia::flash('toast', [
+            'type' => match (true) {
+                $skipped === [] => 'success',
+                $done === [] => 'error',
+                default => 'warning',
+            },
+            'message' => $messages === [] ? __('No accounts were found.') : implode(' ', $messages),
         ]);
 
         return back();

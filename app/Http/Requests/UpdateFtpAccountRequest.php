@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\FtpAccount;
+use App\Services\FtpService;
 use App\Support\FtpDirectory;
 use Illuminate\Auth\Access\Response;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -26,7 +27,8 @@ class UpdateFtpAccountRequest extends FormRequest
 
     /**
      * Get the validation rules that apply to the request: a new password
-     * (empty keeps the current one) and the folder.
+     * (empty keeps the current one), the folder and the FTP quota in
+     * megabytes (empty is no limit).
      *
      * @return array<string, ValidationRule|array<mixed>|string>
      */
@@ -35,6 +37,7 @@ class UpdateFtpAccountRequest extends FormRequest
         return [
             'password' => ['nullable', 'string', 'min:12', 'max:128'],
             'directory' => ['present', ...FtpDirectory::rules()],
+            'quota_mb' => ['nullable', 'integer', 'min:1', 'max:'.FtpService::MAX_QUOTA_MB],
         ];
     }
 

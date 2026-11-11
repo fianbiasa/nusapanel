@@ -38,6 +38,7 @@ class FtpAccountController extends Controller
                 'id' => $ftpAccount->id,
                 'login' => $ftpAccount->login,
                 'directory' => $ftpAccount->directory,
+                'quota_mb' => $ftpAccount->quota_mb,
                 'status' => $ftpAccount->status->value,
                 'created_at' => $ftpAccount->created_at?->toIso8601String(),
             ]);
@@ -50,6 +51,7 @@ class FtpAccountController extends Controller
             ], $this->ftp->loginDomains($account)),
             'home' => '/home/'.$account->username,
             'max_directory' => FtpDirectory::MAX_LENGTH,
+            'max_quota_mb' => FtpService::MAX_QUOTA_MB,
             'limits' => AccountLimits::for($account)->toArray(),
             'connection' => [
                 'host' => parse_url((string) config('app.url'), PHP_URL_HOST) ?: 'localhost',
@@ -78,6 +80,7 @@ class FtpAccountController extends Controller
             $request->integer('domain_id'),
             $request->string('directory')->toString(),
             $request->string('password')->toString(),
+            $request->filled('quota_mb') ? $request->integer('quota_mb') : null,
             $account,
         );
 
@@ -90,7 +93,7 @@ class FtpAccountController extends Controller
     }
 
     /**
-     * Change a login's password and folder.
+     * Change a login's password, folder and FTP quota.
      */
     public function update(UpdateFtpAccountRequest $request, FtpAccount $ftpAccount): RedirectResponse
     {
@@ -98,6 +101,7 @@ class FtpAccountController extends Controller
             $ftpAccount,
             $request->filled('password') ? $request->string('password')->toString() : null,
             $request->string('directory')->toString(),
+            $request->filled('quota_mb') ? $request->integer('quota_mb') : null,
             $request->user(),
         );
 

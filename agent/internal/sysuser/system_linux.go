@@ -25,6 +25,8 @@ const (
 	pkillProgram    = "/usr/bin/pkill"
 	crontabProgram  = "/usr/bin/crontab"
 	chpasswdProgram = "/usr/sbin/chpasswd"
+	// quotacheckProgram comes with Pure-FTPd.
+	quotacheckProgram = "/usr/sbin/pure-quotacheck"
 )
 
 // Exit codes documented by those programs.
@@ -275,6 +277,16 @@ func (System) SetCrontab(ctx context.Context, name string, crontab []byte) error
 // following symlinks or changing folders that already exist.
 func (System) EnsurePath(_ context.Context, path Path) error {
 	return ensurePath(path)
+}
+
+// CountFTPQuota writes the .ftpquota file of dir with pure-quotacheck,
+// which runs as the user name, shut in dir.
+func (System) CountFTPQuota(ctx context.Context, name, dir string) error {
+	if _, err := runner.Run(ctx, quotacheckProgram, "-u", name, "-d", dir); err != nil {
+		return fmt.Errorf("count the files of %s: %w", dir, err)
+	}
+
+	return nil
 }
 
 func (System) lookupGroup(ctx context.Context, name string) (Group, error) {

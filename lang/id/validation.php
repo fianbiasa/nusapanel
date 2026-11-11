@@ -225,6 +225,8 @@ return [
         'email' => 'email',
         'email_accounts' => 'batas akun email',
         'ftp_accounts' => 'batas akun FTP',
+        'quota_mb' => 'kuota',
+        'cron_email' => 'email output cron',
         'inodes' => 'batas inode',
         'max_execution_time' => 'batas waktu eksekusi',
         'max_input_time' => 'batas waktu input',

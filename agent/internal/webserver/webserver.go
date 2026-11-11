@@ -17,6 +17,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -206,6 +207,15 @@ type Site struct {
 	// ForceHTTPS redirects HTTP to HTTPS, except Let's Encrypt challenges.
 	// It needs SSL.
 	ForceHTTPS bool
+	// WWW is how the site treats www.<domain>; empty means WWWBoth.
+	WWW WWWMode
+	// NoPHP turns PHP off: the site gets no PHP-FPM pool, and its PHP files
+	// are refused rather than served as text.
+	NoPHP bool
+	// Root is the folder the site is served from, relative to the home and
+	// inside domains/ (see checkRoot); empty means domains/<domain>/
+	// public_html, or the parent's for an alias. A forward has none.
+	Root string
 	// Kind is what the domain serves; empty means KindDomain.
 	Kind Kind
 	// Parent is the domain of the same account an alias shows or a
@@ -242,6 +252,16 @@ func (s Site) Validate() error {
 
 	if s.CustomCertificate && !s.SSL {
 		return errors.New("a custom certificate needs SSL")
+	}
+
+	switch s.WWW {
+	case "", WWWBoth, WWWOnly, WWWBare:
+	default:
+		return fmt.Errorf("www mode %q must be both, www or bare", s.WWW)
+	}
+
+	if _, err := checkRoot(s.Root); err != nil {
+		return err
 	}
 
 	if err := validate.PHPVersion(s.PHPVersion); err != nil {
@@ -355,7 +375,7 @@ func (m *Manager) ApplyDomain(ctx context.Context, site Site) (string, error) {
 		return "", err
 	}
 
-	if site.Kind != KindForward {
+	if site.Kind != KindForward && !site.NoPHP {
 		if err := m.applyPool(ctx, site); err != nil {
 			return "", err
 		}
@@ -414,7 +434,9 @@ func (m *Manager) prepareFolders(ctx context.Context, site Site) error {
 
 	if site.Kind == KindAlias {
 		folder = site.Parent
-	} else {
+	}
+
+	if site.Kind != KindAlias {
 		page, err := render("index.html.tmpl", m.siteData(site))
 		if err != nil {
 			return err
@@ -423,13 +445,26 @@ func (m *Manager) prepareFolders(ctx context.Context, site Site) error {
 		index = page
 	}
 
+	names := []string{"domains", folder, "public_html"}
+	if site.Root != "" {
+		names, _ = checkRoot(site.Root)
+	}
+
+	// The same modes as a website's own folders: domains/ and the folder of
+	// a website only let the web server pass, what is below may be read.
+	dirs := make([]sysuser.Dir, len(names))
+	for i, name := range names {
+		mode := os.FileMode(0o755)
+		if i < 2 {
+			mode = 0o711
+		}
+
+		dirs[i] = sysuser.Dir{Name: name, Mode: mode}
+	}
+
 	err := m.cfg.PrepareSite(ctx, sysuser.Site{
-		Home: m.home(site.User),
-		Dirs: []sysuser.Dir{
-			{Name: "domains", Mode: 0o711},
-			{Name: folder, Mode: 0o711},
-			{Name: "public_html", Mode: 0o755},
-		},
+		Home:  m.home(site.User),
+		Dirs:  dirs,
 		UID:   site.UID,
 		GID:   site.GID,
 		Index: index,
@@ -444,6 +479,10 @@ func (m *Manager) prepareFolders(ctx context.Context, site Site) error {
 // siteDocumentRoot returns the folder site is served from: its own, its
 // parent's for an alias, or none for a forward.
 func (m *Manager) siteDocumentRoot(site Site) string {
+	if site.Root != "" && site.kind() != KindForward {
+		return m.home(site.User) + "/" + site.Root
+	}
+
 	switch site.kind() {
 	case KindAlias:
 		return m.DocumentRoot(site.User, site.Parent)
@@ -845,4 +884,32 @@ func checkPool(user, version string) error {
 	}
 
 	return validate.PHPVersion(version)
+}
+
+// rootNamePattern is one folder name of a site's Root: no dot first, so no
+// hidden folder (.trash, a .git) can become a website.
+var rootNamePattern = regexp.MustCompile(`^[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}$`)
+
+// checkRoot splits a site's Root into folder names. It must lie inside
+// domains/ with at least one folder below it (tmp/ holds PHP sessions and
+// .trash/ deleted files, neither of which may be served), at most 200
+// characters and 16 folders deep. An empty Root is the default.
+func checkRoot(root string) ([]string, error) {
+	if root == "" {
+		return nil, nil
+	}
+
+	names := strings.Split(root, "/")
+
+	if len(root) > 200 || len(names) > 16 || len(names) < 2 || names[0] != "domains" {
+		return nil, fmt.Errorf("document root %q must be a folder inside domains/, at most 200 characters and 16 folders deep", root)
+	}
+
+	for _, name := range names {
+		if !rootNamePattern.MatchString(name) {
+			return nil, fmt.Errorf("document root %q may only hold folder names of letters, digits, dots, dashes and underscores, not starting with a dot", root)
+		}
+	}
+
+	return names, nil
 }

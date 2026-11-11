@@ -26,7 +26,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
-import { formatDateTime } from '@/lib/format';
+import { formatDateTime, formatMegabytes } from '@/lib/format';
 import { destroy, store, update } from '@/routes/ftp';
 import {
     destroy as removeSftpPassword,
@@ -40,6 +40,7 @@ type FtpAccountRow = {
     id: number;
     login: string;
     directory: string;
+    quota_mb: number | null;
     status: Status;
     created_at: string | null;
 };
@@ -51,6 +52,7 @@ type Props = {
     domains: Domain[];
     home: string;
     max_directory: number;
+    max_quota_mb: number;
     limits: AccountLimits;
     connection: { host: string; port: number };
     sftp: SftpState;
@@ -78,6 +80,7 @@ export default function FtpIndex({
     domains,
     home,
     max_directory,
+    max_quota_mb,
     limits,
     connection,
     sftp,
@@ -145,6 +148,7 @@ export default function FtpIndex({
                         domains={domains}
                         home={home}
                         maxDirectory={max_directory}
+                        maxQuotaMb={max_quota_mb}
                         disabled={isAtLimit}
                     />
                 )}
@@ -180,6 +184,7 @@ export default function FtpIndex({
                                 <tr>
                                     <th className={tableStyles.th}>Login</th>
                                     <th className={tableStyles.th}>Folder</th>
+                                    <th className={tableStyles.th}>Kuota</th>
                                     <th className={tableStyles.th}>Status</th>
                                     <th className={tableStyles.th}>
                                         <span className="sr-only">Aksi</span>
@@ -203,6 +208,15 @@ export default function FtpIndex({
                                             {account.directory === ''
                                                 ? home
                                                 : `${home}/${account.directory}`}
+                                        </td>
+                                        <td
+                                            className={`${tableStyles.td} whitespace-nowrap text-muted-foreground`}
+                                        >
+                                            {account.quota_mb === null
+                                                ? 'Tanpa batas'
+                                                : formatMegabytes(
+                                                      account.quota_mb,
+                                                  )}
                                         </td>
                                         <td className={tableStyles.td}>
                                             <StatusBadge
@@ -288,6 +302,7 @@ export default function FtpIndex({
                             account={action.account}
                             home={home}
                             maxDirectory={max_directory}
+                            maxQuotaMb={max_quota_mb}
                             onSuccess={closeDialog}
                         />
                     )}
@@ -343,11 +358,13 @@ function CreateFtpAccountForm({
     domains,
     home,
     maxDirectory,
+    maxQuotaMb,
     disabled,
 }: {
     domains: Domain[];
     home: string;
     maxDirectory: number;
+    maxQuotaMb: number;
     disabled: boolean;
 }) {
     const [name, setName] = useState('');
@@ -355,6 +372,7 @@ function CreateFtpAccountForm({
     const [directory, setDirectory] = useState(websiteFolder(domains[0].name));
     const [isDirectoryEdited, setIsDirectoryEdited] = useState(false);
     const [password, setPassword] = useState('');
+    const [quota, setQuota] = useState('');
 
     const chooseDomain = (id: string) => {
         setDomainId(id);
@@ -370,6 +388,7 @@ function CreateFtpAccountForm({
     const reset = () => {
         setName('');
         setPassword('');
+        setQuota('');
     };
 
     return (
@@ -473,6 +492,15 @@ function CreateFtpAccountForm({
                         <InputError message={errors.password} />
                     </div>
 
+                    <QuotaField
+                        id="ftp-quota"
+                        value={quota}
+                        onChange={setQuota}
+                        maxQuotaMb={maxQuotaMb}
+                        disabled={disabled}
+                        error={errors.quota_mb}
+                    />
+
                     <div>
                         <Button
                             type="submit"
@@ -493,15 +521,20 @@ function EditFtpAccountForm({
     account,
     home,
     maxDirectory,
+    maxQuotaMb,
     onSuccess,
 }: {
     account: FtpAccountRow;
     home: string;
     maxDirectory: number;
+    maxQuotaMb: number;
     onSuccess: () => void;
 }) {
     const [directory, setDirectory] = useState(account.directory);
     const [password, setPassword] = useState('');
+    const [quota, setQuota] = useState(
+        account.quota_mb === null ? '' : String(account.quota_mb),
+    );
 
     return (
         <Form
@@ -550,6 +583,14 @@ function EditFtpAccountForm({
                         <InputError message={errors.password} />
                     </div>
 
+                    <QuotaField
+                        id="edit-ftp-quota"
+                        value={quota}
+                        onChange={setQuota}
+                        maxQuotaMb={maxQuotaMb}
+                        error={errors.quota_mb}
+                    />
+
                     <DialogFooter className="gap-2">
                         <DialogClose asChild>
                             <Button type="button" variant="secondary">
@@ -564,6 +605,54 @@ function EditFtpAccountForm({
                 </>
             )}
         </Form>
+    );
+}
+
+/**
+ * How many megabytes a login may fill its folder with through FTP; empty is
+ * no limit.
+ */
+function QuotaField({
+    id,
+    value,
+    onChange,
+    maxQuotaMb,
+    disabled = false,
+    error,
+}: {
+    id: string;
+    value: string;
+    onChange: (value: string) => void;
+    maxQuotaMb: number;
+    disabled?: boolean;
+    error?: string;
+}) {
+    return (
+        <div className="grid gap-2">
+            <Label htmlFor={id}>Kuota</Label>
+            <div className="sm:max-w-56">
+                <AffixInput
+                    id={id}
+                    name="quota_mb"
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={maxQuotaMb}
+                    step={1}
+                    suffix="MB"
+                    value={value}
+                    onChange={(event) => onChange(event.target.value)}
+                    disabled={disabled}
+                    placeholder="Tanpa batas"
+                    invalid={Boolean(error)}
+                />
+            </div>
+            <p className="text-xs text-muted-foreground">
+                Batas isi folder saat mengunggah lewat akun ini. Kosongkan untuk
+                tanpa batas.
+            </p>
+            <InputError message={error} />
+        </div>
     );
 }
 

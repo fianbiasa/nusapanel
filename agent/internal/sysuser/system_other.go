@@ -81,3 +81,8 @@ func (System) SetCrontab(context.Context, string, []byte) error {
 func (System) EnsurePath(context.Context, Path) error {
 	return unsupported()
 }
+
+// CountFTPQuota is not supported on this platform.
+func (System) CountFTPQuota(context.Context, string, string) error {
+	return unsupported()
+}

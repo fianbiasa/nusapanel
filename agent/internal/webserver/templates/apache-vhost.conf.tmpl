@@ -7,6 +7,8 @@
     # No access log: Nginx in front already logs every request.
     ErrorLog {{.LogDir}}/{{.Domain}}.apache-error.log
 
+{{- if .PHP}}
+
     DirectoryIndex index.php index.html index.htm
 
     # PHP runs in the account's own pool. Every pool has its own FastCGI
@@ -14,4 +16,14 @@
     <FilesMatch "\.(php|phtml)$">
         SetHandler "proxy:unix:{{.Socket}}|fcgi://{{.PoolName}}"
     </FilesMatch>
+{{- else}}
+
+    DirectoryIndex index.html index.htm
+
+    # PHP is turned off for this website: its scripts are refused, never
+    # served as text (they may hold passwords).
+    <FilesMatch "\.(php[0-9]?|phtml|phar)$">
+        Require all denied
+    </FilesMatch>
+{{- end}}
 </VirtualHost>

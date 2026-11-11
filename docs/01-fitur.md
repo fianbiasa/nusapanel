@@ -1,6 +1,6 @@
 # 1. Daftar Fitur
 
-Target: **minimal setara DirectAdmin**. Setiap fitur diberi fase pengerjaan (lihat [Roadmap](05-roadmap.md)).
+Target: **minimal setara DirectAdmin**. Setiap fitur diberi fase pengerjaan (lihat [Roadmap](05-roadmap.md)); PB adalah fase UI dua bahasa.
 Tanda ★ = fitur tambahan yang tidak ada di DirectAdmin standar.
 
 Pembagian level sama seperti DirectAdmin:
@@ -17,7 +17,9 @@ Pembagian level sama seperti DirectAdmin:
 
 | Fitur                          | Keterangan                                                                                                                                          | Fase |
 | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| Domain setup                   | Tambah/ubah/hapus domain; on/off PHP, CGI, SSL; batas disk & bandwidth per domain                                                                   | P1   |
+| Domain setup                   | Tambah/ubah/hapus domain; on/off PHP dan SSL                                                                                                        | P1   |
+| CGI                            | Skrip CGI di `cgi-bin`, on/off per domain                                                                                                           | P3   |
+| Batas per domain               | Batas disk & bandwidth per domain                                                                                                                   | P3   |
 | Subdomain                      | Buat/hapus, document root kustom, versi PHP sendiri                                                                                                 | P1   |
 | Domain pointer                 | Alias (konten sama) dan pointer (redirect ke domain utama)                                                                                          | P1   |
 | Pengaturan www                 | Layani www & non-www, atau paksa salah satu                                                                                                         | P1   |
@@ -94,7 +96,8 @@ Pembagian level sama seperti DirectAdmin:
 | Cron jobs                   | Preset jadwal, email hasil output                                        | P1   |
 | 2FA                         | TOTP + kode cadangan                                                     | P1   |
 | Riwayat login               | IP, waktu, berhasil/gagal                                                | P1   |
-| Bahasa & tema               | Indonesia & English, mode terang/gelap                                   | P1   |
+| Tema                        | Mode terang/gelap                                                        | P1   |
+| Bahasa                      | Indonesia & English, pilihan per user                                    | PB   |
 | SSH access                  | Shell terkurung (jail), on/off sesuai paket                              | P3   |
 | SSH keys                    | Tambah/hapus public key                                                  | P3   |
 | Site statistics             | Laporan GoAccess per domain                                              | P3   |
@@ -151,26 +154,26 @@ Pembagian level sama seperti DirectAdmin:
 
 ### Server
 
-| Fitur                                 | Keterangan                                                                                              | Fase |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------- | ---- |
-| Info sistem                           | CPU, RAM, disk, load, uptime, versi software                                                            | P1   |
-| Service monitor                       | Status, start/stop/restart; restart otomatis kalau mati                                                 | P1   |
-| Pengaturan server                     | Hostname, timezone, port panel, SSL panel, batas upload (bahasa default menyusul bersama UI dua bahasa) | P1   |
-| Rebuild config                        | Tulis ulang semua config dari database (setara `rewrite_confs`)                                         | P1   |
-| Nameserver default                    |                                                                                                         | P2   |
-| DNS administration                    | Semua zone, template DNS default                                                                        | P2   |
-| Mail queue                            | Lihat, kirim ulang, hapus                                                                               | P2   |
-| Batas kirim email                     | Per user dan per server per hari                                                                        | P2   |
-| Process monitor                       | Lihat & hentikan proses                                                                                 | P3   |
-| Statistik pemakaian                   | Ranking akun per disk & bandwidth                                                                       | P3   |
-| Manajemen IP                          | Tambah/hapus IPv4/IPv6, berikan ke reseller                                                             | P3   |
-| File editor sistem                    | Hanya file config yang diizinkan                                                                        | P3   |
-| Template config kustom                | Override template vhost, PHP-FPM, DNS                                                                   | P3   |
-| Update panel                          | Satu klik, kanal stable/beta                                                                            | P5   |
-| Software manager (setara CustomBuild) | Pasang/hapus versi PHP & ekstensi, update phpMyAdmin/Roundcube, versi MariaDB                           | P6   |
-| Multi-server & DNS cluster            |                                                                                                         | P6   |
-| Plugin manager                        |                                                                                                         | P6   |
-| Skin manager                          |                                                                                                         | P6   |
+| Fitur                                 | Keterangan                                                                           | Fase |
+| ------------------------------------- | ------------------------------------------------------------------------------------ | ---- |
+| Info sistem                           | CPU, RAM, disk, load, uptime, versi software                                         | P1   |
+| Service monitor                       | Status, start/stop/restart; restart otomatis kalau mati                              | P1   |
+| Pengaturan server                     | Hostname, timezone, port panel, SSL panel, batas upload; bahasa default ikut fase PB | P1   |
+| Rebuild config                        | Tulis ulang semua config dari database (setara `rewrite_confs`)                      | P1   |
+| Nameserver default                    |                                                                                      | P2   |
+| DNS administration                    | Semua zone, template DNS default                                                     | P2   |
+| Mail queue                            | Lihat, kirim ulang, hapus                                                            | P2   |
+| Batas kirim email                     | Per user dan per server per hari                                                     | P2   |
+| Process monitor                       | Lihat & hentikan proses                                                              | P3   |
+| Statistik pemakaian                   | Ranking akun per disk & bandwidth                                                    | P3   |
+| Manajemen IP                          | Tambah/hapus IPv4/IPv6, berikan ke reseller                                          | P3   |
+| File editor sistem                    | Hanya file config yang diizinkan                                                     | P3   |
+| Template config kustom                | Override template vhost, PHP-FPM, DNS                                                | P3   |
+| Update panel                          | Satu klik, kanal stable/beta                                                         | P5   |
+| Software manager (setara CustomBuild) | Pasang/hapus versi PHP & ekstensi, update phpMyAdmin/Roundcube, versi MariaDB        | P6   |
+| Multi-server & DNS cluster            |                                                                                      | P6   |
+| Plugin manager                        |                                                                                      | P6   |
+| Skin manager                          |                                                                                      | P6   |
 
 ### Keamanan
 

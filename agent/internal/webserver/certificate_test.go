@@ -214,7 +214,7 @@ func TestRenderedNginxVhostWithHTTPS(t *testing.T) {
 		"disable_symlinks if_not_owner from=$document_root;",
 		"client_max_body_size 256m;",
 		"include "+env.cfg.NginxDir+"/budi/suspended*.inc;",
-		"location ~ /\\.ht {\n        deny all;\n    }",
+		"location ~ /\\.(?:ht|ftpquota$) {\n        deny all;\n    }",
 		"try_files $uri @apache;",
 		"location / {\n        proxy_pass http://127.0.0.1:8080;",
 		"location @apache {\n        proxy_pass http://127.0.0.1:8080;",
@@ -259,6 +259,45 @@ func TestRenderedNginxVhostForcingHTTPS(t *testing.T) {
 
 	if strings.Count(nginx, "proxy_pass") != 2 {
 		t.Fatalf("only the HTTPS server proxies:\n%s", nginx)
+	}
+}
+
+func TestRenderedNginxVhostSendsVisitorsToOneName(t *testing.T) {
+	for _, tc := range []struct {
+		mode      WWWMode
+		redirects string
+	}{
+		{WWWOnly, "if ($host = example.com) {\n        return 301 $scheme://www.example.com$request_uri;\n    }"},
+		{WWWBare, "if ($host = www.example.com) {\n        return 301 $scheme://example.com$request_uri;\n    }"},
+	} {
+		env := newEnv(t)
+		env.writeCertificate("example.com", "example.com", "www.example.com")
+
+		site := sslSite(false)
+		site.WWW = tc.mode
+		env.mustApply(site)
+
+		nginx := env.read(env.nginxVhost("budi", "example.com"))
+		if strings.Count(nginx, tc.redirects) != 2 {
+			t.Fatalf("%s: want the redirect in the HTTP and the HTTPS server:\n%s", tc.mode, nginx)
+		}
+	}
+
+	env := newEnv(t)
+	for _, mode := range []WWWMode{"", WWWBoth} {
+		site := budiSite
+		site.WWW = mode
+		env.mustApply(site)
+
+		if nginx := env.read(env.nginxVhost("budi", "example.com")); strings.Contains(nginx, "if ($host") {
+			t.Fatalf("mode %q redirects:\n%s", mode, nginx)
+		}
+	}
+
+	site := budiSite
+	site.WWW = "sometimes"
+	if _, err := env.apply(site); err == nil || !strings.Contains(err.Error(), "www mode") {
+		t.Fatalf("an unknown www mode: err = %v", err)
 	}
 }
 

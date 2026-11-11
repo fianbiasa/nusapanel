@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\AccountStatus;
+use App\Enums\BulkAccountAction;
 use App\Enums\Role;
 use App\Listeners\ApplyAccountTaskResult;
 use App\Models\Package;
@@ -19,6 +20,11 @@ use Illuminate\Validation\ValidationException;
  */
 class AccountService
 {
+    /**
+     * The most accounts one bulk action may change.
+     */
+    public const MAX_BULK = 100;
+
     public function __construct(
         private TaskDispatcher $tasks,
         private AuditLogger $audit,
@@ -178,6 +184,43 @@ class AccountService
                 'to' => $package?->name,
             ], $actor);
         });
+    }
+
+    /**
+     * Do the action to each of the accounts, one by
+     * one, with the same checks as for a single account. An account the
+     * action does not fit (an administrator, an account that is already
+     * suspended, ...) is skipped with the reason, and the others still go
+     * ahead.
+     *
+     * @param  list<int>  $ids
+     * @return array{done: list<string>, skipped: array<string, string>} Usernames, and the reason each skipped one was left alone.
+     */
+    public function bulk(BulkAccountAction $action, array $ids, ?string $reason, ?Package $package, User $actor): array
+    {
+        $done = [];
+        $skipped = [];
+
+        $accounts = User::query()->whereKey($ids)->orderBy('username')->get();
+
+        foreach ($accounts as $account) {
+            try {
+                match ($action) {
+                    BulkAccountAction::Suspend => $this->suspend($account, $reason, $actor),
+                    BulkAccountAction::Unsuspend => $this->unsuspend($account, $actor),
+                    BulkAccountAction::Delete => $this->delete($account, $actor),
+                    BulkAccountAction::Package => $this->changePackage($account, $package, $actor),
+                };
+
+                $done[] = $account->username;
+            } catch (ValidationException $exception) {
+                $skipped[$account->username] = (string) collect($exception->errors())->flatten()->first();
+            } catch (AuthorizationException $exception) {
+                $skipped[$account->username] = __($exception->getMessage());
+            }
+        }
+
+        return ['done' => $done, 'skipped' => $skipped];
     }
 
     /**

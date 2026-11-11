@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -368,7 +369,7 @@ func TestRenderedNginxVhost(t *testing.T) {
 		"disable_symlinks if_not_owner from=$document_root;",
 		"client_max_body_size 256m;",
 		"include "+env.cfg.NginxDir+"/budi/suspended*.inc;",
-		"location ~ /\\.ht {\n        deny all;\n    }",
+		"location ~ /\\.(?:ht|ftpquota$) {\n        deny all;\n    }",
 		"|webp|avif|svg|ico|bmp|woff|woff2|ttf|otf|eot|mp4|webm|ogg|mp3|wav|pdf|txt|zip|gz|tgz|rar|7z)$ {\n        try_files $uri @apache;\n    }",
 		"location / {\n        proxy_pass http://127.0.0.1:8080;",
 		"location @apache {\n        proxy_pass http://127.0.0.1:8080;",
@@ -413,6 +414,78 @@ func TestRenderedApacheVhost(t *testing.T) {
 		"</VirtualHost>\n",
 	)
 	assertNotContains(t, "apache vhost", apache, "CustomLog", "<no value>")
+}
+
+func TestWebsiteServedFromItsOwnFolder(t *testing.T) {
+	env := newEnv(t)
+
+	site := budiSite
+	site.Domain = "blog.example.com"
+	site.Root = "domains/example.com/public_html/blog"
+	env.mustApply(site)
+
+	prepared := env.sites[len(env.sites)-1]
+	var made []string
+	for _, dir := range prepared.Dirs {
+		made = append(made, fmt.Sprintf("%s %o", dir.Name, dir.Mode))
+	}
+
+	if want := []string{"domains 711", "example.com 711", "public_html 755", "blog 755"}; !slices.Equal(made, want) {
+		t.Fatalf("folders = %q, want %q", made, want)
+	}
+
+	assertContains(t, "Nginx vhost", env.read(env.nginxVhost("budi", "blog.example.com")), "root /home/budi/domains/example.com/public_html/blog;")
+	assertContains(t, "Apache vhost", env.read(env.apacheVhost("budi", "blog.example.com")), "DocumentRoot /home/budi/domains/example.com/public_html/blog\n")
+
+	// An alias of it serves the same folder.
+	alias := Site{User: "budi", UID: 1001, GID: 1001, Domain: "blog.example.net", PHPVersion: "8.4", Kind: KindAlias, Parent: "blog.example.com", Root: site.Root}
+	env.mustApply(alias)
+	assertContains(t, "alias vhost", env.read(env.apacheVhost("budi", "blog.example.net")), "DocumentRoot /home/budi/domains/example.com/public_html/blog\n")
+}
+
+func TestDocumentRootStaysInsideDomains(t *testing.T) {
+	env := newEnv(t)
+
+	for _, root := range []string{
+		"tmp", "domains", ".trash/x", "domains/../tmp", "domains/./x", "/home/sari/domains/x", "domains/x/",
+		"domains/.git", "domains/x y", "backups/site", "domains//x",
+	} {
+		site := budiSite
+		site.Root = root
+
+		if _, err := env.apply(site); err == nil || !strings.Contains(err.Error(), "document root") {
+			t.Errorf("Root %q: err = %v, want a document root error", root, err)
+		}
+	}
+}
+
+func TestWebsiteWithoutPHPRefusesScriptsAndLosesItsPool(t *testing.T) {
+	env := newEnv(t)
+	env.mustApply(budiSite)
+
+	pool := env.poolSection("budi", "8.4", "example.com")
+	if !strings.Contains(env.read(pool), "[example.com]") {
+		t.Fatalf("no pool section for the website with PHP")
+	}
+
+	site := budiSite
+	site.NoPHP = true
+	env.mustApply(site)
+
+	apache := env.read(env.apacheVhost("budi", "example.com"))
+	assertContains(t, "Apache vhost", apache,
+		"    ErrorLog "+env.cfg.LogDir+"/example.com.apache-error.log\n\n    DirectoryIndex index.html index.htm\n",
+		"<FilesMatch \"\\.(php[0-9]?|phtml|phar)$\">\n        Require all denied\n    </FilesMatch>",
+	)
+	assertNotContains(t, "Apache vhost", apache, "SetHandler", "index.php")
+	env.assertMissing(pool)
+
+	// Turned on again, the website runs PHP in its pool as before.
+	env.mustApply(budiSite)
+	assertContains(t, "Apache vhost", env.read(env.apacheVhost("budi", "example.com")), "SetHandler \"proxy:unix:")
+	if !strings.Contains(env.read(pool), "[example.com]") {
+		t.Fatal("the pool did not come back with PHP")
+	}
 }
 
 func TestRenderedPoolAndUnit(t *testing.T) {

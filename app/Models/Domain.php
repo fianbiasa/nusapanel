@@ -7,6 +7,7 @@ use App\Enums\DomainType;
 use App\Enums\PointerMode;
 use App\Enums\SslSource;
 use App\Enums\SslStatus;
+use App\Enums\WwwMode;
 use App\Support\PhpSettings;
 use Database\Factories\DomainFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -50,6 +51,9 @@ use Illuminate\Support\Carbon;
  * @property bool|null $ssl_trusted Whether browsers trust a custom certificate.
  * @property string|null $ssl_error
  * @property bool $force_https
+ * @property bool $php_enabled Whether the website runs PHP; a pointer follows its domain.
+ * @property string|null $document_root The folder a subdomain is served from, relative to the home; null is domains/<name>/public_html.
+ * @property WwwMode $www_mode Which of its two names visitors end up on; a redirecting pointer ignores it.
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
@@ -60,11 +64,27 @@ class Domain extends Model
     use HasFactory;
 
     /**
+     * The folder the website is served from, relative to the home: its own
+     * choice, or domains/<name>/public_html. A pointer serves its domain's
+     * folder; a redirecting one serves none.
+     */
+    public function documentRoot(): ?string
+    {
+        if ($this->type === DomainType::Pointer) {
+            return $this->pointer_mode === PointerMode::Redirect ? null : $this->parent?->documentRoot();
+        }
+
+        return $this->document_root ?? "domains/{$this->name}/public_html";
+    }
+
+    /**
      * @var array<string, mixed>
      */
     protected $attributes = [
         'type' => 'domain',
         'force_https' => false,
+        'www_mode' => 'both',
+        'php_enabled' => true,
     ];
 
     /**
@@ -86,6 +106,8 @@ class Domain extends Model
             'ssl_names' => 'array',
             'ssl_expires_at' => 'datetime',
             'force_https' => 'boolean',
+            'www_mode' => WwwMode::class,
+            'php_enabled' => 'boolean',
         ];
     }
 

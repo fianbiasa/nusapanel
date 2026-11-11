@@ -9,11 +9,13 @@ use App\Enums\PointerMode;
 use App\Enums\Role;
 use App\Enums\SslSource;
 use App\Enums\SslStatus;
+use App\Enums\WwwMode;
 use App\Listeners\ApplyDomainTaskResult;
 use App\Listeners\ApplySslTaskResult;
 use App\Models\Domain;
 use App\Models\UrlRedirect;
 use App\Models\User;
+use App\Rules\DocumentRoot;
 use App\Rules\ValidDomain;
 use App\Support\AccountLimits;
 use App\Support\CustomCertificate;
@@ -418,6 +420,149 @@ class DomainService
     }
 
     /**
+     * Serve a subdomain from another folder of the home, inside domains/
+     * ({@see DocumentRoot}); null, or its own folder, goes back to
+     * domains/<name>/public_html. The files of the old folder are kept.
+     *
+     * @throws ValidationException
+     */
+    public function setDocumentRoot(Domain $domain, ?string $root, User $actor): void
+    {
+        if ($domain->type !== DomainType::Subdomain) {
+            throw ValidationException::withMessages([
+                'document_root' => __('Only a subdomain can be served from another folder.'),
+            ]);
+        }
+
+        if (! in_array($domain->status, [DomainStatus::Active, DomainStatus::Failed], true)) {
+            throw ValidationException::withMessages([
+                'document_root' => __('This domain is still being set up or is already being deleted.'),
+            ]);
+        }
+
+        if ($root === "domains/{$domain->name}/public_html") {
+            $root = null;
+        }
+
+        if ($domain->document_root === $root) {
+            return;
+        }
+
+        $account = $domain->account;
+        $previous = $domain->documentRoot();
+
+        DB::transaction(function () use ($domain, $root, $account, $actor, $previous): void {
+            $domain->forceFill(['document_root' => $root, 'status' => DomainStatus::Pending])->save();
+            $this->dispatchApply($domain, $account, $actor);
+
+            $domain->children()
+                ->where('type', DomainType::Pointer)
+                ->where('status', '!=', DomainStatus::Deleting)
+                ->orderBy('id')
+                ->each(function (Domain $pointer) use ($account, $actor): void {
+                    $pointer->forceFill(['status' => DomainStatus::Pending])->save();
+                    $this->dispatchApply($pointer, $account, $actor);
+                });
+
+            $this->audit->record('domain.root_changed', $domain, [
+                'domain' => $domain->name,
+                'document_root' => ['from' => $previous, 'to' => $domain->documentRoot()],
+            ], $actor);
+        });
+    }
+
+    /**
+     * Turn PHP on or off for a domain or subdomain; its alias pointers
+     * follow. Without PHP, its scripts are refused rather than served.
+     *
+     * @throws ValidationException
+     */
+    public function setPhpEnabled(Domain $domain, bool $enabled, User $actor): void
+    {
+        if ($domain->type === DomainType::Pointer) {
+            throw ValidationException::withMessages([
+                'php_enabled' => __('A pointer runs PHP like its domain.'),
+            ]);
+        }
+
+        if (! in_array($domain->status, [DomainStatus::Active, DomainStatus::Failed], true)) {
+            throw ValidationException::withMessages([
+                'php_enabled' => __('This domain is still being set up or is already being deleted.'),
+            ]);
+        }
+
+        if ($domain->ssl_status?->isBusy()) {
+            throw ValidationException::withMessages([
+                'php_enabled' => __('Wait until the SSL certificate has been installed or removed.'),
+            ]);
+        }
+
+        if ($domain->php_enabled === $enabled) {
+            return;
+        }
+
+        $account = $domain->account;
+
+        DB::transaction(function () use ($domain, $enabled, $account, $actor): void {
+            $domain->forceFill(['php_enabled' => $enabled, 'status' => DomainStatus::Pending])->save();
+            $this->dispatchApply($domain, $account, $actor);
+
+            $domain->children()
+                ->where('type', DomainType::Pointer)
+                ->where('status', '!=', DomainStatus::Deleting)
+                ->orderBy('id')
+                ->each(function (Domain $pointer) use ($account, $actor): void {
+                    $pointer->forceFill(['status' => DomainStatus::Pending])->save();
+                    $this->dispatchApply($pointer, $account, $actor);
+                });
+
+            $this->audit->record($enabled ? 'domain.php_enabled' : 'domain.php_disabled', $domain, [
+                'domain' => $domain->name,
+            ], $actor);
+        });
+    }
+
+    /**
+     * Choose which of the website's two names, with and without www., its
+     * visitors end up on. A redirecting pointer sends everyone to its
+     * domain anyway.
+     *
+     * @throws ValidationException
+     */
+    public function setWwwMode(Domain $domain, WwwMode $mode, User $actor): void
+    {
+        if ($domain->pointer_mode === PointerMode::Redirect) {
+            throw ValidationException::withMessages([
+                'www_mode' => __('A redirecting pointer sends every visitor to its domain already.'),
+            ]);
+        }
+
+        if (! in_array($domain->status, [DomainStatus::Active, DomainStatus::Failed], true)) {
+            throw ValidationException::withMessages([
+                'www_mode' => __('This domain is still being set up or is already being deleted.'),
+            ]);
+        }
+
+        if ($domain->www_mode === $mode) {
+            return;
+        }
+
+        $account = $domain->account;
+        $previous = $domain->www_mode;
+
+        DB::transaction(function () use ($domain, $mode, $account, $actor, $previous): void {
+            $domain->forceFill(['www_mode' => $mode])->save();
+
+            $this->dispatchApply($domain, $account, $actor);
+
+            $this->audit->record('domain.www_changed', $domain, [
+                'domain' => $domain->name,
+                'www_mode' => ['from' => $previous->value, 'to' => $mode->value],
+            ], $actor);
+        });
+    }
+
+    /**
      * Run a domain or subdomain on another installed PHP version. Its
      * pointers follow: an alias runs in the same pool as the website it
      * shows. The agent removes the account's pool of the old version once
@@ -745,6 +890,27 @@ class DomainService
 
         if ($ssl && $domain->ssl_source === SslSource::Custom) {
             $params['certificate'] = 'custom';
+        }
+
+        if ($domain->www_mode !== WwwMode::Both && $domain->pointer_mode !== PointerMode::Redirect) {
+            $params['www'] = $domain->www_mode->value;
+        }
+
+        // An alias serves the folder of the website it shows.
+        $root = match (true) {
+            $domain->type === DomainType::Pointer => $domain->parent->document_root ?? null,
+            default => $domain->document_root,
+        };
+
+        if ($root !== null && $domain->pointer_mode !== PointerMode::Redirect) {
+            $params['root'] = $root;
+        }
+
+        // An alias runs PHP like the website it shows.
+        $runsPhp = $domain->type === DomainType::Pointer ? ($domain->parent->php_enabled ?? true) : $domain->php_enabled;
+
+        if (! $runsPhp && $domain->pointer_mode !== PointerMode::Redirect) {
+            $params['no_php'] = true;
         }
 
         if ($domain->type === DomainType::Pointer) {

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Services\FtpService;
 use App\Support\FtpDirectory;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -10,9 +11,9 @@ class StoreFtpAccountRequest extends FormRequest
 {
     /**
      * Get the validation rules that apply to the request: the name before
-     * "@<domain>", the domain, the folder relative to the home and the
-     * password. Whether the domain is the account's is checked by the
-     * FtpService.
+     * "@<domain>", the domain, the folder relative to the home, the
+     * password and the FTP quota in megabytes (empty is no limit). Whether
+     * the domain is the account's is checked by the FtpService.
      *
      * @return array<string, ValidationRule|array<mixed>|string>
      */
@@ -23,6 +24,7 @@ class StoreFtpAccountRequest extends FormRequest
             'domain_id' => ['required', 'integer'],
             'directory' => ['present', ...FtpDirectory::rules()],
             'password' => ['required', 'string', 'min:12', 'max:128'],
+            'quota_mb' => ['nullable', 'integer', 'min:1', 'max:'.FtpService::MAX_QUOTA_MB],
         ];
     }
 

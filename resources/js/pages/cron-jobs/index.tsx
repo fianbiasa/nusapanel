@@ -1,5 +1,5 @@
 import { Form, Head, router, usePoll } from '@inertiajs/react';
-import { Clock, Pause, Pencil, Play, Plus, Trash2 } from 'lucide-react';
+import { Clock, Mail, Pause, Pencil, Play, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import InputError from '@/components/input-error';
@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { destroy, store, update } from '@/routes/cron-jobs';
+import { update as updateEmail } from '@/routes/cron-jobs/email';
 import type { AccountLimits } from '@/types';
 
 type CronJobRow = {
@@ -40,6 +41,7 @@ type CronJobRow = {
 type Props = {
     cron_jobs: CronJobRow[];
     sync: { pending: boolean; error: string | null };
+    cron_email: string | null;
     home: string;
     limits: AccountLimits;
 };
@@ -81,6 +83,7 @@ function describeSchedule(schedule: string): string | null {
 export default function CronJobsIndex({
     cron_jobs,
     sync,
+    cron_email,
     home,
     limits,
 }: Props) {
@@ -308,6 +311,8 @@ export default function CronJobsIndex({
                 )}
             </Panel>
 
+            <CronEmailPanel email={cron_email} />
+
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
                 <DialogContent className="rounded-2xl sm:max-w-xl">
                     {action?.type === 'create' && (
@@ -484,9 +489,9 @@ function CronJobForm({
                             aria-invalid={errors.command ? true : undefined}
                         />
                         <p className="text-xs text-muted-foreground">
-                            Tulis seperti di terminal (satu baris). Output tidak
-                            dikirim ke mana pun; arahkan ke file kalau perlu,
-                            misalnya{' '}
+                            Tulis seperti di terminal (satu baris). Output
+                            dikirim ke email output cron kalau diisi; untuk
+                            menyimpannya ke file, tambahkan{' '}
                             <code>&gt;&gt; {home}/cron.log 2&gt;&amp;1</code>.
                         </p>
                         <InputError message={errors.command} />
@@ -520,5 +525,55 @@ function CronJobForm({
                 </>
             )}
         </Form>
+    );
+}
+
+/**
+ * The address cron mails the output of every job to; empty mails nothing.
+ */
+function CronEmailPanel({ email }: { email: string | null }) {
+    return (
+        <Panel
+            title="Email output"
+            description="Kirim output cron job ke email. Cron hanya mengirim email kalau job menghasilkan output."
+        >
+            <Form
+                key={email ?? ''}
+                {...updateEmail.form()}
+                options={{ preserveScroll: true }}
+                className="grid max-w-2xl gap-3"
+            >
+                {({ processing, errors }) => (
+                    <>
+                        <Label htmlFor="cron-email">Alamat email</Label>
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                            <Input
+                                id="cron-email"
+                                name="cron_email"
+                                type="email"
+                                defaultValue={email ?? ''}
+                                maxLength={254}
+                                autoComplete="email"
+                                placeholder="Kosongkan agar tidak dikirim"
+                                className="sm:flex-1"
+                                aria-invalid={
+                                    errors.cron_email ? true : undefined
+                                }
+                            />
+                            <Button type="submit" disabled={processing}>
+                                {processing ? <Spinner /> : <Mail />}
+                                Simpan
+                            </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                            Supaya satu job tidak mengirim email, tambahkan{' '}
+                            <code>&gt;/dev/null 2&gt;&amp;1</code> di akhir
+                            perintahnya.
+                        </p>
+                        <InputError message={errors.cron_email} />
+                    </>
+                )}
+            </Form>
+        </Panel>
     );
 }

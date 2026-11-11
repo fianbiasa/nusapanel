@@ -63,6 +63,27 @@ func TestCronApplyInstallsTheJobs(t *testing.T) {
 	}
 }
 
+func TestCronApplyMailsTheOutputToTheAccountsAddress(t *testing.T) {
+	system := newFakeSystem()
+	system.addAccount("budi", 1001)
+
+	err := callCron(t, system, map[string]any{"username": "budi", "mail_to": "budi@example.com", "jobs": []map[string]string{
+		{"schedule": "@daily", "command": "php backup.php"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if crontab := system.crontabs["budi"]; !strings.Contains(crontab, "\nMAILTO=\"budi@example.com\"\n") {
+		t.Fatalf("crontab does not mail its output:\n%s", crontab)
+	}
+
+	for _, address := range []string{"budi@example.com\nMAILTO=evil@example.com", "-oQ/tmp@example.com", "budi"} {
+		err := callCron(t, system, map[string]any{"username": "budi", "mail_to": address, "jobs": []any{}})
+		assertCode(t, err, rpc.CodeInvalidParams)
+	}
+}
+
 func TestCronApplyWithoutJobsRemovesTheCrontab(t *testing.T) {
 	system := newFakeSystem()
 	system.addAccount("budi", 1001)

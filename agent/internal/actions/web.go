@@ -36,6 +36,14 @@ type applyDomainParams struct {
 	PHPVersion string `json:"php_version"`
 	SSL        bool   `json:"ssl"`
 	ForceHTTPS bool   `json:"force_https"`
+	// WWW is "both" (also when missing), "www" or "bare": which of the
+	// domain's two names visitors end up on.
+	WWW string `json:"www"`
+	// NoPHP turns PHP off for the website.
+	NoPHP bool `json:"no_php"`
+	// Root is the folder the website is served from, relative to the home;
+	// empty means its own domains/<domain>/public_html.
+	Root string `json:"root"`
 	// Certificate says which certificate serves HTTPS: "letsencrypt" (the
 	// default) or "custom" (one installed with ssl.install).
 	Certificate string `json:"certificate"`
@@ -88,6 +96,9 @@ func (p applyDomainParams) site(user sysuser.User) webserver.Site {
 		PHPVersion:        p.PHPVersion,
 		SSL:               p.SSL,
 		ForceHTTPS:        p.ForceHTTPS,
+		WWW:               webserver.WWWMode(p.WWW),
+		NoPHP:             p.NoPHP,
+		Root:              p.Root,
 		CustomCertificate: p.Certificate == "custom",
 		Kind:              webserver.Kind(p.Kind),
 		Parent:            p.Parent,

@@ -65,7 +65,7 @@ func TestRender(t *testing.T) {
 	got := string(Render([]Job{
 		{Schedule: "*/5 * * * *", Command: "php artisan schedule:run"},
 		{Schedule: "@daily", Command: `tar czf backup-$(date +%Y%m%d).tgz site && echo 100\% done`},
-	}))
+	}, ""))
 
 	want := "# Written by rayxo from the Cron Jobs page of the panel; changes made here are replaced.\n" +
 		"SHELL=/bin/bash\n" +
@@ -76,5 +76,30 @@ func TestRender(t *testing.T) {
 
 	if got != want {
 		t.Fatalf("crontab =\n%s\nwant\n%s", got, want)
+	}
+
+	mailed := string(Render([]Job{{Schedule: "@hourly", Command: "php backup.php"}}, "ops+cron@example.co.id"))
+	if !strings.Contains(mailed, "\nMAILTO=\"ops+cron@example.co.id\"\n") {
+		t.Fatalf("crontab does not mail its output:\n%s", mailed)
+	}
+}
+
+func TestMailToIsAPlainAddress(t *testing.T) {
+	for _, address := range []string{"", "budi@example.com", "ops+cron@mail.example.co.id", "a_b.c-d@x-y.io"} {
+		if err := ValidateMailTo(address); err != nil {
+			t.Errorf("%q: %v", address, err)
+		}
+	}
+
+	invalid := []string{
+		"budi", "budi@localhost", "-oQ/tmp@example.com", ".budi@example.com", "budi@-example.com", "budi@example-.com",
+		"budi @example.com", `"budi"@example.com`, "budi@example.com\nSHELL=/bin/sh", "budi@example.com\"", "a@b.com,c@d.com",
+		"budi%x@example.com", strings.Repeat("a", 250) + "@x.com",
+	}
+
+	for _, address := range invalid {
+		if ValidateMailTo(address) == nil {
+			t.Errorf("%q was accepted", address)
+		}
 	}
 }

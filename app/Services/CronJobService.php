@@ -16,13 +16,26 @@ use Illuminate\Validation\ValidationException;
  * Adds, changes and removes the cron jobs of hosting accounts. Every change
  * sends the account's whole set of enabled jobs to the agent (cron.apply),
  * which makes it the account's crontab, so applying it again is always safe
- * and the last change wins.
+ * and the last change wins. Output of the jobs is mailed to the account's
+ * cron email, when it has one (MAILTO).
  *
  * A suspended account keeps its crontab, but cron does not run it: the
  * account is expired while suspended, and cron checks accounts through PAM.
  */
 class CronJobService
 {
+    /**
+     * The longest address cron output may be mailed to.
+     */
+    public const MAX_MAIL_TO = 254;
+
+    /**
+     * A plain address cron may mail output to, as the agent accepts it: no
+     * leading dash or dot (cron hands it to sendmail), no quotes, spaces or
+     * percent signs, and a host name of at least two labels.
+     */
+    public const MAIL_TO_PATTERN = '/^[A-Za-z0-9_+][A-Za-z0-9._+-]*@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$/D';
+
     public function __construct(
         private TaskDispatcher $tasks,
         private AuditLogger $audit,
@@ -101,6 +114,31 @@ class CronJobService
     }
 
     /**
+     * Mail the output of the account's jobs to the address, or nothing when
+     * it is null, and write the crontab again with it.
+     *
+     * @param  string|null  $address  Already validated.
+     *
+     * @throws ValidationException
+     */
+    public function setEmail(User $account, ?string $address, User $actor): void
+    {
+        $this->ensureAccountIsActive($account, 'cron_email');
+
+        if ($address === $account->cron_email) {
+            return;
+        }
+
+        DB::transaction(function () use ($account, $address, $actor): void {
+            $account->forceFill(['cron_email' => $address])->save();
+
+            $this->audit->record('cron_job.email_changed', $account, ['email' => $address], $actor);
+
+            $this->apply($account, $actor);
+        });
+    }
+
+    /**
      * Where the account's latest crontab change stands: whether the agent is
      * still applying it, and the error when it failed.
      *
@@ -159,17 +197,18 @@ class CronJobService
         $this->tasks->dispatch('cron.apply', [
             'username' => $account->username,
             'jobs' => $jobs,
+            ...($account->cron_email === null ? [] : ['mail_to' => $account->cron_email]),
         ], $account, $actor);
     }
 
     /**
      * @throws ValidationException
      */
-    private function ensureAccountIsActive(User $account): void
+    private function ensureAccountIsActive(User $account, string $errorKey = 'schedule'): void
     {
         if (! $account->hasRole(Role::User) || $account->status !== AccountStatus::Active) {
             throw ValidationException::withMessages([
-                'schedule' => __('Cron jobs can only be changed while the account is active.'),
+                $errorKey => __('Cron jobs can only be changed while the account is active.'),
             ]);
         }
     }

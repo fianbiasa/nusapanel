@@ -33,6 +33,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::delete('domains/{domain}/ssl', [DomainController::class, 'removeSsl'])->name('domains.ssl.destroy');
         Route::post('domains/{domain}/certificate', [DomainController::class, 'installCertificate'])->name('domains.certificate.store');
         Route::put('domains/{domain}/force-https', [DomainController::class, 'updateForceHttps'])->name('domains.force-https.update');
+        Route::put('domains/{domain}/www', [DomainController::class, 'updateWww'])->name('domains.www.update');
+        Route::put('domains/{domain}/php-enabled', [DomainController::class, 'updatePhpEnabled'])->name('domains.php-enabled.update');
+        Route::put('domains/{domain}/document-root', [DomainController::class, 'updateDocumentRoot'])->name('domains.document-root.update');
         Route::put('domains/{domain}/php', [DomainController::class, 'updatePhpVersion'])->name('domains.php.update');
         Route::put('domains/{domain}/php-settings', [DomainController::class, 'updatePhpSettings'])->name('domains.php-settings.update');
         Route::get('databases', [DatabaseController::class, 'index'])->name('databases.index');
@@ -44,6 +47,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::delete('database-users/{databaseUser}', [DatabaseUserController::class, 'destroy'])->name('database-users.destroy');
         Route::get('cron-jobs', [CronJobController::class, 'index'])->name('cron-jobs.index');
         Route::post('cron-jobs', [CronJobController::class, 'store'])->name('cron-jobs.store');
+        Route::put('cron-jobs/email', [CronJobController::class, 'updateEmail'])->name('cron-jobs.email.update');
         Route::put('cron-jobs/{cronJob}', [CronJobController::class, 'update'])->name('cron-jobs.update');
         Route::delete('cron-jobs/{cronJob}', [CronJobController::class, 'destroy'])->name('cron-jobs.destroy');
         Route::put('sftp-password', [SftpPasswordController::class, 'update'])->middleware('throttle:10,1')->name('sftp-password.update');
@@ -84,6 +88,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('accounts', [AccountController::class, 'index'])->name('accounts.index');
         Route::get('accounts/create', [AccountController::class, 'create'])->name('accounts.create');
         Route::post('accounts', [AccountController::class, 'store'])->name('accounts.store');
+        Route::post('accounts/bulk', [AccountController::class, 'bulk'])->name('accounts.bulk');
         Route::post('accounts/{account}/suspend', [AccountController::class, 'suspend'])->name('accounts.suspend');
         Route::post('accounts/{account}/unsuspend', [AccountController::class, 'unsuspend'])->name('accounts.unsuspend');
         Route::put('accounts/{account}/package', [AccountController::class, 'updatePackage'])->name('accounts.package.update');

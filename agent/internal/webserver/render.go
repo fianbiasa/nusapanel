@@ -31,7 +31,9 @@ type siteData struct {
 	NginxAccountDir string
 	Backend         string
 	IPv6            bool
-	// Socket and PoolName identify the website's PHP-FPM pool.
+	// PHP is set when the website runs PHP, in the PHP-FPM pool Socket and
+	// PoolName identify.
+	PHP      bool
 	Socket   string
 	PoolName string
 	// ClientMaxBodySize is the largest request body Nginx accepts, enough
@@ -41,8 +43,11 @@ type siteData struct {
 	AcmeDir string
 	// SSL adds a server on port 443 with Certificate and CertificateKey;
 	// ForceHTTPS redirects port 80 to it.
-	SSL            bool
-	ForceHTTPS     bool
+	SSL        bool
+	ForceHTTPS bool
+	// WWW is "www" or "bare" when one of the site's two names redirects
+	// to the other, else empty.
+	WWW            string
 	Certificate    string
 	CertificateKey string
 	// ForwardTo is the domain a forward redirects every request to; empty
@@ -134,12 +139,14 @@ func (m *Manager) siteData(site Site) siteData {
 		NginxAccountDir:   m.nginxAccountDir(site.User),
 		Backend:           m.cfg.Backend,
 		IPv6:              m.hasIPv6(),
+		PHP:               !site.NoPHP,
 		Socket:            pool.Socket,
 		PoolName:          pool.PoolName,
 		ClientMaxBodySize: clientMaxBodySize(site.PHPSettings),
 		AcmeDir:           m.cfg.AcmeDir,
 		SSL:               site.SSL,
 		ForceHTTPS:        site.ForceHTTPS,
+		WWW:               wwwRedirect(site.WWW),
 		Certificate:       certificate,
 		CertificateKey:    certificateKey,
 	}
@@ -342,4 +349,14 @@ func (m *Manager) customCertificateKeyFile(domain string) string {
 
 func (m *Manager) challengeDir() string {
 	return m.cfg.AcmeDir + "/.well-known/acme-challenge"
+}
+
+// wwwRedirect is the mode the vhost template redirects for: empty when the
+// site serves both names.
+func wwwRedirect(mode WWWMode) string {
+	if mode == WWWOnly || mode == WWWBare {
+		return string(mode)
+	}
+
+	return ""
 }

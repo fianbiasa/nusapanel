@@ -4,10 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Enums\DomainType;
 use App\Enums\SslStatus;
+use App\Enums\WwwMode;
 use App\Http\Requests\StoreCustomCertificateRequest;
 use App\Http\Requests\StoreDomainRequest;
 use App\Http\Requests\UpdatePhpSettingsRequest;
 use App\Models\Domain;
+use App\Rules\DocumentRoot;
 use App\Services\DomainService;
 use App\Services\PhpVersionService;
 use App\Services\ServerSettingsService;
@@ -74,6 +76,12 @@ class DomainController extends Controller
                 'ssl_expires_at' => $domain->ssl_expires_at?->toIso8601String(),
                 'ssl_error' => $domain->ssl_error,
                 'force_https' => $domain->force_https,
+                'www_mode' => $domain->www_mode->value,
+                'document_root' => $domain->type === DomainType::Pointer ? null : ($domain->document_root ?? "domains/{$domain->name}/public_html"),
+                'document_root_custom' => $domain->document_root !== null,
+                'php_enabled' => $domain->type === DomainType::Pointer
+                    ? ($websites->firstWhere('id', $domain->parent_id)->php_enabled ?? true)
+                    : $domain->php_enabled,
                 'created_at' => $domain->created_at?->toIso8601String(),
             ])
             ->values();
@@ -183,6 +191,83 @@ class DomainController extends Controller
         }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => $message]);
+
+        return back();
+    }
+
+    /**
+     * Serve a subdomain from another folder of the home, or its own again.
+     */
+    public function updateDocumentRoot(Request $request, Domain $domain): RedirectResponse
+    {
+        Gate::authorize('update', $domain);
+
+        $request->merge(['document_root' => DocumentRoot::normalize($request->input('document_root'))]);
+
+        $validated = $request->validate([
+            'document_root' => ['nullable', 'string', new DocumentRoot],
+        ]);
+
+        $root = $validated['document_root'] ?? null;
+
+        $this->domains->setDocumentRoot($domain, $root === '' ? null : $root, $request->user());
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => __(':domain is now served from :folder.', ['domain' => $domain->display_name, 'folder' => $domain->documentRoot()]),
+        ]);
+
+        return back();
+    }
+
+    /**
+     * Turn PHP on or off for a website.
+     */
+    public function updatePhpEnabled(Request $request, Domain $domain): RedirectResponse
+    {
+        Gate::authorize('update', $domain);
+
+        $validated = $request->validate([
+            'php_enabled' => ['required', 'boolean'],
+        ]);
+
+        $enabled = (bool) $validated['php_enabled'];
+
+        $this->domains->setPhpEnabled($domain, $enabled, $request->user());
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => $enabled
+                ? __(':domain runs PHP again.', ['domain' => $domain->display_name])
+                : __(':domain no longer runs PHP; its PHP files are refused.', ['domain' => $domain->display_name]),
+        ]);
+
+        return back();
+    }
+
+    /**
+     * Choose which of the website's two names visitors end up on.
+     */
+    public function updateWww(Request $request, Domain $domain): RedirectResponse
+    {
+        Gate::authorize('update', $domain);
+
+        $validated = $request->validate([
+            'www_mode' => ['required', Rule::enum(WwwMode::class)],
+        ]);
+
+        $mode = WwwMode::from($validated['www_mode']);
+
+        $this->domains->setWwwMode($domain, $mode, $request->user());
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => match ($mode) {
+                WwwMode::Www => __(':domain now always opens as www.:name.', ['domain' => $domain->display_name, 'name' => $domain->display_name]),
+                WwwMode::Bare => __(':domain now always opens without www.', ['domain' => $domain->display_name]),
+                WwwMode::Both => __(':domain opens with and without www again.', ['domain' => $domain->display_name]),
+            },
+        ]);
 
         return back();
     }

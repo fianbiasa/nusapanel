@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreCronJobRequest;
+use App\Http\Requests\UpdateCronEmailRequest;
 use App\Http\Requests\UpdateCronJobRequest;
 use App\Models\CronJob;
 use App\Services\CronJobService;
@@ -37,6 +38,7 @@ class CronJobController extends Controller
                     'enabled' => $job->enabled,
                 ]),
             'sync' => $this->cron->syncState($account),
+            'cron_email' => $account->cron_email,
             'home' => '/home/'.$account->username,
             'limits' => AccountLimits::for($account)->toArray(),
         ]);
@@ -77,6 +79,26 @@ class CronJobController extends Controller
         );
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('The cron job is being updated.')]);
+
+        return back();
+    }
+
+    /**
+     * Mail the output of the account's cron jobs to an address, or stop
+     * mailing it.
+     */
+    public function updateEmail(UpdateCronEmailRequest $request): RedirectResponse
+    {
+        $email = $request->filled('cron_email') ? $request->string('cron_email')->toString() : null;
+
+        $this->cron->setEmail($request->user(), $email, $request->user());
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => $email === null
+                ? __('Cron job output is no longer mailed.')
+                : __('Cron job output is mailed to :email.', ['email' => $email]),
+        ]);
 
         return back();
     }

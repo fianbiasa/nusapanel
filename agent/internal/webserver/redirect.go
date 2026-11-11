@@ -27,6 +27,18 @@ const (
 	KindForward Kind = "forward"
 )
 
+// WWWMode says how a site treats its www. name.
+type WWWMode string
+
+const (
+	// WWWBoth serves the site on both names; it is what an empty mode means.
+	WWWBoth WWWMode = "both"
+	// WWWOnly sends visitors of the bare name to www.<domain> (301).
+	WWWOnly WWWMode = "www"
+	// WWWBare sends visitors of www.<domain> to the bare name (301).
+	WWWBare WWWMode = "bare"
+)
+
 // MaxRedirects is the most URL redirects one site may have.
 const MaxRedirects = 100
 

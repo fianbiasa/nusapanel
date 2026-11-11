@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -30,13 +31,20 @@ var ftpDirNamePattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 // sysuser.System implements it.
 type ftpSystem interface {
 	EnsurePath(ctx context.Context, path sysuser.Path) error
+	// CountFTPQuota counts the files in dir, as the account username, into
+	// the .ftpquota file Pure-FTPd keeps its quotas with.
+	CountFTPQuota(ctx context.Context, username, dir string) error
 }
 
 // ftpDirParams are the params of ftp.ensure_dir: the folder of an FTP
-// account, relative to the account's home ("" is the home itself).
+// account, relative to the account's home ("" is the home itself). Quota
+// is set for a login with an FTP quota: Pure-FTPd only counts what passes
+// through it and starts from an empty folder, so the files already there
+// are counted first.
 type ftpDirParams struct {
 	Username  string `json:"username"`
 	Directory string `json:"directory"`
+	Quota     bool   `json:"quota"`
 }
 
 func (p ftpDirParams) account() string { return p.Username }
@@ -102,8 +110,9 @@ func ftpMethods(accounts accountSystem, system ftpSystem) map[string]rpc.Method 
 }
 
 // ensureDir implements ftp.ensure_dir: it creates the missing folders of an
-// FTP account's folder, as the account's, and reports the account's ids.
-// Folders that exist are left as they are.
+// FTP account's folder, as the account's, counts its files for an FTP quota
+// when asked, and reports the account's ids. Folders that exist are left as
+// they are.
 func (f ftpActions) ensureDir(ctx context.Context, raw json.RawMessage) (any, error) {
 	params, err := decodeWebParams[ftpDirParams](raw)
 	if err != nil {
@@ -124,6 +133,14 @@ func (f ftpActions) ensureDir(ctx context.Context, raw json.RawMessage) (any, er
 
 	if err != nil {
 		return nil, systemError(err)
+	}
+
+	if params.Quota {
+		dir := filepath.Join(append([]string{user.Home}, names...)...)
+
+		if err := f.system.CountFTPQuota(ctx, params.Username, dir); err != nil {
+			return nil, rpc.Errorf(rpc.CodeActionFailed, "could not count the files of %s for its FTP quota: %v", dir, err)
+		}
 	}
 
 	return ftpFolder{UID: user.UID, GID: user.GID, Home: user.Home}, nil

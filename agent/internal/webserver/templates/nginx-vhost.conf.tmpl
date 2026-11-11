@@ -40,6 +40,19 @@ server {
 {{- /* What every server of the domain shares, on any port. */ -}}
 {{define "identity"}}
     server_name {{.Domain}} www.{{.Domain}};
+{{- if eq .WWW "www"}}
+
+    # Every visitor ends up on www.{{.Domain}}.
+    if ($host = {{.Domain}}) {
+        return 301 $scheme://www.{{.Domain}}$request_uri;
+    }
+{{- else if eq .WWW "bare"}}
+
+    # Every visitor ends up on {{.Domain}}, without www.
+    if ($host = www.{{.Domain}}) {
+        return 301 $scheme://{{.Domain}}$request_uri;
+    }
+{{- end}}
 
     access_log {{.LogDir}}/{{.Domain}}.access.log;
     error_log {{.LogDir}}/{{.Domain}}.error.log;
@@ -90,7 +103,8 @@ server {
     }
 {{- end}}
 
-    location ~ /\.ht {
+    # Apache's own files, and the usage Pure-FTPd keeps for an FTP quota.
+    location ~ /\.(?:ht|ftpquota$) {
         deny all;
     }
 

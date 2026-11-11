@@ -4,6 +4,7 @@ import {
     CornerDownRight,
     ExternalLink,
     FileKey,
+    FolderOpen,
     Globe,
     Info,
     Lock,
@@ -19,6 +20,7 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { AddWebsitePanel } from '@/components/add-website-panel';
 import InputError from '@/components/input-error';
+import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/page-header';
 import type { PhpSettingOptions } from '@/components/php-settings-form';
 import { PhpSettingsForm } from '@/components/php-settings-form';
@@ -55,6 +57,9 @@ import { formatDate, formatDateTime } from '@/lib/format';
 import { destroy } from '@/routes/domains';
 import { store as storeCertificate } from '@/routes/domains/certificate';
 import { update as updateForceHttps } from '@/routes/domains/force-https';
+import { update as updateDocumentRoot } from '@/routes/domains/document-root';
+import { update as updatePhpEnabled } from '@/routes/domains/php-enabled';
+import { update as updateWww } from '@/routes/domains/www';
 import { update as updatePhpVersion } from '@/routes/domains/php';
 import { destroy as destroySsl, store as storeSsl } from '@/routes/domains/ssl';
 import type { AccountLimits } from '@/types';
@@ -86,14 +91,24 @@ type DomainRow = {
     ssl_expires_at: string | null;
     ssl_error: string | null;
     force_https: boolean;
+    www_mode: WwwMode;
+    /** Whether the website runs PHP; a pointer shows its domain's. */
+    php_enabled: boolean;
+    /** The folder it is served from, relative to the home; null for a pointer. */
+    document_root: string | null;
+    document_root_custom: boolean;
     created_at: string | null;
 };
+
+/** Which of a website's two names its visitors end up on. */
+type WwwMode = 'both' | 'www' | 'bare';
 
 type DomainAction = {
     type:
         | 'request-ssl'
         | 'custom-certificate'
         | 'php-settings'
+        | 'document-root'
         | 'remove-ssl'
         | 'delete';
     domain: DomainRow;
@@ -173,6 +188,26 @@ export default function DomainsIndex({
     const openDialog = (type: DomainAction['type'], domain: DomainRow) => {
         setAction({ type, domain });
         setDialogOpen(true);
+    };
+
+    const togglePhp = (domain: DomainRow) => {
+        router.put(
+            updatePhpEnabled.url(domain.id),
+            { php_enabled: !domain.php_enabled },
+            { preserveScroll: true, onError: toastFirstError },
+        );
+    };
+
+    const changeWww = (domain: DomainRow, mode: WwwMode) => {
+        if (mode === domain.www_mode) {
+            return;
+        }
+
+        router.put(
+            updateWww.url(domain.id),
+            { www_mode: mode },
+            { preserveScroll: true, onError: toastFirstError },
+        );
     };
 
     const toggleForceHttps = (domain: DomainRow) => {
@@ -279,6 +314,7 @@ export default function DomainsIndex({
                                                     default_php_version
                                                 }
                                                 onChange={changePhpVersion}
+                                                onTogglePhp={togglePhp}
                                                 onSettings={() =>
                                                     openDialog(
                                                         'php-settings',
@@ -304,6 +340,7 @@ export default function DomainsIndex({
                                                 onToggleForceHttps={
                                                     toggleForceHttps
                                                 }
+                                                onChangeWww={changeWww}
                                                 onCancelSsl={cancelSsl}
                                             />
                                         </td>
@@ -338,6 +375,13 @@ export default function DomainsIndex({
                             domain={action.domain}
                             settings={action.domain.php_settings}
                             options={php_setting_options}
+                            onSuccess={() => setDialogOpen(false)}
+                        />
+                    )}
+                    {action?.type === 'document-root' && (
+                        <DocumentRootForm
+                            key={`document-root-${action.domain.id}`}
+                            domain={action.domain}
                             onSuccess={() => setDialogOpen(false)}
                         />
                     )}
@@ -431,12 +475,14 @@ function PhpVersionCell({
     versions,
     defaultVersion,
     onChange,
+    onTogglePhp,
     onSettings,
 }: {
     domain: DomainRow;
     versions: string[];
     defaultVersion: string;
     onChange: (domain: DomainRow, version: string) => void;
+    onTogglePhp: (domain: DomainRow) => void;
     onSettings: () => void;
 }) {
     if (domain.pointer_mode === 'redirect') {
@@ -449,7 +495,40 @@ function PhpVersionCell({
         !isSslBusy(domain);
 
     if (!canChange) {
-        return <span className="font-medium">{domain.php_version}</span>;
+        return (
+            <span className="font-medium">
+                {domain.php_enabled ? domain.php_version : 'PHP mati'}
+            </span>
+        );
+    }
+
+    if (!domain.php_enabled) {
+        return (
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1 rounded-lg font-semibold text-muted-foreground"
+                        aria-label={`PHP ${domain.display_name}: mati`}
+                    >
+                        PHP mati
+                        <ChevronDown className="size-3.5" />
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                    align="start"
+                    className="min-w-44 rounded-xl"
+                >
+                    <DropdownMenuCheckboxItem
+                        checked={false}
+                        onCheckedChange={() => onTogglePhp(domain)}
+                    >
+                        PHP aktif
+                    </DropdownMenuCheckboxItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
+        );
     }
 
     return (
@@ -491,6 +570,13 @@ function PhpVersionCell({
                 <DropdownMenuItem onSelect={onSettings}>
                     <SlidersHorizontal /> Pengaturan PHP…
                 </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuCheckboxItem
+                    checked
+                    onCheckedChange={() => onTogglePhp(domain)}
+                >
+                    PHP aktif
+                </DropdownMenuCheckboxItem>
             </DropdownMenuContent>
         </DropdownMenu>
     );
@@ -579,15 +665,21 @@ function RowActions({
     sslAllowed,
     onAction,
     onToggleForceHttps,
+    onChangeWww,
     onCancelSsl,
 }: {
     domain: DomainRow;
     sslAllowed: boolean;
     onAction: (type: DomainAction['type'], domain: DomainRow) => void;
     onToggleForceHttps: (domain: DomainRow) => void;
+    onChangeWww: (domain: DomainRow, mode: WwwMode) => void;
     onCancelSsl: (domain: DomainRow) => void;
 }) {
     const isActive = domain.status === 'active';
+    // A redirecting pointer sends everyone to its domain anyway.
+    const canChooseWww = isActive && domain.pointer_mode !== 'redirect';
+    const canChooseFolder =
+        domain.type === 'subdomain' && (isActive || domain.status === 'failed');
     const canRequestSsl = isActive && sslAllowed && domain.ssl_status === null;
     const canRetrySsl =
         isActive && sslAllowed && domain.ssl_status === 'failed';
@@ -608,7 +700,7 @@ function RowActions({
     const canDelete =
         deletableStatuses.includes(domain.status) && !isSslBusy(domain);
 
-    if (!hasSslActions && !canDelete) {
+    if (!hasSslActions && !canChooseWww && !canChooseFolder && !canDelete) {
         return null;
     }
 
@@ -679,7 +771,46 @@ function RowActions({
                             <X /> Batalkan
                         </DropdownMenuItem>
                     )}
-                    {hasSslActions && canDelete && <DropdownMenuSeparator />}
+                    {canChooseFolder && (
+                        <>
+                            {hasSslActions && <DropdownMenuSeparator />}
+                            <DropdownMenuItem
+                                onSelect={() =>
+                                    onAction('document-root', domain)
+                                }
+                            >
+                                <FolderOpen /> Folder website…
+                            </DropdownMenuItem>
+                        </>
+                    )}
+                    {canChooseWww && (
+                        <>
+                            {(hasSslActions || canChooseFolder) && (
+                                <DropdownMenuSeparator />
+                            )}
+                            <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground">
+                                Alamat www
+                            </DropdownMenuLabel>
+                            <DropdownMenuRadioGroup
+                                value={domain.www_mode}
+                                onValueChange={(mode) =>
+                                    onChangeWww(domain, mode as WwwMode)
+                                }
+                            >
+                                <DropdownMenuRadioItem value="both">
+                                    Dengan &amp; tanpa www
+                                </DropdownMenuRadioItem>
+                                <DropdownMenuRadioItem value="www">
+                                    Selalu www.{domain.display_name}
+                                </DropdownMenuRadioItem>
+                                <DropdownMenuRadioItem value="bare">
+                                    Selalu tanpa www
+                                </DropdownMenuRadioItem>
+                            </DropdownMenuRadioGroup>
+                        </>
+                    )}
+                    {(hasSslActions || canChooseWww || canChooseFolder) &&
+                        canDelete && <DropdownMenuSeparator />}
                     {canDelete && (
                         <DropdownMenuItem
                             variant="destructive"
@@ -967,6 +1098,79 @@ function CustomCertificateForm({
     );
 }
 
+/** The folder a subdomain is served from, inside domains/ of the home. */
+function DocumentRootForm({
+    domain,
+    onSuccess,
+}: {
+    domain: DomainRow;
+    onSuccess: () => void;
+}) {
+    const ownFolder = `domains/${domain.name}/public_html`;
+    const [value, setValue] = useState(domain.document_root ?? ownFolder);
+
+    return (
+        <Form
+            {...updateDocumentRoot.form(domain.id)}
+            options={{ preserveScroll: true }}
+            onSuccess={onSuccess}
+            className="grid gap-4"
+        >
+            {({ processing, errors }) => (
+                <>
+                    <DialogHeader>
+                        <DialogTitle>
+                            Folder website {domain.display_name}
+                        </DialogTitle>
+                        <DialogDescription>
+                            Folder di dalam <code>domains/</code> di home kamu,
+                            misalnya{' '}
+                            <code>domains/example.com/public_html/blog</code>.
+                            Folder dibuat kalau belum ada; file di folder lama
+                            tetap tersimpan.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="grid gap-2">
+                        <Input
+                            name="document_root"
+                            value={value}
+                            onChange={(event) => setValue(event.target.value)}
+                            className="rounded-xl font-mono"
+                            autoComplete="off"
+                            aria-invalid={
+                                errors.document_root ? true : undefined
+                            }
+                        />
+                        <InputError message={errors.document_root} />
+                        {value !== ownFolder && (
+                            <button
+                                type="button"
+                                className="justify-self-start text-sm text-primary underline-offset-4 hover:underline"
+                                onClick={() => setValue(ownFolder)}
+                            >
+                                Pakai folder bawaan ({ownFolder})
+                            </button>
+                        )}
+                    </div>
+
+                    <DialogFooter className="gap-2">
+                        <DialogClose asChild>
+                            <Button type="button" variant="secondary">
+                                Batal
+                            </Button>
+                        </DialogClose>
+                        <Button type="submit" disabled={processing}>
+                            {processing && <Spinner />}
+                            Simpan
+                        </Button>
+                    </DialogFooter>
+                </>
+            )}
+        </Form>
+    );
+}
+
 function RemoveSslForm({
     domain,
     onSuccess,
@@ -1044,7 +1248,8 @@ function DeleteDomainForm({
                                     Website ini tidak akan dilayani lagi oleh
                                     server. File di{' '}
                                     <code className="font-mono text-xs">
-                                        domains/{domain.name}/public_html
+                                        {domain.document_root ??
+                                            `domains/${domain.name}/public_html`}
                                     </code>{' '}
                                     tetap tersimpan di folder home kamu.
                                 </>

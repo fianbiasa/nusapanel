@@ -17,6 +17,7 @@ import { Pagination } from '@/components/pagination';
 import { Panel, tableStyles } from '@/components/panel';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
     Dialog,
     DialogClose,
@@ -39,6 +40,7 @@ import { useInitials } from '@/hooks/use-initials';
 import { cn } from '@/lib/utils';
 import { formatDateTime, formatDiskUsage, roleLabels } from '@/lib/format';
 import {
+    bulk,
     create,
     destroy,
     index,
@@ -65,10 +67,11 @@ type AccountRow = {
     created_at: string | null;
 };
 
-type AccountAction = {
-    type: 'suspend' | 'unsuspend' | 'delete' | 'package';
-    account: AccountRow;
-};
+type ActionType = 'suspend' | 'unsuspend' | 'delete' | 'package';
+
+type AccountAction =
+    | { type: ActionType; account: AccountRow }
+    | { type: ActionType; bulk: number[] };
 
 type Props = {
     accounts: Paginated<AccountRow>;
@@ -85,6 +88,7 @@ export default function AccountsIndex({ accounts, packages, filters }: Props) {
     const getInitials = useInitials();
     const [action, setAction] = useState<AccountAction | null>(null);
     const [dialogOpen, setDialogOpen] = useState(false);
+    const [selected, setSelected] = useState<number[]>([]);
 
     // Refresh the list while the agent is still creating or deleting accounts.
     const hasBusyAccounts = accounts.data.some((account) =>
@@ -104,13 +108,43 @@ export default function AccountsIndex({ accounts, packages, filters }: Props) {
         }
     }, [hasBusyAccounts, start, stop]);
 
-    const openDialog = (type: AccountAction['type'], account: AccountRow) => {
+    const openDialog = (type: ActionType, account: AccountRow) => {
         setAction({ type, account });
         setDialogOpen(true);
     };
 
     const isProtected = (account: AccountRow) =>
         account.role === 'admin' || account.id === auth.user.id;
+
+    // Accounts that can be picked for a bulk action; the server checks each
+    // one again and skips those the action does not fit.
+    const isSelectable = (account: AccountRow) =>
+        !isProtected(account) && account.status !== 'deleting';
+    const selectable = accounts.data.filter(isSelectable);
+    const selectedIds = selected.filter((id) =>
+        selectable.some((account) => account.id === id),
+    );
+    const allSelected =
+        selectable.length > 0 && selectedIds.length === selectable.length;
+
+    const toggleAll = (checked: boolean) =>
+        setSelected(checked ? selectable.map((account) => account.id) : []);
+    const toggleOne = (id: number, checked: boolean) =>
+        setSelected((current) =>
+            checked
+                ? [...current, id]
+                : current.filter((selectedId) => selectedId !== id),
+        );
+
+    const openBulkDialog = (type: ActionType) => {
+        setAction({ type, bulk: selectedIds });
+        setDialogOpen(true);
+    };
+
+    const finishBulk = () => {
+        setSelected([]);
+        setDialogOpen(false);
+    };
 
     return (
         <>
@@ -170,9 +204,32 @@ export default function AccountsIndex({ accounts, packages, filters }: Props) {
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
+                        {selectedIds.length > 0 && (
+                            <BulkBar
+                                count={selectedIds.length}
+                                onAction={openBulkDialog}
+                                onClear={() => setSelected([])}
+                            />
+                        )}
                         <table className={tableStyles.table}>
                             <thead className={tableStyles.head}>
                                 <tr>
+                                    <th className={`${tableStyles.th} w-10`}>
+                                        <Checkbox
+                                            aria-label="Pilih semua akun di halaman ini"
+                                            checked={
+                                                allSelected
+                                                    ? true
+                                                    : selectedIds.length > 0
+                                                      ? 'indeterminate'
+                                                      : false
+                                            }
+                                            onCheckedChange={(checked) =>
+                                                toggleAll(checked === true)
+                                            }
+                                            disabled={selectable.length === 0}
+                                        />
+                                    </th>
                                     <th className={tableStyles.th}>Akun</th>
                                     <th className={tableStyles.th}>Domain</th>
                                     <th className={tableStyles.th}>Paket</th>
@@ -192,6 +249,23 @@ export default function AccountsIndex({ accounts, packages, filters }: Props) {
                                         key={account.id}
                                         className={tableStyles.row}
                                     >
+                                        <td className={tableStyles.td}>
+                                            <Checkbox
+                                                aria-label={`Pilih ${account.username}`}
+                                                checked={selectedIds.includes(
+                                                    account.id,
+                                                )}
+                                                onCheckedChange={(checked) =>
+                                                    toggleOne(
+                                                        account.id,
+                                                        checked === true,
+                                                    )
+                                                }
+                                                disabled={
+                                                    !isSelectable(account)
+                                                }
+                                            />
+                                        </td>
                                         <td className={tableStyles.td}>
                                             <div className="flex items-center gap-3">
                                                 <span className="flex size-9 shrink-0 items-center justify-center rounded-full rayxo-brand-gradient text-xs font-semibold text-white">
@@ -290,22 +364,35 @@ export default function AccountsIndex({ accounts, packages, filters }: Props) {
 
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
                 <DialogContent className="rounded-2xl">
-                    {action?.type === 'package' && (
-                        <ChangePackageForm
-                            key={`package-${action.account.id}`}
-                            account={action.account}
-                            packages={packages}
-                            onSuccess={() => setDialogOpen(false)}
-                        />
-                    )}
-                    {action && action.type !== 'package' && (
-                        <AccountActionForm
-                            key={`${action.type}-${action.account.id}`}
+                    {action && 'bulk' in action && (
+                        <BulkActionForm
+                            key={`bulk-${action.type}`}
                             type={action.type}
-                            account={action.account}
-                            onSuccess={() => setDialogOpen(false)}
+                            ids={action.bulk}
+                            packages={packages}
+                            onSuccess={finishBulk}
                         />
                     )}
+                    {action &&
+                        'account' in action &&
+                        action.type === 'package' && (
+                            <ChangePackageForm
+                                key={`package-${action.account.id}`}
+                                account={action.account}
+                                packages={packages}
+                                onSuccess={() => setDialogOpen(false)}
+                            />
+                        )}
+                    {action &&
+                        'account' in action &&
+                        action.type !== 'package' && (
+                            <AccountActionForm
+                                key={`${action.type}-${action.account.id}`}
+                                type={action.type}
+                                account={action.account}
+                                onSuccess={() => setDialogOpen(false)}
+                            />
+                        )}
                 </DialogContent>
             </Dialog>
         </>
@@ -468,7 +555,7 @@ function RowActions({
 }: {
     account: AccountRow;
     isProtected: boolean;
-    onAction: (type: AccountAction['type'], account: AccountRow) => void;
+    onAction: (type: ActionType, account: AccountRow) => void;
 }) {
     const canChangePackage =
         account.role === 'user' && account.status !== 'deleting';
@@ -529,5 +616,194 @@ function RowActions({
                 </DropdownMenuContent>
             </DropdownMenu>
         </div>
+    );
+}
+
+/** What to do with the accounts picked on this page. */
+function BulkBar({
+    count,
+    onAction,
+    onClear,
+}: {
+    count: number;
+    onAction: (type: ActionType) => void;
+    onClear: () => void;
+}) {
+    return (
+        <div className="flex flex-wrap items-center gap-2 border-b bg-muted/40 px-6 py-3">
+            <span className="mr-auto text-sm font-semibold">
+                {count} akun dipilih
+            </span>
+            <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onAction('package')}
+            >
+                <Package /> Ganti paket
+            </Button>
+            <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onAction('suspend')}
+            >
+                <ShieldOff /> Suspend
+            </Button>
+            <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onAction('unsuspend')}
+            >
+                <ShieldCheck /> Buka suspend
+            </Button>
+            <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => onAction('delete')}
+            >
+                <Trash2 /> Hapus
+            </Button>
+            <Button variant="ghost" size="sm" onClick={onClear}>
+                Batal pilih
+            </Button>
+        </div>
+    );
+}
+
+/** The confirmation of a bulk action, with what the action needs. */
+function BulkActionForm({
+    type,
+    ids,
+    packages,
+    onSuccess,
+}: {
+    type: ActionType;
+    ids: number[];
+    packages: PackageOption[];
+    onSuccess: () => void;
+}) {
+    const [confirmation, setConfirmation] = useState('');
+    const count = ids.length;
+
+    const copy = {
+        package: {
+            title: `Ganti paket ${count} akun?`,
+            description:
+                'Batas paket baru langsung berlaku. Akun yang sudah memakai lebih dari batasnya tetap jalan, tapi tidak bisa menambah lagi.',
+            confirm: 'Simpan paket',
+            variant: 'default' as const,
+        },
+        suspend: {
+            title: `Suspend ${count} akun?`,
+            description:
+                'Akun-akun ini dikeluarkan dan tidak bisa masuk lagi, website-nya menampilkan halaman "tidak tersedia", dan akunnya dikunci di server. Akun yang tidak aktif dilewati.',
+            confirm: 'Suspend akun',
+            variant: 'destructive' as const,
+        },
+        unsuspend: {
+            title: `Buka suspend ${count} akun?`,
+            description:
+                'Akun-akun ini bisa masuk lagi dan website-nya aktif kembali. Akun yang tidak di-suspend dilewati.',
+            confirm: 'Buka suspend',
+            variant: 'default' as const,
+        },
+        delete: {
+            title: `Hapus ${count} akun?`,
+            description:
+                'Akun-akun ini beserta semua file, website, database dan email-nya dihapus dari server. Tindakan ini tidak bisa dibatalkan.',
+            confirm: 'Hapus akun',
+            variant: 'destructive' as const,
+        },
+    }[type];
+
+    const isConfirmed = type !== 'delete' || confirmation.trim() === 'HAPUS';
+
+    return (
+        <Form
+            {...bulk.form()}
+            options={{ preserveScroll: true }}
+            onSuccess={onSuccess}
+            className="grid gap-4"
+        >
+            {({ processing, errors }) => (
+                <>
+                    <DialogHeader>
+                        <DialogTitle>{copy.title}</DialogTitle>
+                        <DialogDescription>
+                            {copy.description}
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <input type="hidden" name="action" value={type} />
+                    {ids.map((id) => (
+                        <input key={id} type="hidden" name="ids[]" value={id} />
+                    ))}
+
+                    {type === 'suspend' && (
+                        <div className="grid gap-2">
+                            <Label htmlFor="bulk-reason">
+                                Alasan (opsional)
+                            </Label>
+                            <Input
+                                id="bulk-reason"
+                                name="reason"
+                                maxLength={255}
+                                placeholder="mis. Tagihan belum dibayar"
+                                autoComplete="off"
+                            />
+                            <InputError message={errors.reason} />
+                        </div>
+                    )}
+
+                    {type === 'package' && (
+                        <div className="grid gap-2">
+                            <Label htmlFor="bulk-package">Paket</Label>
+                            <PackageSelect
+                                id="bulk-package"
+                                packages={packages}
+                                defaultValue={packages[0]?.id ?? null}
+                                invalid={Boolean(errors.package_id)}
+                            />
+                            <InputError message={errors.package_id} />
+                        </div>
+                    )}
+
+                    {type === 'delete' && (
+                        <div className="grid gap-2">
+                            <Label htmlFor="bulk-confirmation">
+                                Ketik <span className="font-mono">HAPUS</span>{' '}
+                                untuk mengonfirmasi
+                            </Label>
+                            <Input
+                                id="bulk-confirmation"
+                                value={confirmation}
+                                onChange={(event) =>
+                                    setConfirmation(event.target.value)
+                                }
+                                autoComplete="off"
+                                spellCheck={false}
+                            />
+                        </div>
+                    )}
+
+                    <InputError message={errors.ids ?? errors.action} />
+
+                    <DialogFooter className="gap-2">
+                        <DialogClose asChild>
+                            <Button type="button" variant="secondary">
+                                Batal
+                            </Button>
+                        </DialogClose>
+                        <Button
+                            type="submit"
+                            variant={copy.variant}
+                            disabled={processing || !isConfirmed}
+                        >
+                            {processing && <Spinner />}
+                            {copy.confirm}
+                        </Button>
+                    </DialogFooter>
+                </>
+            )}
+        </Form>
     );
 }

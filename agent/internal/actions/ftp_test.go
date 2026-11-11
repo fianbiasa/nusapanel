@@ -12,16 +12,25 @@ import (
 	"rayxo/agent/internal/sysuser"
 )
 
-// fakeFTPSystem records the folders ftp.ensure_dir asks for.
+// fakeFTPSystem records the folders ftp.ensure_dir asks for and the
+// folders it counts for FTP quotas.
 type fakeFTPSystem struct {
-	paths []sysuser.Path
-	fail  error
+	paths     []sysuser.Path
+	counted   []string
+	fail      error
+	countFail error
 }
 
 func (f *fakeFTPSystem) EnsurePath(_ context.Context, path sysuser.Path) error {
 	f.paths = append(f.paths, path)
 
 	return f.fail
+}
+
+func (f *fakeFTPSystem) CountFTPQuota(_ context.Context, username, dir string) error {
+	f.counted = append(f.counted, username+":"+dir)
+
+	return f.countFail
 }
 
 func callFTP(t *testing.T, system *fakeSystem, ftp *fakeFTPSystem, params any) (json.RawMessage, error) {
@@ -75,6 +84,54 @@ func TestEnsureDirCreatesTheFolderAsTheAccount(t *testing.T) {
 	want := sysuser.Path{Home: "/home/budi", Dirs: []string{"domains", "example.com", "public_html"}, UID: 1001, GID: 1001, Mode: 0o755}
 	if len(ftp.paths) != 1 || !samePath(ftp.paths[0], want) {
 		t.Fatalf("paths = %+v", ftp.paths)
+	}
+}
+
+func TestEnsureDirCountsTheFilesOfALoginWithAQuota(t *testing.T) {
+	system := newFakeSystem()
+	system.addAccount("budi", 1001)
+	ftp := &fakeFTPSystem{}
+
+	if _, err := callFTP(t, system, ftp, map[string]any{"username": "budi", "directory": "domains/example.com/public_html"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(ftp.counted) != 0 {
+		t.Fatalf("a login without a quota was counted: %v", ftp.counted)
+	}
+
+	if _, err := callFTP(t, system, ftp, map[string]any{"username": "budi", "directory": "domains/example.com/public_html", "quota": true}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := callFTP(t, system, ftp, map[string]any{"username": "budi", "directory": "", "quota": true}); err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{"budi:/home/budi/domains/example.com/public_html", "budi:/home/budi"}
+	if !slices.Equal(ftp.counted, want) {
+		t.Fatalf("counted = %v, want %v", ftp.counted, want)
+	}
+}
+
+func TestEnsureDirFailsWhenTheQuotaCannotBeCounted(t *testing.T) {
+	system := newFakeSystem()
+	system.addAccount("budi", 1001)
+	ftp := &fakeFTPSystem{countFail: errors.New("exit status 1")}
+
+	_, err := callFTP(t, system, ftp, map[string]any{"username": "budi", "directory": "uploads", "quota": true})
+	if agentErr := assertCode(t, err, rpc.CodeActionFailed); !strings.Contains(agentErr.Message, "/home/budi/uploads for its FTP quota") {
+		t.Fatalf("message = %q", agentErr.Message)
+	}
+
+	// Nothing is counted for a folder that could not be made.
+	ftp = &fakeFTPSystem{fail: sysuser.ErrInTheWay}
+
+	_, err = callFTP(t, system, ftp, map[string]any{"username": "budi", "directory": "uploads", "quota": true})
+	assertCode(t, err, rpc.CodeActionFailed)
+
+	if len(ftp.counted) != 0 {
+		t.Fatalf("counted = %v", ftp.counted)
 	}
 }
 

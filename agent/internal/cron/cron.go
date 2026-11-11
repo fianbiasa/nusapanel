@@ -1,12 +1,14 @@
 // Package cron renders the crontab of a hosting account from the jobs the
 // panel keeps: a schedule and a shell command each, which the cron daemon
-// runs as the account's user. Schedules and commands are validated, so a job
-// can never add a line or a variable of its own.
+// runs as the account's user, and the address their output is mailed to.
+// Schedules, commands and the address are validated, so a job can never add
+// a line or a variable of its own.
 package cron
 
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -17,7 +19,14 @@ const (
 	MaxJobs = 100
 	// MaxCommand is the longest command, in bytes.
 	MaxCommand = 1024
+	// MaxMailTo is the longest address output may be mailed to.
+	MaxMailTo = 254
 )
+
+// mailToPattern is an address cron may mail output to: letters, digits and
+// "._+-" before the @, never starting with a dash or dot (cron hands the
+// address to sendmail), and a host name of at least two labels after it.
+var mailToPattern = regexp.MustCompile(`^[A-Za-z0-9_+][A-Za-z0-9._+-]*@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$`)
 
 // Job is one cron job: when, and what to run.
 type Job struct {
@@ -155,6 +164,20 @@ func ValidateCommand(command string) error {
 	return nil
 }
 
+// ValidateMailTo returns an error unless address is empty (output is not
+// mailed) or a plain address of at most MaxMailTo bytes.
+func ValidateMailTo(address string) error {
+	if address == "" {
+		return nil
+	}
+
+	if len(address) > MaxMailTo || !mailToPattern.MatchString(address) {
+		return fmt.Errorf("mail_to %q must be a plain email address of at most %d bytes", address, MaxMailTo)
+	}
+
+	return nil
+}
+
 // Validate checks every job and their number.
 func Validate(jobs []Job) error {
 	if len(jobs) > MaxJobs {
@@ -175,16 +198,17 @@ func Validate(jobs []Job) error {
 }
 
 // Render returns the crontab of jobs, which must be valid. Commands run in
-// bash with a plain PATH, and their output is not mailed. A "%" that is not
-// escaped yet is escaped, since cron would otherwise cut the command there:
-// commands are written as they would be typed in a terminal.
-func Render(jobs []Job) []byte {
+// bash with a plain PATH. Their output is mailed to mailTo, which must be
+// valid; empty mails nothing. A "%" that is not escaped yet is escaped, since
+// cron would otherwise cut the command there: commands are written as they
+// would be typed in a terminal.
+func Render(jobs []Job, mailTo string) []byte {
 	var crontab strings.Builder
 
 	crontab.WriteString("# Written by rayxo from the Cron Jobs page of the panel; changes made here are replaced.\n")
 	crontab.WriteString("SHELL=/bin/bash\n")
 	crontab.WriteString("PATH=/usr/local/bin:/usr/bin:/bin\n")
-	crontab.WriteString("MAILTO=\"\"\n")
+	crontab.WriteString("MAILTO=\"" + mailTo + "\"\n")
 
 	for _, job := range jobs {
 		crontab.WriteString("\n" + job.Schedule + " " + escapePercent(job.Command) + "\n")

@@ -23,6 +23,7 @@ use Illuminate\Support\Str;
  * @property string $login
  * @property string $password_hash SHA512-CRYPT, as Pure-FTPd checks it.
  * @property string $directory Relative to the home; "" is the whole home.
+ * @property int|null $quota_mb How many megabytes the login may fill its folder with; null is no limit.
  * @property FtpAccountStatus $status
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
@@ -66,6 +67,7 @@ class FtpAccount extends Model
     protected function casts(): array
     {
         return [
+            'quota_mb' => 'integer',
             'status' => FtpAccountStatus::class,
         ];
     }

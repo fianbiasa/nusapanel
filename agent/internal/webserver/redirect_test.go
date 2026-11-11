@@ -155,7 +155,7 @@ func TestRenderedRedirects(t *testing.T) {
 	// path comes first, and all come before the site's own locations.
 	last := strings.Index(nginx, "include "+env.cfg.NginxDir+"/budi/suspended*.inc;")
 
-	for _, block := range append(blocks, "location ~ /\\.ht {") {
+	for _, block := range append(blocks, "location ~ /\\.(?:ht|ftpquota$) {") {
 		index := strings.Index(nginx, block)
 		if index <= last {
 			t.Fatalf("block missing or out of order:\n%s\n\nin:\n%s", block, nginx)
