@@ -419,3 +419,115 @@ func TestInstallCertificateExplainsARefusal(t *testing.T) {
 		assertCode(t, err, rpc.CodeInvalidParams)
 	}
 }
+
+func wildcardOf(domain string) map[string]any {
+	return map[string]any{"username": "budi", "domain": domain, "wildcard": true, "nameservers": []string{"ns1.example.net", "ns2.example.net"}}
+}
+
+func TestWildcardCertificateNeedsThisServersNameservers(t *testing.T) {
+	env := newWebEnv(t)
+	env.mustCall("web.apply_domain", applyParams("example.com", "8.4"))
+
+	var certbotArgs []string
+
+	env.certbot = func(args []string) ([]byte, error) {
+		certbotArgs = args
+
+		return env.fakeCertbot(args)
+	}
+
+	env.nameservers["example.com"] = []string{"ns1.other.org", "ns2.other.org"}
+	env.assertMessage("ssl.issue", wildcardOf("example.com"),
+		"example.com uses nameservers ns1.other.org, ns2.other.org, not this server's; a wildcard certificate needs the domain to use "+
+			"this server's nameservers: change them at the domain's registrar, wait until they are in use, then try again")
+
+	if env.countPrograms("certbot certonly") != 0 {
+		t.Fatal("certbot ran for a domain that is not on this server's nameservers")
+	}
+
+	env.nameservers["example.com"] = []string{"ns2.example.net"}
+
+	if result := env.mustCall("ssl.issue", wildcardOf("example.com")); !strings.HasPrefix(result, `{"names":["example.com","*.example.com"],`) {
+		t.Fatalf("unexpected result %s", result)
+	}
+
+	want := []string{
+		"certonly", "--manual", "--preferred-challenges", "dns",
+		"--manual-auth-hook", "/usr/local/rayxo/bin/rayxo acme-dns-hook auth",
+		"--manual-cleanup-hook", "/usr/local/rayxo/bin/rayxo acme-dns-hook cleanup",
+		"--cert-name", "example.com", "-d", "example.com", "-d", "*.example.com",
+		"--non-interactive", "--agree-tos", "--keep-until-expiring", "--register-unsafely-without-email",
+	}
+	if !slices.Equal(certbotArgs, want) {
+		t.Fatalf("certbot args = %q", certbotArgs)
+	}
+}
+
+func TestSubdomainsServeHTTPSWithTheirDomainsWildcard(t *testing.T) {
+	env := newWebEnv(t)
+	env.mustCall("web.apply_domain", applyParams("example.com", "8.4"))
+	env.nameservers["example.com"] = []string{"ns1.example.net"}
+	env.mustCall("ssl.issue", wildcardOf("example.com"))
+
+	blog := map[string]any{
+		"username": "budi", "domain": "blog.example.com", "php_version": "8.4", "ssl": true,
+		"certificate": "parent", "certificate_domain": "example.com",
+	}
+	env.mustCall("web.apply_domain", blog)
+
+	vhost, err := os.ReadFile(filepath.Join(env.cfg.NginxDir, "budi", "blog.example.com.conf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(string(vhost), "ssl_certificate "+filepath.Join(env.cfg.LetsEncryptDir, "live", "example.com", "fullchain.pem")+";") {
+		t.Fatalf("the subdomain does not use its domain's certificate:\n%s", vhost)
+	}
+
+	// The domain's certificate stays while the subdomain uses it.
+	env.assertMessage("ssl.delete", domainOf("budi", "example.com"), "turn off HTTPS for example.com before deleting its certificate")
+}
+
+func TestOnlyAWildcardOfTheSameAccountOneLabelUpServesASubdomain(t *testing.T) {
+	env := newWebEnv(t)
+	env.mustCall("web.apply_domain", applyParams("example.com", "8.4"))
+	env.reach("example.com")
+	env.mustCall("ssl.issue", domainOf("budi", "example.com"))
+
+	parent := func(domain, certificateDomain string) map[string]any {
+		return map[string]any{
+			"username": "budi", "domain": domain, "php_version": "8.4", "ssl": true,
+			"certificate": "parent", "certificate_domain": certificateDomain,
+		}
+	}
+
+	// Without the wildcard, the domain's certificate does not cover it.
+	env.assertMessage("web.apply_domain", parent("blog.example.com", "example.com"), "there is no certificate for blog.example.com yet; request one first")
+
+	for _, params := range []any{
+		parent("a.blog.example.com", "example.com"),
+		parent("blog.example.org", "example.com"),
+		map[string]any{"username": "budi", "domain": "blog.example.com", "php_version": "8.4", "ssl": true, "certificate": "parent"},
+		map[string]any{"username": "budi", "domain": "blog.example.com", "php_version": "8.4", "ssl": true, "certificate_domain": "example.com"},
+		map[string]any{"username": "budi", "domain": "blog.example.com", "php_version": "8.4", "certificate": "parent", "certificate_domain": "example.com"},
+		map[string]any{"username": "budi", "domain": "example.com", "wildcard": true},
+		map[string]any{"username": "budi", "domain": "example.com", "nameservers": []string{"ns1.example.net"}},
+	} {
+		method := "web.apply_domain"
+		if _, ok := params.(map[string]any)["php_version"]; !ok {
+			method = "ssl.issue"
+		}
+
+		_, err := env.call(method, params)
+		if rpcErr, ok := errors.AsType[*rpc.Error](err); !ok || rpcErr.Code != rpc.CodeInvalidParams {
+			t.Errorf("%v: got %v, want invalid params", params, err)
+		}
+	}
+
+	// Another account's domain is not this account's to borrow from.
+	env.mustCall("web.apply_domain", map[string]string{"username": "sari", "domain": "other.org", "php_version": "8.4"})
+
+	if _, err := env.call("web.apply_domain", parent("blog.other.org", "other.org")); err == nil {
+		t.Fatal("a subdomain used another account's certificate")
+	}
+}

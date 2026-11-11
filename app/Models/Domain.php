@@ -140,6 +140,17 @@ class Domain extends Model
     }
 
     /**
+     * Whether the website's Let's Encrypt certificate also covers its
+     * subdomains (*.<name>), so they can serve HTTPS with it.
+     */
+    public function hasWildcardCertificate(): bool
+    {
+        return $this->ssl_status === SslStatus::Active
+            && $this->ssl_source === SslSource::LetsEncrypt
+            && in_array('*.'.$this->name, $this->ssl_names ?? [], true);
+    }
+
+    /**
      * Whether the website serves a folder of its own: domains and
      * subdomains do, pointers never.
      */

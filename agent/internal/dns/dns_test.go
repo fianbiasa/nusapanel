@@ -82,6 +82,8 @@ func (f *fakePowerDNS) serve(w http.ResponseWriter, r *http.Request) {
 		}
 
 		w.WriteHeader(http.StatusCreated)
+	case r.Method == http.MethodPut && path == "/cache/flush":
+		_ = json.NewEncoder(w).Encode(map[string]any{"count": 1, "result": "Flushed cache."})
 	case !exists:
 		http.Error(w, `{"error": "Not Found"}`, http.StatusNotFound)
 	case r.Method == http.MethodGet:
@@ -412,5 +414,99 @@ func TestPowerDNSErrorsAndAMissingKeyAreReported(t *testing.T) {
 
 	if err := manager.Sync(context.Background(), exampleZone()); err == nil || !strings.Contains(err.Error(), "not set up") {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestChallengesGoInTheZoneThatHoldsTheName(t *testing.T) {
+	fake, manager := newFakePowerDNS(t)
+	ctx := context.Background()
+
+	if err := manager.Sync(ctx, exampleZone()); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, step := range []struct{ domain, value string }{
+		{"example.com", "domain-token"},
+		{"example.com", "wildcard-token"},
+		{"example.com", "wildcard-token"},
+		{"blog.example.com", "blog-token"},
+	} {
+		if err := manager.AddChallenge(ctx, step.domain, step.value); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	challenges := func() []string {
+		var lines []string
+
+		for _, line := range fake.records("example.com.") {
+			if strings.HasPrefix(line, "_acme-challenge.") {
+				lines = append(lines, line)
+			}
+		}
+
+		return lines
+	}
+
+	want := []string{
+		`_acme-challenge.blog.example.com. TXT 60 "blog-token"`,
+		`_acme-challenge.example.com. TXT 60 "domain-token"`,
+		`_acme-challenge.example.com. TXT 60 "wildcard-token"`,
+	}
+	if got := challenges(); !slices.Equal(got, want) {
+		t.Fatalf("challenges = %q", got)
+	}
+
+	if fake.count(http.MethodPut) != 4 {
+		t.Fatalf("the cache was not flushed after every change: %v", fake.requests)
+	}
+
+	// The panel's sync leaves a running challenge alone.
+	if err := manager.Sync(ctx, exampleZone()); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := challenges(); len(got) != 3 {
+		t.Fatalf("a sync removed challenges: %q", got)
+	}
+
+	for _, step := range []struct{ domain, value string }{
+		{"example.com", "domain-token"},
+		{"example.com", "wildcard-token"},
+		{"blog.example.com", "blog-token"},
+		{"blog.example.com", "blog-token"},
+	} {
+		if err := manager.RemoveChallenge(ctx, step.domain, step.value); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if got := challenges(); len(got) != 0 {
+		t.Fatalf("challenges left = %q", got)
+	}
+}
+
+func TestChallengesNeedAZoneOfThisServerAndAPlainValue(t *testing.T) {
+	fake, manager := newFakePowerDNS(t)
+	ctx := context.Background()
+
+	if err := manager.AddChallenge(ctx, "example.org", "token"); err == nil || !strings.Contains(err.Error(), "no zone of this server holds example.org") {
+		t.Fatalf("err = %v", err)
+	}
+
+	requests := len(fake.requests)
+
+	for _, value := range []string{"", `to"ken`, "to ken", strings.Repeat("a", 256)} {
+		if err := manager.AddChallenge(ctx, "example.org", value); err == nil {
+			t.Errorf("value %q was accepted", value)
+		}
+	}
+
+	if err := manager.AddChallenge(ctx, "Example.org", "token"); err == nil {
+		t.Error("an uppercase domain was accepted")
+	}
+
+	if len(fake.requests) != requests {
+		t.Fatalf("invalid challenges reached PowerDNS: %v", fake.requests[requests:])
 	}
 }

@@ -12,4 +12,7 @@ enum SslSource: string
 
     /** Brought by the customer, e.g. bought from a CA or a Cloudflare Origin Certificate; never renewed by the panel. */
     case Custom = 'custom';
+
+    /** The wildcard Let's Encrypt certificate of the subdomain's domain (*.<domain>), renewed with it. */
+    case Parent = 'parent';
 }

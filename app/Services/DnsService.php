@@ -8,6 +8,7 @@ use App\Enums\DomainType;
 use App\Enums\Role;
 use App\Enums\TaskStatus;
 use App\Models\DnsRecord;
+use App\Models\DnsTemplateRecord;
 use App\Models\DnsZone;
 use App\Models\Domain;
 use App\Models\Setting;
@@ -40,6 +41,27 @@ class DnsService
      * The TTL of the records the template makes, in seconds.
      */
     public const DEFAULT_TTL = 3600;
+
+    /**
+     * The template RAYXO ships, which the admin can go back to. Names are
+     * relative to the zone; {domain} and {ip} stand for the zone and the
+     * server's address.
+     *
+     * @var list<array{name: string, type: string, content: string, ttl: int, priority: int|null}>
+     */
+    public const DEFAULT_TEMPLATE = [
+        ['name' => '@', 'type' => 'A', 'content' => '{ip}', 'ttl' => self::DEFAULT_TTL, 'priority' => null],
+        ['name' => 'www', 'type' => 'A', 'content' => '{ip}', 'ttl' => self::DEFAULT_TTL, 'priority' => null],
+        ['name' => 'mail', 'type' => 'A', 'content' => '{ip}', 'ttl' => self::DEFAULT_TTL, 'priority' => null],
+        ['name' => 'ftp', 'type' => 'A', 'content' => '{ip}', 'ttl' => self::DEFAULT_TTL, 'priority' => null],
+        ['name' => '@', 'type' => 'MX', 'content' => 'mail.{domain}', 'ttl' => self::DEFAULT_TTL, 'priority' => 10],
+        ['name' => '@', 'type' => 'TXT', 'content' => 'v=spf1 a mx ip4:{ip} ~all', 'ttl' => self::DEFAULT_TTL, 'priority' => null],
+    ];
+
+    /**
+     * The placeholders a template record may use.
+     */
+    public const PLACEHOLDERS = ['{domain}', '{ip}'];
 
     public function __construct(
         private TaskDispatcher $tasks,
@@ -133,7 +155,7 @@ class DnsService
      */
     public function addRecord(DnsZone $zone, array $record, User $actor): DnsRecord
     {
-        $this->ensureAccountIsActive($zone->account);
+        $this->ensureAccountIsActive($zone->account, $actor);
 
         return DB::transaction(function () use ($zone, $record, $actor): DnsRecord {
             DnsZone::query()->lockForUpdate()->findOrFail($zone->id);
@@ -166,7 +188,7 @@ class DnsService
     {
         $zone = $dnsRecord->zone;
 
-        $this->ensureAccountIsActive($zone->account);
+        $this->ensureAccountIsActive($zone->account, $actor);
 
         DB::transaction(function () use ($zone, $dnsRecord, $record, $actor): void {
             DnsZone::query()->lockForUpdate()->findOrFail($zone->id);
@@ -190,7 +212,7 @@ class DnsService
     {
         $zone = $dnsRecord->zone;
 
-        $this->ensureAccountIsActive($zone->account);
+        $this->ensureAccountIsActive($zone->account, $actor);
 
         DB::transaction(function () use ($zone, $dnsRecord, $actor): void {
             $dnsRecord->delete();
@@ -208,7 +230,7 @@ class DnsService
      */
     public function resetZone(DnsZone $zone, User $actor): void
     {
-        $this->ensureAccountIsActive($zone->account);
+        $this->ensureAccountIsActive($zone->account, $actor);
 
         DB::transaction(function () use ($zone, $actor): void {
             $zone->records()->delete();
@@ -216,6 +238,68 @@ class DnsService
 
             $this->audit->record('dns.zone_reset', $zone, ['zone' => $zone->name], $actor);
             $this->sync($zone, $actor);
+        });
+    }
+
+    /**
+     * Add a record to the template new zones start with. Zones that exist
+     * keep their records.
+     *
+     * @param  array{name: string, type: string, content: string, ttl: int, priority: int|null}  $record  Already validated, name relative.
+     *
+     * @throws ValidationException
+     */
+    public function addTemplateRecord(array $record, User $actor): DnsTemplateRecord
+    {
+        $this->ensureNotInTemplate($record, null);
+
+        $created = DnsTemplateRecord::query()->create($record);
+
+        $this->audit->record('dns.template_changed', null, ['added' => $this->describe($record)], $actor);
+
+        return $created;
+    }
+
+    /**
+     * Change a record of the template.
+     *
+     * @param  array{name: string, type: string, content: string, ttl: int, priority: int|null}  $record  Already validated, name relative.
+     *
+     * @throws ValidationException
+     */
+    public function updateTemplateRecord(DnsTemplateRecord $templateRecord, array $record, User $actor): void
+    {
+        $this->ensureNotInTemplate($record, $templateRecord->id);
+
+        $before = $this->describe($templateRecord->only(['name', 'type', 'content', 'ttl', 'priority']));
+        $templateRecord->forceFill($record)->save();
+
+        $this->audit->record('dns.template_changed', null, ['from' => $before, 'to' => $this->describe($record)], $actor);
+    }
+
+    /**
+     * Remove a record from the template.
+     */
+    public function deleteTemplateRecord(DnsTemplateRecord $templateRecord, User $actor): void
+    {
+        $templateRecord->delete();
+
+        $this->audit->record('dns.template_changed', null, ['removed' => $this->describe($templateRecord->only(['name', 'type', 'content', 'ttl', 'priority']))], $actor);
+    }
+
+    /**
+     * Put the template back to the one RAYXO ships.
+     */
+    public function resetTemplate(User $actor): void
+    {
+        DB::transaction(function () use ($actor): void {
+            DnsTemplateRecord::query()->delete();
+
+            foreach (self::DEFAULT_TEMPLATE as $record) {
+                DnsTemplateRecord::query()->create($record);
+            }
+
+            $this->audit->record('dns.template_reset', null, [], $actor);
         });
     }
 
@@ -430,11 +514,36 @@ class DnsService
     }
 
     /**
+     * Refuse a template record that is already in the template.
+     *
+     * @param  array{name: string, type: string, content: string, ttl: int, priority: int|null}  $record
+     *
      * @throws ValidationException
      */
-    private function ensureAccountIsActive(User $account): void
+    private function ensureNotInTemplate(array $record, ?int $ignoreId): void
     {
-        if (! $account->hasRole(Role::User) || $account->status !== AccountStatus::Active) {
+        $exists = DnsTemplateRecord::query()
+            ->where('name', $record['name'])
+            ->where('type', $record['type'])
+            ->get()
+            ->contains(fn (DnsTemplateRecord $other): bool => $other->id !== $ignoreId && $other->content === $record['content']);
+
+        if ($exists) {
+            throw ValidationException::withMessages(['content' => __('This record already exists.')]);
+        }
+    }
+
+    /**
+     * Customers change their DNS while their account is active; admins
+     * also while it is suspended.
+     *
+     * @throws ValidationException
+     */
+    private function ensureAccountIsActive(User $account, ?User $actor = null): void
+    {
+        $allowed = $actor?->isAdmin() ? [AccountStatus::Active, AccountStatus::Suspended] : [AccountStatus::Active];
+
+        if (! $account->hasRole(Role::User) || ! in_array($account->status, $allowed, true)) {
             throw ValidationException::withMessages([
                 'name' => __('DNS records can only be changed while the account is active.'),
             ]);
@@ -499,14 +608,20 @@ class DnsService
         $ip = $this->publicIp();
         $records = [];
 
-        if ($ip !== null) {
-            foreach ([$zone, "www.{$zone}", "mail.{$zone}", "ftp.{$zone}"] as $name) {
-                $records[] = $this->record($name, 'A', $ip);
+        foreach (DnsTemplateRecord::query()->orderBy('id')->get() as $template) {
+            // Without a known address, records that need it are left out.
+            if ($ip === null && str_contains($template->content, '{ip}')) {
+                continue;
             }
-        }
 
-        $records[] = $this->record($zone, 'MX', "mail.{$zone}", 10);
-        $records[] = $this->record($zone, 'TXT', $ip === null ? 'v=spf1 a mx ~all' : "v=spf1 a mx ip4:{$ip} ~all");
+            $records[] = [
+                'name' => DnsRecordInput::absoluteName($template->name, $zone),
+                'type' => $template->type,
+                'content' => strtr($template->content, ['{domain}' => $zone, '{ip}' => (string) $ip]),
+                'ttl' => $template->ttl,
+                'priority' => $template->priority,
+            ];
+        }
 
         return $records;
     }

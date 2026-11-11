@@ -107,7 +107,7 @@ func (m *Manager) IssueHostnameCertificate(ctx context.Context) (HostnameCertifi
 		return HostnameCertificate{}, err
 	}
 
-	if err := m.runCertbotIssue(ctx, hostname, []string{hostname}); err != nil {
+	if err := m.runCertbot(ctx, hostname, []string{hostname}, certbotIssueArgs(m.cfg.AcmeDir, hostname, []string{hostname})); err != nil {
 		return HostnameCertificate{}, err
 	}
 

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\AccountController;
 use App\Http\Controllers\Admin\AuditLogController;
+use App\Http\Controllers\Admin\DnsController as AdminDnsController;
 use App\Http\Controllers\Admin\PackageController;
 use App\Http\Controllers\Admin\ServerSettingController;
 use App\Http\Controllers\Admin\ServiceController;
@@ -108,6 +109,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('tasks', [TaskController::class, 'index'])->name('tasks.index');
         Route::get('audit-logs', [AuditLogController::class, 'index'])->name('audit-logs.index');
         Route::get('services', [ServiceController::class, 'index'])->name('services.index');
+        Route::get('dns', [AdminDnsController::class, 'index'])->name('dns.index');
+        Route::get('dns/zones/{dnsZone}', [AdminDnsController::class, 'show'])->name('dns.zones.show');
+        Route::post('dns/zones/{dnsZone}/records', [DnsController::class, 'store'])->name('dns.records.store');
+        Route::put('dns/records/{dnsRecord}', [DnsController::class, 'update'])->name('dns.records.update');
+        Route::delete('dns/records/{dnsRecord}', [DnsController::class, 'destroy'])->name('dns.records.destroy');
+        Route::post('dns/zones/{dnsZone}/reset', [DnsController::class, 'reset'])->name('dns.reset');
+        Route::post('dns/template', [AdminDnsController::class, 'storeTemplate'])->name('dns.template.store');
+        Route::post('dns/template/reset', [AdminDnsController::class, 'resetTemplate'])->name('dns.template.reset');
+        Route::put('dns/template/{dnsTemplateRecord}', [AdminDnsController::class, 'updateTemplate'])->name('dns.template.update');
+        Route::delete('dns/template/{dnsTemplateRecord}', [AdminDnsController::class, 'destroyTemplate'])->name('dns.template.destroy');
         Route::get('server-settings', [ServerSettingController::class, 'index'])->name('server-settings.index');
         Route::put('server-settings/hostname', [ServerSettingController::class, 'updateHostname'])
             ->middleware('throttle:5,1,server-hostname')

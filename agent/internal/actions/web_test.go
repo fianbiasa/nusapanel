@@ -41,13 +41,16 @@ type webEnv struct {
 	// reachable maps the names that reach this server's ACME webroot to
 	// its address; other names have no DNS record.
 	reachable map[string]string
+	// nameservers are what public DNS gives as the nameservers of a
+	// domain.
+	nameservers map[string][]string
 }
 
 func newWebEnv(t *testing.T) *webEnv {
 	t.Helper()
 
 	base := t.TempDir()
-	env := &webEnv{t: t, system: newFakeSystem(), reachable: map[string]string{}}
+	env := &webEnv{t: t, system: newFakeSystem(), reachable: map[string]string{}, nameservers: map[string][]string{}}
 	env.certbot = env.fakeCertbot
 	env.system.addAccount("budi", 1001)
 	env.system.addAccount("sari", 1002)
@@ -69,6 +72,13 @@ func newWebEnv(t *testing.T) *webEnv {
 		Hostnames:            func() []string { return []string{"server1.example.net"} },
 		Run:                  env.run,
 		DialHTTP:             env.dial,
+		AcmeDNSHook:          "/usr/local/rayxo/bin/rayxo acme-dns-hook",
+		LookupNS: func(_ context.Context, domain string) ([]string, error) {
+			env.mu.Lock()
+			defer env.mu.Unlock()
+
+			return env.nameservers[domain], nil
+		},
 		PrepareSite: func(_ context.Context, site sysuser.Site) error {
 			env.mu.Lock()
 			defer env.mu.Unlock()

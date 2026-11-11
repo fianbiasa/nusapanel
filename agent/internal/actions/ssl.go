@@ -4,10 +4,59 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"slices"
 	"time"
 
 	"rayxo/agent/internal/validate"
+	"rayxo/agent/internal/webserver"
 )
+
+// maxNameservers bounds the nameservers ssl.issue checks a wildcard
+// domain against.
+const maxNameservers = 4
+
+// issueCertificateParams are the params of ssl.issue. With wildcard, the
+// certificate also covers *.<domain> and is issued through DNS-01, which
+// needs the domain's nameservers to be among nameservers (this server's).
+type issueCertificateParams struct {
+	Username    string   `json:"username"`
+	Domain      string   `json:"domain"`
+	Wildcard    bool     `json:"wildcard"`
+	Nameservers []string `json:"nameservers"`
+}
+
+func (p issueCertificateParams) account() string { return p.Username }
+
+func (p issueCertificateParams) validate() error {
+	if err := firstError(validate.Username(p.Username), validate.Domain(p.Domain)); err != nil {
+		return err
+	}
+
+	if !p.Wildcard {
+		if len(p.Nameservers) > 0 {
+			return errors.New("nameservers only go with wildcard")
+		}
+
+		return nil
+	}
+
+	if len(p.Nameservers) == 0 || len(p.Nameservers) > maxNameservers {
+		return fmt.Errorf("a wildcard certificate needs 1 to %d nameservers", maxNameservers)
+	}
+
+	for i, nameserver := range p.Nameservers {
+		if err := validate.Domain(nameserver); err != nil {
+			return fmt.Errorf("nameserver: %w", err)
+		}
+
+		if slices.Contains(p.Nameservers[:i], nameserver) {
+			return fmt.Errorf("nameserver %q is given twice", nameserver)
+		}
+	}
+
+	return nil
+}
 
 // certificateInfo is the result of ssl.issue.
 type certificateInfo struct {
@@ -17,11 +66,12 @@ type certificateInfo struct {
 
 // issueCertificate implements ssl.issue: it gets a Let's Encrypt
 // certificate for a domain of the account, and for www.<domain> when that
-// reaches this server too. A valid certificate for the same names is kept,
+// reaches this server too; with wildcard, for the domain and *.<domain>
+// through DNS-01 instead. A valid certificate for the same names is kept,
 // so calling it again returns the same result. It does not turn HTTPS on;
 // web.apply_domain with ssl does.
 func (w webActions) issueCertificate(ctx context.Context, raw json.RawMessage) (any, error) {
-	params, err := decodeWebParams[domainParams](raw)
+	params, err := decodeWebParams[issueCertificateParams](raw)
 	if err != nil {
 		return nil, err
 	}
@@ -31,7 +81,14 @@ func (w webActions) issueCertificate(ctx context.Context, raw json.RawMessage) (
 		return nil, err
 	}
 
-	certificate, err := w.web.IssueCertificate(ctx, user.Name, params.Domain)
+	issue := w.web.IssueCertificate
+	if params.Wildcard {
+		issue = func(ctx context.Context, user, domain string) (webserver.Certificate, error) {
+			return w.web.IssueWildcardCertificate(ctx, user, domain, params.Nameservers)
+		}
+	}
+
+	certificate, err := issue(ctx, user.Name, params.Domain)
 	if err != nil {
 		return nil, webError(err, params.Domain)
 	}

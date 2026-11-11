@@ -71,6 +71,9 @@ class DomainController extends Controller
                 'status' => $domain->status->value,
                 'ssl_status' => $domain->ssl_status?->value,
                 'ssl_source' => $domain->ssl_source?->value,
+                'ssl_wildcard' => $domain->hasWildcardCertificate(),
+                'parent_has_wildcard' => $domain->type === DomainType::Subdomain
+                    && ($websites->firstWhere('id', $domain->parent_id)?->hasWildcardCertificate() ?? false),
                 'ssl_issuer' => $domain->ssl_issuer,
                 'ssl_trusted' => $domain->ssl_trusted,
                 'ssl_expires_at' => $domain->ssl_expires_at?->toIso8601String(),
@@ -142,7 +145,9 @@ class DomainController extends Controller
     {
         Gate::authorize('update', $domain);
 
-        $this->domains->requestSsl($domain, $request->user());
+        $request->validate(['wildcard' => ['sometimes', 'boolean']]);
+
+        $this->domains->requestSsl($domain, $request->user(), $request->boolean('wildcard'));
 
         Inertia::flash('toast', [
             'type' => 'success',

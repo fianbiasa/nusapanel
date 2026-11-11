@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"rayxo/agent/internal/client"
+	"rayxo/agent/internal/dns"
 	"rayxo/agent/internal/rpc"
 	"rayxo/agent/internal/version"
 )
@@ -24,6 +25,7 @@ const usage = `Usage:
   rayxo [flags] call <method> [params-json]
   rayxo rebuild
   rayxo version
+  rayxo acme-dns-hook auth|cleanup   (certbot's hook for wildcard certificates)
 
 Flags:
 `
@@ -79,6 +81,14 @@ func run() int {
 		}
 
 		return rebuild()
+	case "acme-dns-hook":
+		if len(args) != 2 || (args[1] != "auth" && args[1] != "cleanup") {
+			flags.Usage()
+
+			return 2
+		}
+
+		return acmeDNSHook(args[1])
 	case "ping":
 		method = "agent.ping"
 	case "call":
@@ -160,6 +170,35 @@ func rebuild() int {
 		}
 
 		fmt.Fprintln(os.Stderr, err)
+
+		return 1
+	}
+
+	return 0
+}
+
+// acmeDNSHook is certbot's --manual-auth-hook and --manual-cleanup-hook for
+// wildcard certificates: it puts the DNS-01 challenge certbot passes in
+// CERTBOT_DOMAIN and CERTBOT_VALIDATION into the server's PowerDNS
+// ("auth"), or takes it out again ("cleanup"). certbot runs it as root,
+// which may read PowerDNS's API key.
+func acmeDNSHook(step string) int {
+	domain, value := os.Getenv("CERTBOT_DOMAIN"), os.Getenv("CERTBOT_VALIDATION")
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	manager := dns.New(dns.DefaultConfig())
+
+	var err error
+	if step == "auth" {
+		err = manager.AddChallenge(ctx, domain, value)
+	} else {
+		err = manager.RemoveChallenge(ctx, domain, value)
+	}
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "rayxo acme-dns-hook %s %s: %v\n", step, domain, err)
 
 		return 1
 	}

@@ -85,7 +85,11 @@ type DomainRow = {
     is_primary: boolean;
     status: DomainStatus;
     ssl_status: SslStatus | null;
-    ssl_source: 'letsencrypt' | 'custom' | null;
+    ssl_source: 'letsencrypt' | 'custom' | 'parent' | null;
+    /** Whether its Let's Encrypt certificate also covers *.<name>. */
+    ssl_wildcard: boolean;
+    /** For a subdomain: whether its domain has a wildcard certificate it can use. */
+    parent_has_wildcard: boolean;
     ssl_issuer: string | null;
     ssl_trusted: boolean | null;
     ssl_expires_at: string | null;
@@ -853,6 +857,51 @@ function RequestSslForm({
     publicIp: string | null;
     onSuccess: () => void;
 }) {
+    const [wildcard, setWildcard] = useState(false);
+
+    if (domain.parent_has_wildcard) {
+        return (
+            <Form
+                {...storeSsl.form(domain.id)}
+                options={{ preserveScroll: true }}
+                onSuccess={onSuccess}
+                className="grid gap-4"
+            >
+                {({ processing, errors }) => (
+                    <>
+                        <DialogHeader>
+                            <DialogTitle>
+                                Pasang SSL untuk {domain.display_name}?
+                            </DialogTitle>
+                            <DialogDescription>
+                                {domain.parent_display_name} punya sertifikat
+                                wildcard (*.{domain.parent_display_name}).
+                                Subdomain ini langsung memakainya, tanpa
+                                menunggu sertifikat baru, dan ikut diperpanjang
+                                bersamanya. www.{domain.display_name} tidak
+                                tercakup wildcard.
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        <InputError message={errors.domain} />
+
+                        <DialogFooter className="gap-2">
+                            <DialogClose asChild>
+                                <Button type="button" variant="secondary">
+                                    Batal
+                                </Button>
+                            </DialogClose>
+                            <Button type="submit" disabled={processing}>
+                                {processing ? <Spinner /> : <Lock />}
+                                Pakai sertifikat wildcard
+                            </Button>
+                        </DialogFooter>
+                    </>
+                )}
+            </Form>
+        );
+    }
+
     return (
         <Form
             {...storeSsl.form(domain.id)}
@@ -873,7 +922,35 @@ function RequestSslForm({
                         </DialogDescription>
                     </DialogHeader>
 
-                    <ol className="grid gap-3 text-sm">
+                    {domain.type === 'domain' && (
+                        <label className="flex items-start gap-3 rounded-xl border px-4 py-3 text-sm">
+                            <input
+                                type="checkbox"
+                                name="wildcard"
+                                value="1"
+                                checked={wildcard}
+                                onChange={(event) =>
+                                    setWildcard(event.target.checked)
+                                }
+                                className="mt-0.5 size-4 accent-primary"
+                            />
+                            <span className="grid gap-1">
+                                <span className="font-medium">
+                                    Sertakan semua subdomain (*.
+                                    {domain.display_name})
+                                </span>
+                                <span className="text-muted-foreground">
+                                    Sertifikat wildcard lewat DNS. Subdomain
+                                    langsung bisa memakai HTTPS tanpa sertifikat
+                                    sendiri. Syaratnya, nameserver{' '}
+                                    {domain.display_name} di registrar sudah
+                                    mengarah ke server ini (lihat halaman DNS).
+                                </span>
+                            </span>
+                        </label>
+                    )}
+
+                    <ol className="grid gap-3 text-sm" hidden={wildcard}>
                         <Step number={1}>
                             Domain harus sudah mengarah ke server ini: A record{' '}
                             <Code>{domain.display_name}</Code> dan{' '}
@@ -948,7 +1025,11 @@ function ActiveCertificate({ domain }: { domain: DomainRow }) {
             <span className="text-xs text-muted-foreground">
                 {isCustom
                     ? `Sertifikat sendiri${domain.ssl_issuer ? ` · ${domain.ssl_issuer}` : ''}`
-                    : "Let's Encrypt"}
+                    : domain.ssl_source === 'parent'
+                      ? `Wildcard *.${domain.parent_display_name ?? ''}`
+                      : domain.ssl_wildcard
+                        ? `Let's Encrypt · termasuk *.${domain.display_name}`
+                        : "Let's Encrypt"}
             </span>
             {domain.ssl_expires_at && (
                 <span

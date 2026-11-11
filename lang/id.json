@@ -285,5 +285,10 @@
     "The text must be 1 to :max bytes.": "Teks harus 1 sampai :max byte.",
     "The text must be on one line, without control characters.": "Teks harus satu baris, tanpa karakter kontrol.",
     "Enter \"weight port target\", such as 5 5060 sip.example.com.": "Masukkan \"bobot port target\", misalnya 5 5060 sip.example.com.",
-    "Enter \"flags tag value\", such as 0 issue letsencrypt.org (without quotes).": "Masukkan \"flag tag nilai\", misalnya 0 issue letsencrypt.org (tanpa tanda kutip)."
+    "Enter \"flags tag value\", such as 0 issue letsencrypt.org (without quotes).": "Masukkan \"flag tag nilai\", misalnya 0 issue letsencrypt.org (tanpa tanda kutip).",
+    "Placeholders only go in the content.": "Placeholder hanya boleh di isi record.",
+    "Only {domain} and {ip} can be filled in.": "Hanya {domain} dan {ip} yang bisa diisi otomatis.",
+    "The template is saved; new zones start with it.": "Template disimpan; zone baru memakainya.",
+    "The template is back to the default.": "Template kembali ke bawaan.",
+    "Only a domain can get a certificate for all its subdomains.": "Hanya domain yang bisa mendapat sertifikat untuk semua subdomainnya."
 }

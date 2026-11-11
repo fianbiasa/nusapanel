@@ -116,6 +116,13 @@ type Config struct {
 	// this server before a certificate is requested. Defaults to dialing
 	// public addresses only.
 	DialHTTP func(ctx context.Context, network, address string) (net.Conn, error)
+	// AcmeDNSHook is the command certbot runs, with "auth" or "cleanup", to
+	// put the DNS-01 challenges of a wildcard certificate into this
+	// server's DNS.
+	AcmeDNSHook string
+	// LookupNS returns the nameservers public DNS gives for a domain,
+	// lowercase without the trailing dot.
+	LookupNS func(ctx context.Context, domain string) ([]string, error)
 	// Logger receives the output of rejected config tests. Defaults to
 	// slog.Default().
 	Logger *slog.Logger
@@ -147,7 +154,46 @@ func DefaultConfig() Config {
 		Run:                  runner.Run,
 		PrepareSite:          sysuser.System{}.PrepareSite,
 		DialHTTP:             dialPublic,
+		AcmeDNSHook:          "/usr/local/rayxo/bin/rayxo acme-dns-hook",
+		LookupNS:             lookupNS,
 	}
+}
+
+// lookupNS asks Google's public DNS, then Cloudflare's, for the
+// nameservers of domain, as Let's Encrypt would find them.
+func lookupNS(ctx context.Context, domain string) ([]string, error) {
+	var lastErr error
+
+	for _, server := range []string{"8.8.8.8:53", "1.1.1.1:53"} {
+		resolver := &net.Resolver{
+			PreferGo: true,
+			Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
+				var dialer net.Dialer
+
+				return dialer.DialContext(ctx, network, server)
+			},
+		}
+
+		lookupCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		records, err := resolver.LookupNS(lookupCtx, domain)
+
+		cancel()
+
+		if err != nil {
+			lastErr = err
+
+			continue
+		}
+
+		names := make([]string, 0, len(records))
+		for _, record := range records {
+			names = append(names, strings.ToLower(strings.TrimSuffix(record.Host, ".")))
+		}
+
+		return names, nil
+	}
+
+	return nil, lastErr
 }
 
 // systemHostnames returns the kernel hostname and the name setup.sh gave
@@ -204,6 +250,11 @@ type Site struct {
 	// installed (InstallCertificate) instead of Let's Encrypt's. It needs
 	// SSL.
 	CustomCertificate bool
+	// CertificateDomain serves HTTPS with the Let's Encrypt certificate of
+	// that domain instead of the site's own: a website of the same account
+	// one label above Domain, whose certificate covers *.<it>
+	// (IssueWildcardCertificate). It needs SSL and no custom certificate.
+	CertificateDomain string
 	// ForceHTTPS redirects HTTP to HTTPS, except Let's Encrypt challenges.
 	// It needs SSL.
 	ForceHTTPS bool
@@ -252,6 +303,21 @@ func (s Site) Validate() error {
 
 	if s.CustomCertificate && !s.SSL {
 		return errors.New("a custom certificate needs SSL")
+	}
+
+	if s.CertificateDomain != "" {
+		if !s.SSL || s.CustomCertificate {
+			return errors.New("another domain's certificate needs SSL and no custom certificate")
+		}
+
+		if err := validate.Domain(s.CertificateDomain); err != nil {
+			return fmt.Errorf("certificate domain: %w", err)
+		}
+
+		label, found := strings.CutSuffix(s.Domain, "."+s.CertificateDomain)
+		if !found || strings.Contains(label, ".") {
+			return fmt.Errorf("%s is not one label below %s, so its wildcard cannot cover it", s.Domain, s.CertificateDomain)
+		}
 	}
 
 	switch s.WWW {
@@ -361,6 +427,12 @@ func (m *Manager) ApplyDomain(ctx context.Context, site Site) (string, error) {
 
 	site.Kind = site.kind()
 
+	if site.CertificateDomain != "" {
+		if _, err := m.accountVhost(site.User, site.CertificateDomain); err != nil {
+			return "", err
+		}
+	}
+
 	if site.SSL && !m.hasSiteCertificate(site) {
 		return "", fmt.Errorf("%w: %s", ErrNoCertificate, site.Domain)
 	}
@@ -410,13 +482,25 @@ func (m *Manager) hasSiteCertificate(site Site) bool {
 		return m.HasCustomCertificate(site.Domain)
 	}
 
+	if site.CertificateDomain != "" {
+		return m.HasCertificate(site.CertificateDomain) && m.certificateCovers(site.CertificateDomain, "*."+site.CertificateDomain)
+	}
+
 	return m.HasCertificate(site.Domain)
 }
 
 // deleteOtherCertificate deletes the certificate of site's domain that its
 // HTTPS does not use: the Let's Encrypt one when it serves a custom one,
-// and the other way round.
+// and the other way round; both when it uses another domain's.
 func (m *Manager) deleteOtherCertificate(ctx context.Context, site Site) error {
+	if site.CertificateDomain != "" {
+		if err := m.deleteCustomCertificate(site.Domain); err != nil {
+			return err
+		}
+
+		return m.deleteCertificate(ctx, site.Domain)
+	}
+
 	if site.CustomCertificate {
 		return m.deleteCertificate(ctx, site.Domain)
 	}

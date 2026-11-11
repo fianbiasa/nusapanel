@@ -22,6 +22,7 @@ import { index as databasesIndex } from '@/routes/databases';
 import { index as dnsIndex } from '@/routes/dns';
 import { index as accountsIndex } from '@/routes/admin/accounts';
 import { index as auditLogsIndex } from '@/routes/admin/audit-logs';
+import { index as adminDnsIndex } from '@/routes/admin/dns';
 import { index as packagesIndex } from '@/routes/admin/packages';
 import { index as serverSettingsIndex } from '@/routes/admin/server-settings';
 import { index as servicesIndex } from '@/routes/admin/services';
@@ -72,6 +73,11 @@ export function useNavigation(): {
             href: accountsIndex(),
             icon: Users,
         };
+        const adminDns: NavItem = {
+            title: 'DNS',
+            href: adminDnsIndex(),
+            icon: Network,
+        };
         const packages: NavItem = {
             title: 'Packages',
             href: packagesIndex(),
@@ -99,7 +105,10 @@ export function useNavigation(): {
         };
 
         sections.push(
-            { label: 'Menu', items: [dashboardItem, accounts, packages] },
+            {
+                label: 'Menu',
+                items: [dashboardItem, accounts, packages, adminDns],
+            },
             {
                 label: 'Server',
                 items: [services, serverSettings, tasks, auditLog],

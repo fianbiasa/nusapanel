@@ -66,6 +66,8 @@ export const auditActionLabels: Record<string, string> = {
     'dns.record_updated': 'Record DNS diubah',
     'dns.record_deleted': 'Record DNS dihapus',
     'dns.zone_reset': 'Zone DNS dikembalikan ke bawaan',
+    'dns.template_changed': 'Template DNS diubah',
+    'dns.template_reset': 'Template DNS dikembalikan ke bawaan',
     'server.php_uploads_changed': 'Batas upload PHP diubah',
     'server.hostname_ssl_requested': 'SSL hostname diminta',
     'server.hostname_change_started': 'Penggantian hostname dimulai',

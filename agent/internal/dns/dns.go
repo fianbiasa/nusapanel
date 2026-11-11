@@ -8,6 +8,11 @@
 // strings of at most 255 bytes), priorities in front of MX and SRV content.
 // The SOA and the zone's own NS records come from the nameservers given,
 // never from the records.
+//
+// The TXT records of ACME DNS-01 challenges (_acme-challenge.<domain>) are
+// put in and taken out by certbot's hooks (AddChallenge, RemoveChallenge)
+// while a wildcard certificate is issued; a sync leaves them alone unless
+// the panel has records of that name itself.
 package dns
 
 import (
@@ -46,6 +51,11 @@ const (
 	soaTimers = "10800 3600 604800 3600"
 	zoneTTL   = 3600
 
+	// challengeTTL is the TTL of an ACME challenge record.
+	challengeTTL = 60
+	// challengePrefix starts the name of an ACME DNS-01 challenge.
+	challengePrefix = "_acme-challenge."
+
 	// requestTimeout bounds one call to the PowerDNS API.
 	requestTimeout = 30 * time.Second
 	// maxResponse is the most of a response body read.
@@ -63,6 +73,9 @@ var (
 	// quotes or backslashes; the agent adds the quotes itself.
 	caaValuePattern = regexp.MustCompile(`^[\x21\x23-\x5b\x5d-\x7e]{1,255}$`)
 	caaTags         = []string{"issue", "issuewild", "iodef"}
+	// challengeValuePattern is the value of an ACME DNS-01 challenge: the
+	// base64url digest of the key authorization.
+	challengeValuePattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,255}$`)
 )
 
 // ErrServer means PowerDNS refused or failed a request; the error says how.
@@ -216,6 +229,93 @@ func (m *Manager) Delete(ctx context.Context, name string) error {
 	}
 
 	return err
+}
+
+// AddChallenge adds value to the TXT records of _acme-challenge.<domain>,
+// in the zone of this server that holds that name, and has PowerDNS answer
+// with it at once. Values already there stay: a certificate for a domain
+// and its wildcard has one challenge for each.
+func (m *Manager) AddChallenge(ctx context.Context, domain, value string) error {
+	return m.changeChallenge(ctx, domain, value, true)
+}
+
+// RemoveChallenge takes value out of the TXT records of
+// _acme-challenge.<domain> again; the record goes once it has no value.
+func (m *Manager) RemoveChallenge(ctx context.Context, domain, value string) error {
+	return m.changeChallenge(ctx, domain, value, false)
+}
+
+func (m *Manager) changeChallenge(ctx context.Context, domain, value string, add bool) error {
+	if err := validate.Domain(domain); err != nil {
+		return err
+	}
+
+	if !challengeValuePattern.MatchString(value) {
+		return errors.New("the challenge value must be base64url text")
+	}
+
+	zone, rrsets, err := m.findZone(ctx, domain)
+	if err != nil {
+		return err
+	}
+
+	name := absolute(challengePrefix + domain)
+	quoted := `"` + value + `"`
+
+	var values []string
+
+	for _, rrset := range rrsets {
+		if rrset.Name == name && rrset.Type == "TXT" {
+			for _, record := range rrset.Records {
+				values = append(values, record.Content)
+			}
+		}
+	}
+
+	if add && !slices.Contains(values, quoted) {
+		values = append(values, quoted)
+	}
+
+	if !add {
+		values = slices.DeleteFunc(values, func(content string) bool { return content == quoted })
+	}
+
+	change := apiRRset{Name: name, Type: "TXT", TTL: challengeTTL, ChangeType: "REPLACE", Records: []apiRecord{}}
+	for _, content := range values {
+		change.Records = append(change.Records, apiRecord{Content: content})
+	}
+
+	if len(values) == 0 {
+		change = apiRRset{Name: name, Type: "TXT", ChangeType: "DELETE", Records: []apiRecord{}}
+	}
+
+	if err := m.send(ctx, http.MethodPatch, zonePath(zone), apiZone{RRsets: []apiRRset{change}}, nil); err != nil {
+		return err
+	}
+
+	// A cached "no such record" would otherwise be answered for a while.
+	return m.send(ctx, http.MethodPut, "/cache/flush?domain="+name, nil, nil)
+}
+
+// findZone returns the zone of this server that holds name (name itself or
+// the nearest parent of it) and its rrsets.
+func (m *Manager) findZone(ctx context.Context, name string) (string, []apiRRset, error) {
+	labels := strings.Split(name, ".")
+
+	for i := 0; i < len(labels)-1; i++ {
+		candidate := strings.Join(labels[i:], ".")
+
+		rrsets, found, err := m.getZone(ctx, candidate)
+		if err != nil {
+			return "", nil, err
+		}
+
+		if found {
+			return candidate, rrsets, nil
+		}
+	}
+
+	return "", nil, fmt.Errorf("no zone of this server holds %s", name)
 }
 
 // apiRecord, apiRRset and apiZone are PowerDNS's API objects.
@@ -544,6 +644,12 @@ func diff(current, want []apiRRset, zone Zone) []apiRRset {
 	}
 
 	for _, rrset := range have {
+		// An ACME challenge certbot's hook put in is not the panel's to
+		// remove.
+		if rrset.Type == "TXT" && strings.HasPrefix(rrset.Name, challengePrefix) {
+			continue
+		}
+
 		changes = append(changes, apiRRset{Name: rrset.Name, Type: rrset.Type, ChangeType: "DELETE", Records: []apiRecord{}})
 	}
 

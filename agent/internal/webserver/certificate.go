@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -37,6 +39,24 @@ var (
 	// by certbot.timer, held certbot's lock.
 	ErrCertbotBusy = errors.New("another certbot instance is running")
 )
+
+// NotDelegatedError means a wildcard certificate was asked for a domain
+// whose nameservers are not this server's, so Let's Encrypt would never see
+// the DNS-01 challenge.
+type NotDelegatedError struct {
+	Domain string
+	// Found are the nameservers public DNS gave for the domain; empty when
+	// it gave none.
+	Found []string
+}
+
+func (e *NotDelegatedError) Error() string {
+	if len(e.Found) == 0 {
+		return e.Domain + " has no nameservers in public DNS"
+	}
+
+	return e.Domain + " uses nameservers " + strings.Join(e.Found, ", ") + ", not this server's"
+}
 
 // UnreachableError means a domain does not reach this server over HTTP, so
 // Let's Encrypt could not verify it either.
@@ -142,7 +162,7 @@ func (m *Manager) IssueCertificate(ctx context.Context, user, domain string) (Ce
 		return Certificate{}, err
 	}
 
-	if err := m.runCertbotIssue(ctx, domain, names); err != nil {
+	if err := m.runCertbot(ctx, domain, names, certbotIssueArgs(m.cfg.AcmeDir, domain, names)); err != nil {
 		return Certificate{}, err
 	}
 
@@ -162,10 +182,71 @@ func (m *Manager) IssueCertificate(ctx context.Context, user, domain string) (Ce
 	return Certificate{Names: names, ExpiresAt: expiresAt}, nil
 }
 
+// IssueWildcardCertificate gets a Let's Encrypt certificate for domain of
+// user and for *.<domain>, named domain, through DNS-01: certbot's hooks
+// (Config.AcmeDNSHook) put the challenges into this server's PowerDNS. That
+// only works when public DNS sends the domain to this server, so its
+// nameservers must include one of nameservers (else *NotDelegatedError).
+// Subdomains of the account may then serve HTTPS with it
+// (Site.CertificateDomain). certbot failures are returned as *IssueError
+// or ErrCertbotBusy.
+func (m *Manager) IssueWildcardCertificate(ctx context.Context, user, domain string, nameservers []string) (Certificate, error) {
+	if err := checkNames(user, domain); err != nil {
+		return Certificate{}, err
+	}
+
+	for _, nameserver := range nameservers {
+		if err := validate.Domain(nameserver); err != nil {
+			return Certificate{}, fmt.Errorf("nameserver: %w", err)
+		}
+	}
+
+	if _, err := m.accountVhost(user, domain); err != nil {
+		return Certificate{}, err
+	}
+
+	if exists(m.suspendedFile(user)) {
+		return Certificate{}, fmt.Errorf("%w: %s", ErrAccountSuspended, user)
+	}
+
+	found, err := m.cfg.LookupNS(ctx, domain)
+	if err != nil {
+		m.logger().Info("no nameservers found for a wildcard certificate", "domain", domain, "error", err)
+	}
+
+	if !slices.ContainsFunc(found, func(name string) bool { return slices.Contains(nameservers, name) }) {
+		return Certificate{}, &NotDelegatedError{Domain: domain, Found: found}
+	}
+
+	names := []string{domain, "*." + domain}
+
+	if err := m.runCertbot(ctx, domain, names, certbotWildcardArgs(m.cfg.AcmeDNSHook, domain, names)); err != nil {
+		return Certificate{}, err
+	}
+
+	expiresAt, err := certificateExpiry(m.certificateFile(domain))
+	if err != nil {
+		return Certificate{}, err
+	}
+
+	uses, err := m.accountUsesCertificate(user, domain)
+	if err != nil {
+		return Certificate{}, err
+	}
+
+	if uses {
+		if err := m.reloadNginx(ctx); err != nil {
+			return Certificate{}, err
+		}
+	}
+
+	return Certificate{Names: names, ExpiresAt: expiresAt}, nil
+}
+
 // DeleteCertificate deletes the certificates of domain of user, Let's
-// Encrypt's and a custom one, unless the domain's vhost still serves HTTPS
-// with one of them (ErrCertificateInUse). A domain without a certificate
-// succeeds.
+// Encrypt's and a custom one, unless a vhost of the account (the domain's
+// own, or a subdomain's using its wildcard) still serves HTTPS with one of
+// them (ErrCertificateInUse). A domain without a certificate succeeds.
 func (m *Manager) DeleteCertificate(ctx context.Context, user, domain string) error {
 	if err := checkNames(user, domain); err != nil {
 		return err
@@ -176,7 +257,12 @@ func (m *Manager) DeleteCertificate(ctx context.Context, user, domain string) er
 		return err
 	}
 
-	if m.usesCertificate(vhost, domain) || m.usesCustomCertificate(vhost, domain) {
+	uses, err := m.accountUsesCertificate(user, domain)
+	if err != nil {
+		return err
+	}
+
+	if uses || m.usesCustomCertificate(vhost, domain) {
 		return fmt.Errorf("%w: %s", ErrCertificateInUse, domain)
 	}
 
@@ -241,12 +327,13 @@ func (m *Manager) deleteCertificate(ctx context.Context, domain string) error {
 	return nil
 }
 
-// runCertbotIssue has certbot get a certificate for names, named domain.
-func (m *Manager) runCertbotIssue(ctx context.Context, domain string, names []string) error {
+// runCertbot has certbot get a certificate for names, named domain, with
+// args.
+func (m *Manager) runCertbot(ctx context.Context, domain string, names, args []string) error {
 	certbotMu.Lock()
 	defer certbotMu.Unlock()
 
-	output, err := m.cfg.Run(ctx, certbotProgram, certbotIssueArgs(m.cfg.AcmeDir, domain, names)...)
+	output, err := m.cfg.Run(ctx, certbotProgram, args...)
 	if err == nil {
 		m.logger().Info("certificate issued or still valid", "domain", domain, "names", names)
 
@@ -273,6 +360,24 @@ func (m *Manager) runCertbotIssue(ctx context.Context, domain string, names []st
 // registered without an email address.
 func certbotIssueArgs(acmeDir, domain string, names []string) []string {
 	args := []string{"certonly", "--webroot", "-w", acmeDir, "--cert-name", domain}
+	for _, name := range names {
+		args = append(args, "-d", name)
+	}
+
+	return append(args, "--non-interactive", "--agree-tos", "--keep-until-expiring", "--register-unsafely-without-email")
+}
+
+// certbotWildcardArgs returns the certbot arguments that get a certificate
+// named domain for names through DNS-01, with hook (a command taking "auth"
+// or "cleanup") putting the challenges in DNS. certbot keeps the hooks in
+// the certificate's renewal configuration, so renewals use them too.
+func certbotWildcardArgs(hook, domain string, names []string) []string {
+	args := []string{
+		"certonly", "--manual", "--preferred-challenges", "dns",
+		"--manual-auth-hook", hook + " auth", "--manual-cleanup-hook", hook + " cleanup",
+		"--cert-name", domain,
+	}
+
 	for _, name := range names {
 		args = append(args, "-d", name)
 	}
@@ -379,6 +484,47 @@ func (m *Manager) servesChallenges(vhost []byte) bool {
 // of domain.
 func (m *Manager) usesCertificate(vhost []byte, domain string) bool {
 	return bytes.Contains(vhost, []byte(m.certificateDir(domain)+"/"))
+}
+
+// accountUsesCertificate reports whether a vhost of user serves HTTPS with
+// the Let's Encrypt certificate of domain: the domain's own, or that of a
+// subdomain using its wildcard.
+func (m *Manager) accountUsesCertificate(user, domain string) (bool, error) {
+	dir := m.nginxAccountDir(user)
+
+	entries, err := os.ReadDir(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+
+	if err != nil {
+		return false, fmt.Errorf("list %s: %w", dir, err)
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".conf") {
+			continue
+		}
+
+		content, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+		if err != nil {
+			return false, fmt.Errorf("read %s: %w", entry.Name(), err)
+		}
+
+		if m.usesCertificate(content, domain) {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+// certificateCovers reports whether the Let's Encrypt certificate of domain
+// lists name.
+func (m *Manager) certificateCovers(domain, name string) bool {
+	certificate, err := readFirstCertificate(m.certificateFile(domain))
+
+	return err == nil && slices.Contains(certificate.DNSNames, name)
 }
 
 // hasVhost reports whether any account has an Nginx vhost for domain.

@@ -306,7 +306,7 @@ class DomainService
      *
      * @throws ValidationException
      */
-    public function requestSsl(Domain $domain, User $actor): void
+    public function requestSsl(Domain $domain, User $actor, bool $wildcard = false): void
     {
         $this->ensureDomainIsActive($domain);
 
@@ -324,7 +324,41 @@ class DomainService
             ]);
         }
 
-        DB::transaction(function () use ($domain, $account, $actor): void {
+        if ($wildcard && $domain->type !== DomainType::Domain) {
+            throw ValidationException::withMessages([
+                'domain' => __('Only a domain can get a certificate for all its subdomains.'),
+            ]);
+        }
+
+        $parent = $domain->type === DomainType::Subdomain ? $domain->parent : null;
+
+        // A subdomain whose domain has a wildcard certificate uses it right
+        // away: nothing needs to be issued.
+        if ($parent !== null && $parent->hasWildcardCertificate()) {
+            DB::transaction(function () use ($domain, $parent, $account, $actor): void {
+                $domain->forceFill([
+                    'ssl_status' => SslStatus::Active,
+                    'ssl_source' => SslSource::Parent,
+                    'ssl_names' => [$domain->name],
+                    'ssl_expires_at' => $parent->ssl_expires_at,
+                    'ssl_issuer' => "Let's Encrypt",
+                    'ssl_trusted' => true,
+                    'ssl_error' => null,
+                ])->save();
+
+                $this->dispatchApply($domain, $account, $actor);
+
+                $this->audit->record('domain.ssl_requested', $domain, [
+                    'domain' => $domain->name,
+                    'username' => $account->username,
+                    'certificate' => '*.'.$parent->name,
+                ], $actor);
+            });
+
+            return;
+        }
+
+        DB::transaction(function () use ($domain, $account, $actor, $wildcard): void {
             $domain->forceFill([
                 'ssl_status' => SslStatus::Pending,
                 'ssl_error' => null,
@@ -333,12 +367,14 @@ class DomainService
             $this->tasks->dispatch('ssl.issue', [
                 'username' => $account->username,
                 'domain' => $domain->name,
+                ...($wildcard ? ['wildcard' => true, 'nameservers' => $this->dns->nameservers()] : []),
             ], $account, $actor);
 
-            $this->audit->record('domain.ssl_requested', $domain, [
+            $this->audit->record('domain.ssl_requested', $domain, array_filter([
                 'domain' => $domain->name,
                 'username' => $account->username,
-            ], $actor);
+                'wildcard' => $wildcard ?: null,
+            ]), $actor);
         });
     }
 
@@ -357,6 +393,20 @@ class DomainService
         $account = $domain->account;
 
         DB::transaction(function () use ($domain, $account, $actor): void {
+            // Subdomains serving HTTPS with this domain's wildcard lose it
+            // first: their vhosts must stop using the certificate before
+            // it can be deleted.
+            $borrowers = $domain->children()
+                ->where('type', DomainType::Subdomain)
+                ->where('ssl_source', SslSource::Parent)
+                ->whereIn('ssl_status', [SslStatus::Active, SslStatus::Replacing])
+                ->get();
+
+            foreach ($borrowers as $child) {
+                $child->forceFill(['ssl_status' => SslStatus::Removing, 'force_https' => false])->save();
+                $this->dispatchApply($child, $account, $actor);
+            }
+
             $domain->forceFill([
                 'ssl_status' => SslStatus::Removing,
                 'force_https' => false,
@@ -896,6 +946,11 @@ class DomainService
 
         if ($ssl && $domain->ssl_source === SslSource::Custom) {
             $params['certificate'] = 'custom';
+        }
+
+        if ($ssl && $domain->ssl_source === SslSource::Parent && $domain->parent !== null) {
+            $params['certificate'] = 'parent';
+            $params['certificate_domain'] = $domain->parent->name;
         }
 
         if ($domain->www_mode !== WwwMode::Both && $domain->pointer_mode !== PointerMode::Redirect) {

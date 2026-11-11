@@ -125,6 +125,10 @@ func (m *Manager) siteData(site Site) siteData {
 	}
 
 	certificate, certificateKey := m.certificateFile(site.Domain), m.certificateKeyFile(site.Domain)
+	if site.CertificateDomain != "" {
+		certificate, certificateKey = m.certificateFile(site.CertificateDomain), m.certificateKeyFile(site.CertificateDomain)
+	}
+
 	if site.CustomCertificate {
 		certificate, certificateKey = m.customCertificateFile(site.Domain), m.customCertificateKeyFile(site.Domain)
 	}
