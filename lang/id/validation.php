@@ -233,6 +233,7 @@ return [
         'ttl' => 'TTL',
         'priority' => 'prioritas',
         'type' => 'jenis',
+        'local_part' => 'nama alamat',
         'inodes' => 'batas inode',
         'max_execution_time' => 'batas waktu eksekusi',
         'max_input_time' => 'batas waktu input',

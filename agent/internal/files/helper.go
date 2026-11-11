@@ -28,6 +28,9 @@ const (
 	OpCopy       = "copy"
 	OpMove       = "move"
 	OpDelete     = "delete"
+	// OpRemove deletes for good, without the trash; the agent uses it for
+	// the mail of deleted mailboxes and mail domains.
+	OpRemove     = "remove"
 	OpChmod      = "chmod"
 	OpUpload     = "upload"
 	OpDownload   = "download"
@@ -282,6 +285,8 @@ func Execute(home, op string, raw json.RawMessage, data *os.File) (any, error) {
 		return run(raw, func(p TransferParams) (any, error) { return h.Move(p.Paths, p.Destination), nil })
 	case OpDelete:
 		return run(raw, func(p PathsParams) (any, error) { return h.Delete(p.Paths), nil })
+	case OpRemove:
+		return run(raw, func(p PathsParams) (any, error) { return h.Remove(p.Paths), nil })
 	case OpChmod:
 		return run(raw, func(p ChmodParams) (any, error) { return h.Chmod(p.Paths, fs.FileMode(p.Mode)), nil })
 	case OpUpload:

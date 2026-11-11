@@ -31,6 +31,7 @@ class RebuildCommand extends Command
             "{$queued['crontabs']} crontabs",
             "{$queued['ftp_folders']} FTP folders",
             "{$queued['dns_zones']} DNS zones",
+            "{$queued['mail_domains']} mail domains",
         ]).'. The queue worker applies them in the background; see Tasks in the panel.');
 
         return self::SUCCESS;

@@ -13,6 +13,7 @@ use App\Http\Controllers\DatabaseController;
 use App\Http\Controllers\DatabaseUserController;
 use App\Http\Controllers\DnsController;
 use App\Http\Controllers\DomainController;
+use App\Http\Controllers\EmailController;
 use App\Http\Controllers\FileManagerController;
 use App\Http\Controllers\FtpAccountController;
 use App\Http\Controllers\PhpMyAdminController;
@@ -47,6 +48,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('database-users', [DatabaseUserController::class, 'store'])->name('database-users.store');
         Route::put('database-users/{databaseUser}', [DatabaseUserController::class, 'update'])->name('database-users.update');
         Route::delete('database-users/{databaseUser}', [DatabaseUserController::class, 'destroy'])->name('database-users.destroy');
+        Route::get('email', [EmailController::class, 'index'])->name('email.index');
+        Route::post('email', [EmailController::class, 'store'])->name('email.store');
+        Route::put('email/{mailbox}', [EmailController::class, 'update'])->name('email.update');
+        Route::delete('email/{mailbox}', [EmailController::class, 'destroy'])->name('email.destroy');
         Route::get('dns', [DnsController::class, 'index'])->name('dns.index');
         Route::post('dns/{dnsZone}/records', [DnsController::class, 'store'])->name('dns.records.store');
         Route::put('dns/records/{dnsRecord}', [DnsController::class, 'update'])->name('dns.records.update');

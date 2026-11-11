@@ -31,6 +31,7 @@ class AccountService
         private DomainService $domains,
         private QuotaService $quotas,
         private DnsService $dns,
+        private MailService $mail,
     ) {}
 
     /**
@@ -141,6 +142,7 @@ class AccountService
             $account->forceFill(['status' => AccountStatus::Deleting])->save();
 
             $this->dns->removeAccount($account, $actor);
+            $this->mail->removeAccount($account, $actor);
             $this->tasks->dispatch('account.delete', ['username' => $account->username], $account, $actor);
 
             $this->audit->record('account.deleted', $account, ['username' => $account->username], $actor);

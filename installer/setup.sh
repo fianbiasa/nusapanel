@@ -66,6 +66,14 @@ readonly DKIM_SELECTOR="rayxo"
 readonly DNS_API_KEY_FILE="$CONFIG_DIR/pdns-api-key"
 readonly DNS_API_PORT="8081"
 readonly PDNS_CONF="/etc/powerdns/pdns.d/rayxo.conf"
+# Postfix and Dovecot read mail domains and mailboxes from the panel's
+# database as this MariaDB user, which may only read the v_mail_* views.
+readonly MAIL_DB_USER="rayxo-mail"
+readonly POSTFIX_MAPS_DIR="/etc/postfix/rayxo"
+# Rspamd signs the mail of hosting accounts' domains with these DKIM keys
+# (<domain>.<selector>.key); the agent writes them and the selector map.
+readonly RSPAMD_DKIM_DIR="/var/lib/rspamd/dkim"
+readonly RSPAMD_MAP_DIR="/etc/rspamd/rayxo"
 readonly DNS_REPORT="$CONFIG_DIR/dns-records.txt"
 readonly RELEASE_REPO="fianbiasa/rayxo"
 # Public DNS over HTTPS, asked in this order. A resolver's cache can still
@@ -754,7 +762,7 @@ resolve_panel_port() {
     local passive_low passive_high
     read -r passive_low passive_high <<<"$FTP_PASSIVE_PORTS"
     case "$PANEL_PORT" in
-        3306 | 8080 | 8891) die "port $PANEL_PORT dipakai layanan lain di server ini; pilih port lain" ;;
+        3306 | 6379 | 8080 | 8081 | 8891 | 11332 | 11333 | 11334) die "port $PANEL_PORT dipakai layanan lain di server ini; pilih port lain" ;;
     esac
     if ((PANEL_PORT >= passive_low && PANEL_PORT <= passive_high)); then
         die "port $PANEL_PORT termasuk port passive FTP ($passive_low-$passive_high); pilih port lain"
@@ -882,11 +890,16 @@ DEBCONF
     # Without the bind backend PowerDNS recommends: its settings stop
     # PowerDNS from starting when only the MySQL backend is launched.
     quietly "${apt[@]}" install --no-install-recommends pdns-server pdns-backend-mysql
+    # Dovecot would start with Debian's defaults (system users signing in to
+    # IMAP); it stays stopped until configure_mailboxes has set it up.
+    quietly "${apt[@]}" install dovecot-core dovecot-imapd dovecot-pop3d dovecot-lmtpd dovecot-mysql
     remove_policy_rc
+
+    quietly "${apt[@]}" install postfix-mysql redis-server rspamd
 
     # cron runs the cron jobs of hosting accounts (the agent writes their crontabs).
     quietly systemctl enable --now mariadb nginx cron "php$PHP_VERSION-fpm"
-    info "Nginx, Apache, MariaDB, Postfix, Pure-FTPd, PowerDNS dan PHP $PHP_VERSION terpasang"
+    info "Nginx, Apache, MariaDB, Postfix, Dovecot, Rspamd, Pure-FTPd, PowerDNS dan PHP $PHP_VERSION terpasang"
 }
 
 # The site PHP versions: those of an earlier install plus --php-versions, or
@@ -1704,6 +1717,217 @@ CONF
     die "API PowerDNS tidak menjawab (cek: journalctl -u pdns)"
 }
 
+# Email for the domains of hosting accounts. Postfix takes mail for the
+# domains in v_mail_domains (port 25, opportunistic TLS) and hands it to
+# Dovecot over LMTP, which keeps it in /home/<account>/imap/<domain>/<name>
+# as the account's Linux user (so it counts towards its disk quota).
+# Mailboxes send through submission (587, STARTTLS) and smtps (465), always
+# signed in and only as themselves. Dovecot serves IMAP and POP3 over TLS
+# only, with the hostname certificate, and checks the passwords in
+# v_mail_mailboxes. Rspamd scans mail and signs it with each domain's DKIM
+# key; OpenDKIM keeps signing the server's own mail. Suspended accounts
+# drop out of the views, so their mail stops at once.
+configure_mailboxes() {
+    step "Mengatur email akun hosting (Postfix, Dovecot, Rspamd)"
+
+    # A new password on every run; it only lives in Postfix's and Dovecot's
+    # config. The views come from the panel's migrations (prepare_panel).
+    local password
+    password="$(openssl rand -hex 24)"
+
+    mariadb <<SQL
+CREATE USER IF NOT EXISTS '$MAIL_DB_USER'@'localhost' IDENTIFIED BY '$password';
+ALTER USER '$MAIL_DB_USER'@'localhost' IDENTIFIED BY '$password';
+GRANT SELECT ON \`rayxo\`.\`v_mail_domains\` TO '$MAIL_DB_USER'@'localhost';
+GRANT SELECT ON \`rayxo\`.\`v_mail_mailboxes\` TO '$MAIL_DB_USER'@'localhost';
+SQL
+
+    # Postfix's lookups, through proxymap (smtpd runs chrooted).
+    install -d -m 0750 -o root -g postfix "$POSTFIX_MAPS_DIR"
+    local map query
+    while read -r map query; do
+        (
+            umask 027
+            cat >"$POSTFIX_MAPS_DIR/$map.cf.new" <<MAP
+# Written by RAYXO setup.sh on every run; changes made here are lost.
+hosts = unix:/run/mysqld/mysqld.sock
+user = $MAIL_DB_USER
+password = $password
+dbname = rayxo
+query = $query
+MAP
+        )
+        chgrp postfix "$POSTFIX_MAPS_DIR/$map.cf.new"
+        mv -f "$POSTFIX_MAPS_DIR/$map.cf.new" "$POSTFIX_MAPS_DIR/$map.cf"
+    done <<'MAPS'
+mail-domains SELECT 1 FROM v_mail_domains WHERE name = '%s'
+mail-mailboxes SELECT 1 FROM v_mail_mailboxes WHERE address = '%s'
+mail-senders SELECT address FROM v_mail_mailboxes WHERE address = '%s'
+MAPS
+
+    quietly postconf -e \
+        "inet_interfaces = all" \
+        "virtual_mailbox_domains = proxy:mysql:$POSTFIX_MAPS_DIR/mail-domains.cf" \
+        "virtual_mailbox_maps = proxy:mysql:$POSTFIX_MAPS_DIR/mail-mailboxes.cf" \
+        "virtual_transport = lmtp:unix:private/dovecot-lmtp" \
+        "smtpd_sender_login_maps = proxy:mysql:$POSTFIX_MAPS_DIR/mail-senders.cf" \
+        "smtpd_sasl_type = dovecot" \
+        "smtpd_sasl_path = private/auth" \
+        "smtpd_sasl_auth_enable = no" \
+        "smtpd_tls_cert_file = $CONFIG_DIR/ssl/panel.crt" \
+        "smtpd_tls_key_file = $CONFIG_DIR/ssl/panel.key" \
+        "smtpd_tls_security_level = may" \
+        "smtpd_tls_mandatory_protocols = >=TLSv1.2" \
+        "smtpd_tls_protocols = >=TLSv1.2" \
+        "smtpd_helo_required = yes" \
+        "smtpd_relay_restrictions = permit_mynetworks, permit_sasl_authenticated, reject_unauth_destination" \
+        "local_header_rewrite_clients = permit_inet_interfaces, permit_sasl_authenticated" \
+        "smtpd_milters = inet:127.0.0.1:11332, inet:127.0.0.1:8891" \
+        "non_smtpd_milters = \$smtpd_milters" \
+        "milter_protocol = 6" \
+        "milter_default_action = accept" \
+        "message_size_limit = 52428800" \
+        "mailbox_size_limit = 0"
+
+    # Mailboxes send on 587 (STARTTLS) and 465 (TLS), signed in, as
+    # themselves only. Signed-in senders count as local for header
+    # rewriting, so a message without Message-ID or Date gets them.
+    local service
+    for service in submission smtps; do
+        quietly postconf -M "$service/inet=$service inet n - y - - smtpd"
+        quietly postconf -P \
+            "$service/inet/syslog_name=postfix/$service" \
+            "$service/inet/smtpd_sasl_auth_enable=yes" \
+            "$service/inet/smtpd_tls_auth_only=yes" \
+            "$service/inet/smtpd_client_restrictions=permit_sasl_authenticated,reject" \
+            "$service/inet/smtpd_sender_restrictions=reject_sender_login_mismatch" \
+            "$service/inet/smtpd_relay_restrictions=permit_sasl_authenticated,reject" \
+            "$service/inet/milter_macro_daemon_name=ORIGINATING"
+    done
+    quietly postconf -P "submission/inet/smtpd_tls_security_level=encrypt" "smtps/inet/smtpd_tls_wrappermode=yes"
+
+    (
+        umask 027
+        cat >/etc/dovecot/rayxo-sql.conf.ext.new <<SQLCONF
+# Written by RAYXO setup.sh on every run; changes made here are lost.
+driver = mysql
+connect = host=/run/mysqld/mysqld.sock dbname=rayxo user=$MAIL_DB_USER password=$password
+default_pass_scheme = SHA512-CRYPT
+password_query = SELECT address AS user, password FROM v_mail_mailboxes WHERE address = '%u'
+user_query = SELECT home, uid, gid, quota_rule FROM v_mail_mailboxes WHERE address = '%u'
+iterate_query = SELECT address AS user FROM v_mail_mailboxes
+SQLCONF
+    )
+    chgrp dovecot /etc/dovecot/rayxo-sql.conf.ext.new
+    mv -f /etc/dovecot/rayxo-sql.conf.ext.new /etc/dovecot/rayxo-sql.conf.ext
+
+    # The whole Dovecot configuration, without Debian's conf.d: system users
+    # never sign in to IMAP, only the panel's mailboxes do.
+    cat >/etc/dovecot/dovecot.conf <<CONF
+# Written by RAYXO setup.sh on every run; changes made here are lost.
+protocols = imap pop3 lmtp
+listen = *
+ssl = required
+ssl_cert = <$CONFIG_DIR/ssl/panel.crt
+ssl_key = <$CONFIG_DIR/ssl/panel.key
+ssl_min_protocol = TLSv1.2
+disable_plaintext_auth = yes
+auth_mechanisms = plain login
+auth_username_format = %Lu
+first_valid_uid = 1000
+mail_location = maildir:~/Maildir
+mail_plugins = \$mail_plugins quota
+
+passdb {
+  driver = sql
+  args = /etc/dovecot/rayxo-sql.conf.ext
+}
+
+userdb {
+  driver = sql
+  args = /etc/dovecot/rayxo-sql.conf.ext
+}
+
+namespace inbox {
+  inbox = yes
+  separator = /
+  mailbox Drafts {
+    special_use = \\Drafts
+    auto = subscribe
+  }
+  mailbox Sent {
+    special_use = \\Sent
+    auto = subscribe
+  }
+  mailbox Junk {
+    special_use = \\Junk
+    auto = subscribe
+  }
+  mailbox Trash {
+    special_use = \\Trash
+    auto = subscribe
+  }
+}
+
+service lmtp {
+  unix_listener /var/spool/postfix/private/dovecot-lmtp {
+    mode = 0600
+    user = postfix
+    group = postfix
+  }
+}
+
+service auth {
+  unix_listener /var/spool/postfix/private/auth {
+    mode = 0660
+    user = postfix
+    group = postfix
+  }
+}
+
+protocol imap {
+  mail_plugins = \$mail_plugins imap_quota
+}
+
+protocol lmtp {
+  postmaster_address = postmaster@$server_hostname
+}
+
+plugin {
+  quota = maildir:User quota
+}
+CONF
+
+    # Rspamd: DKIM keys of the accounts' domains (written by the agent), no
+    # greylisting (it delays first mail by minutes), Redis on localhost.
+    install -d -m 0750 -o _rspamd -g _rspamd "$RSPAMD_DKIM_DIR"
+    install -d -m 0755 "$RSPAMD_MAP_DIR"
+    [[ -f "$RSPAMD_MAP_DIR/dkim_selectors.map" ]] || install -m 0644 /dev/null "$RSPAMD_MAP_DIR/dkim_selectors.map"
+
+    cat >/etc/rspamd/local.d/dkim_signing.conf <<CONF
+# Written by RAYXO setup.sh on every run; changes made here are lost.
+path = "$RSPAMD_DKIM_DIR/\$domain.\$selector.key";
+selector_map = "$RSPAMD_MAP_DIR/dkim_selectors.map";
+allow_username_mismatch = true;
+try_fallback = false;
+use_esld = false;
+CONF
+    printf '# Written by RAYXO setup.sh on every run.\nenabled = false;\n' >/etc/rspamd/local.d/greylist.conf
+    printf '# Written by RAYXO setup.sh on every run.\nservers = "127.0.0.1";\n' >/etc/rspamd/local.d/redis.conf
+    printf '# Written by RAYXO setup.sh on every run.\nuse = ["x-spamd-bar", "x-spam-level", "authentication-results"];\nskip_local = true;\nskip_authenticated = true;\n' \
+        >/etc/rspamd/local.d/milter_headers.conf
+
+    quietly systemctl enable redis-server rspamd dovecot
+    systemctl restart redis-server
+    quietly rspamadm configtest || die "konfigurasi Rspamd ditolak (cek: rspamadm configtest)"
+    systemctl restart rspamd
+    quietly doveconf -n || die "konfigurasi Dovecot ditolak (cek: doveconf -n)"
+    systemctl restart dovecot
+    quietly postfix check
+    systemctl restart postfix
+    info "Email akun hosting aktif: SMTP 25, kirim lewat 587/465, IMAP 993, POP3 995"
+}
+
 configure_web() {
     step "Mengatur web server untuk website customer (Nginx -> Apache 127.0.0.1:8080)"
 
@@ -2112,10 +2336,23 @@ verify_install() {
     info "Nginx mendengar di port 80 dan 443"
 
     systemctl is-active --quiet postfix || die "Postfix tidak berjalan (cek: journalctl -u postfix)"
-    if ss -ltnH 'sport = :25' | grep -vqE '127\.0\.0\.1:25'; then
-        die "Postfix mendengar di alamat selain 127.0.0.1; server bisa dipakai untuk spam"
+    # Postfix takes mail from the internet for the accounts' domains, so it
+    # must refuse to pass mail on to any other domain for anyone who has
+    # not signed in: asked through the server's own public address (outside
+    # mynetworks), it has to refuse a foreign recipient.
+    if [[ -n "${server_ip:-}" ]] && ! python3 - "$server_ip" >>"$INSTALL_LOG" 2>&1 <<'PYTHON'
+import smtplib, sys
+smtp = smtplib.SMTP(sys.argv[1], 25, timeout=20)
+smtp.ehlo("relay-check.invalid")
+smtp.mail("check@example.org")
+code, _ = smtp.rcpt("check@example.net")
+smtp.quit()
+sys.exit(0 if code >= 500 else 1)
+PYTHON
+    then
+        die "Postfix meneruskan email ke domain lain tanpa login (open relay); server bisa dipakai untuk spam"
     fi
-    info "Postfix aktif dan hanya mendengar di 127.0.0.1"
+    info "Postfix aktif dan menolak meneruskan email tanpa login"
 
     systemctl is-active --quiet opendkim || die "OpenDKIM tidak berjalan (cek: journalctl -u opendkim)"
     info "OpenDKIM aktif"
@@ -2150,6 +2387,10 @@ verify_install() {
     # login sent before that. fd 4: fd 3 is the terminal.
     systemctl is-active --quiet pure-ftpd-mysql || die "Pure-FTPd tidak berjalan (cek: journalctl -u pure-ftpd-mysql)"
     systemctl is-active --quiet pdns || die "PowerDNS tidak berjalan (cek: journalctl -u pdns)"
+    local unit
+    for unit in dovecot rspamd redis-server; do
+        systemctl is-active --quiet "$unit" || die "$unit tidak berjalan (cek: journalctl -u $unit)"
+    done
     if ! timeout 15 openssl s_client -connect 127.0.0.1:21 -starttls ftp -servername "$server_hostname" \
         </dev/null 2>/dev/null | grep -q "BEGIN CERTIFICATE"; then
         die "FTP di port 21 tidak bisa beralih ke TLS (cek: journalctl -u pure-ftpd-mysql)"
@@ -2271,7 +2512,7 @@ summary() {
 
     printf '\n'
     info "Catatan:"
-    info "- Pastikan port 80, 443, $PANEL_PORT, 21, ${FTP_PASSIVE_PORTS/ /-} (FTP passive) dan 53 TCP & UDP (DNS) terbuka di firewall / security group provider VPS."
+    info "- Pastikan port 80, 443, $PANEL_PORT, 21, ${FTP_PASSIVE_PORTS/ /-} (FTP passive), 53 TCP & UDP (DNS) dan 25, 465, 587, 993, 995 (email) terbuka di firewall / security group provider VPS."
     info "- Cek agent: rayxo ping"
     info "- Lupa password admin: runuser -u $PANEL_USER -- php$PHP_VERSION $INSTALL_DIR/current/panel/artisan rayxo:reset-password $admin_user"
     info "- Log instalasi: $INSTALL_LOG"
@@ -2322,6 +2563,7 @@ main() {
     configure_ftp
     configure_sftp
     configure_dns
+    configure_mailboxes
     configure_web
     configure_quota
     configure_logrotate

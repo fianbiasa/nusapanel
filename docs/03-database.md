@@ -195,27 +195,27 @@ Password user database **tidak disimpan** dan tidak pernah dikirim ke agent. Pan
 
 ## 3.6 Email
 
-| Tabel                 | Kolom penting                                                                                                                                               |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mail_domains`        | domain_id (unique), enabled, dkim_selector, dkim_public_key, catchall_mode `bounce`/`forward`/`discard`, catchall_target, daily_send_limit                  |
-| `mailboxes`           | mail_domain_id, local_part, password_hash (SHA512-CRYPT), quota_mb, used_mb, daily_send_limit, status, last_login_at. Unique `(mail_domain_id, local_part)` |
-| `mail_forwarders`     | mail_domain_id, local_part, destinations (json)                                                                                                             |
-| `mail_autoresponders` | mail_domain_id, local_part, subject, body, content_type, cc, reply_interval_hours                                                                           |
-| `mail_vacations`      | mailbox_id, subject, body, starts_at, ends_at, reply_interval_hours                                                                                         |
-| `mail_filters`        | mailbox_id, name, sort, conditions (json), actions (json), enabled. Dikompilasi menjadi skrip Sieve                                                         |
-| `spam_settings`       | scope_type `account`/`mailbox`, scope_id, enabled, threshold, action `move`/`delete`/`tag`, whitelist (json), blacklist (json)                              |
-| `mailing_lists`       | P6, skema menyusul                                                                                                                                          |
+| Tabel                 | Kolom penting                                                                                                                                                                                                                           |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mail_domains`        | ✅ domain_id (unique), dkim_selector (`rayxo`), dkim_public_key, status `pending`/`active`/`failed`; dibuat bersama mailbox pertama domain itu. Menyusul: catchall_mode `bounce`/`forward`/`discard`, catchall_target, daily_send_limit |
+| `mailboxes`           | ✅ mail_domain_id, local_part (≤ 64), password_hash (SHA512-CRYPT), quota_mb (null = tanpa kuota), status. Unique `(mail_domain_id, local_part)`. Menyusul: used_mb, daily_send_limit, last_login_at                                    |
+| `mail_forwarders`     | mail_domain_id, local_part, destinations (json)                                                                                                                                                                                         |
+| `mail_autoresponders` | mail_domain_id, local_part, subject, body, content_type, cc, reply_interval_hours                                                                                                                                                       |
+| `mail_vacations`      | mailbox_id, subject, body, starts_at, ends_at, reply_interval_hours                                                                                                                                                                     |
+| `mail_filters`        | mailbox_id, name, sort, conditions (json), actions (json), enabled. Dikompilasi menjadi skrip Sieve                                                                                                                                     |
+| `spam_settings`       | scope_type `account`/`mailbox`, scope_id, enabled, threshold, action `move`/`delete`/`tag`, whitelist (json), blacklist (json)                                                                                                          |
+| `mailing_lists`       | P6, skema menyusul                                                                                                                                                                                                                      |
 
 ### View SQL untuk layanan
 
 Setiap layanan punya user MariaDB sendiri yang hanya boleh `SELECT` dari view-nya.
 
-| View               | Dipakai oleh     | Isi                                                                                                                                                                                                                             |
-| ------------------ | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `v_mail_domains`   | Postfix          | Domain aktif dengan mail lokal                                                                                                                                                                                                  |
-| `v_mail_mailboxes` | Postfix, Dovecot | Alamat, password_hash, uid, gid, home, quota                                                                                                                                                                                    |
-| `v_mail_aliases`   | Postfix          | Forwarder + catch-all                                                                                                                                                                                                           |
-| `v_ftp_users`      | Pure-FTPd        | ✅ login, password, uid, gid, dir (`/home/<user>/<directory>`); hanya login `active` dari akun `active` ber-role user yang uid & gid-nya sudah diketahui. Dibaca user MariaDB `rayxo-ftp` yang hanya punya `SELECT` di view ini |
+| View               | Dipakai oleh     | Isi                                                                                                                                                                                                                                                                   |
+| ------------------ | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `v_mail_domains`   | Postfix          | ✅ name: domain mail `active` dari akun `active` ber-role user yang uid & gid-nya sudah diketahui                                                                                                                                                                     |
+| `v_mail_mailboxes` | Postfix, Dovecot | ✅ address, password, uid, gid, home (`/home/<user>/imap/<domain>/<local_part>`), quota_rule (`*:storage=<n>M`, null tanpa kuota); hanya mailbox `active` dari domain di `v_mail_domains`. Dibaca user MariaDB `rayxo-mail` yang hanya punya `SELECT` di dua view ini |
+| `v_mail_aliases`   | Postfix          | Forwarder + catch-all                                                                                                                                                                                                                                                 |
+| `v_ftp_users`      | Pure-FTPd        | ✅ login, password, uid, gid, dir (`/home/<user>/<directory>`); hanya login `active` dari akun `active` ber-role user yang uid & gid-nya sudah diketahui. Dibaca user MariaDB `rayxo-ftp` yang hanya punya `SELECT` di view ini                                       |
 
 Akun, domain, atau mailbox yang di-suspend otomatis tersaring dari view, jadi suspend berlaku seketika tanpa reload service.
 

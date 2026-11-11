@@ -159,16 +159,16 @@ Setiap akun juga punya **user pemilik** bernama persis `<username>` (tanpa akhir
 
 ### mail
 
-| Aksi                                               | Fungsi                                                                 | Fase |
-| -------------------------------------------------- | ---------------------------------------------------------------------- | ---- |
-| `mail.domain_apply`                                | Folder mail, kunci DKIM (Rspamd), aktifkan domain                      | P2   |
-| `mail.domain_remove`                               |                                                                        | P2   |
-| `mail.mailbox_remove`                              | Hapus Maildir                                                          | P2   |
-| `mail.sieve_apply`                                 | Tulis skrip Sieve (filter, vacation, autoresponder, spam) sebagai user | P2   |
-| `mail.quota_usage`                                 | Lewat `doveadm quota get`                                              | P2   |
-| `mail.queue_list` / `queue_flush` / `queue_delete` |                                                                        | P2   |
-| `mail.ratelimit_apply`                             | Batas kirim per akun/domain di Rspamd                                  | P2   |
-| `mail.webmail_sso`                                 | Token sekali pakai untuk Roundcube                                     | P2   |
+| Aksi                                               | Fungsi                                                                                                                                                                                                                                                                                                                                                                           | Fase |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| `mail.domain_apply`                                | ✅ `{username, domain, selector}` → `{dkim_public_key}`: folder `imap/<domain>` di home akun (0700, milik akun) dan kunci DKIM RSA 2048 di `/var/lib/rspamd/dkim/<domain>.<selector>.key` (root:_rspamd 0640) kalau belum ada, plus selector domain di `/etc/rspamd/rayxo/dkim_selectors.map`. Postfix dan Dovecot mengenal domain dan mailbox lewat view SQL, bukan lewat agent | P2   |
+| `mail.domain_remove`                               | ✅ `{username, domain}`: hapus kunci DKIM dan selector domain itu, dan selama akunnya masih ada, email semua mailbox-nya (`imap/<domain>`, dihapus sebagai user akun)                                                                                                                                                                                                            | P2   |
+| `mail.mailbox_remove`                              | ✅ `{username, domain, local_part}`: hapus email mailbox itu (`imap/<domain>/<local_part>`) sebagai user akun; akun yang sudah terhapus membawa email-nya                                                                                                                                                                                                                        | P2   |
+| `mail.sieve_apply`                                 | Tulis skrip Sieve (filter, vacation, autoresponder, spam) sebagai user                                                                                                                                                                                                                                                                                                           | P2   |
+| `mail.quota_usage`                                 | Lewat `doveadm quota get`                                                                                                                                                                                                                                                                                                                                                        | P2   |
+| `mail.queue_list` / `queue_flush` / `queue_delete` |                                                                                                                                                                                                                                                                                                                                                                                  | P2   |
+| `mail.ratelimit_apply`                             | Batas kirim per akun/domain di Rspamd                                                                                                                                                                                                                                                                                                                                            | P2   |
+| `mail.webmail_sso`                                 | Token sekali pakai untuk Roundcube                                                                                                                                                                                                                                                                                                                                               | P2   |
 
 ### fs (file manager, semuanya sebagai user)
 
@@ -315,6 +315,10 @@ Setiap aksi dijalankan oleh proses pembantu (`rayxod files-helper`) yang berjala
 /aquota.user                            data kuota user (journaled, vfsv1); fstab filesystem /home mendapat usrjquota=aquota.user,jqfmt=vfsv1
 /etc/fstab.rayxo-<waktu>            cadangan fstab sebelum setup.sh mengaktifkan kuota
 /etc/opendkim/keys/<hostname>/          kunci DKIM email panel (0600 opendkim)
+/etc/postfix/rayxo/mail-*.cf            lookup Postfix ke view mail (root:postfix 0640, ditulis ulang setup.sh dengan password baru)
+/etc/dovecot/dovecot.conf               config Dovecot utuh dari setup.sh (tanpa conf.d); login & userdb di rayxo-sql.conf.ext
+/var/lib/rspamd/dkim/<domain>.rayxo.key kunci DKIM domain customer (root:_rspamd 0640, ditulis rayxod)
+/etc/rspamd/rayxo/dkim_selectors.map    selector DKIM tiap domain mail (ditulis rayxod)
 /var/lib/mysql/<user>_<nama>/           database MariaDB customer (data dir bawaan, MariaDB hanya di 127.0.0.1:3306)
 /var/lib/rayxo/                     home user rayxo; state agent, backup admin
 /var/lib/rayxo/storage/             storage Laravel (log, cache view), dipakai semua rilis
@@ -324,22 +328,22 @@ Setiap aksi dijalankan oleh proses pembantu (`rayxod files-helper`) yang berjala
 
 ## 4.5 Port
 
-| Port            | Layanan                                                | Terbuka untuk                                                                    |
-| --------------- | ------------------------------------------------------ | -------------------------------------------------------------------------------- |
-| 22              | SSH, dan SFTP saja untuk akun hosting                  | Publik (port bisa diganti)                                                       |
-| 21, 35000–35999 | FTP + passive (Pure-FTPd, wajib TLS eksplisit)         | Publik                                                                           |
-| 25, 465, 587    | SMTP                                                   | Publik mulai P2; sampai itu Postfix hanya mendengar di 127.0.0.1:25 (kirim-saja) |
-| 110, 995        | POP3                                                   | Publik                                                                           |
-| 143, 993        | IMAP                                                   | Publik                                                                           |
-| 4190            | ManageSieve                                            | Publik (opsional)                                                                |
-| 53 tcp/udp      | DNS                                                    | Publik                                                                           |
-| 80, 443         | Web + phpMyAdmin (`https://<hostname>/phpmyadmin/`)    | Publik                                                                           |
-| 2222            | Panel (port bawaan; bisa diganti di Pengaturan Server) | Publik (bisa dibatasi per IP)                                                    |
-| 8080            | Apache backend                                         | 127.0.0.1                                                                        |
-| 3306            | MariaDB                                                | Lokal (remote kalau diaktifkan)                                                  |
-| 6379            | Redis (Rspamd, P2)                                     | Lokal, wajib berpassword/socket terkunci                                         |
-| 8081            | API PowerDNS                                           | 127.0.0.1                                                                        |
-| 11332–11334     | Rspamd                                                 | 127.0.0.1                                                                        |
+| Port            | Layanan                                                | Terbuka untuk                                                               |
+| --------------- | ------------------------------------------------------ | --------------------------------------------------------------------------- |
+| 22              | SSH, dan SFTP saja untuk akun hosting                  | Publik (port bisa diganti)                                                  |
+| 21, 35000–35999 | FTP + passive (Pure-FTPd, wajib TLS eksplisit)         | Publik                                                                      |
+| 25, 465, 587    | SMTP                                                   | Publik: 25 menerima email untuk domain di server ini, 465 & 587 wajib login |
+| 110, 995        | POP3                                                   | Publik, wajib TLS (STARTTLS di 110)                                         |
+| 143, 993        | IMAP                                                   | Publik, wajib TLS (STARTTLS di 143)                                         |
+| 4190            | ManageSieve                                            | Publik (opsional)                                                           |
+| 53 tcp/udp      | DNS                                                    | Publik                                                                      |
+| 80, 443         | Web + phpMyAdmin (`https://<hostname>/phpmyadmin/`)    | Publik                                                                      |
+| 2222            | Panel (port bawaan; bisa diganti di Pengaturan Server) | Publik (bisa dibatasi per IP)                                               |
+| 8080            | Apache backend                                         | 127.0.0.1                                                                   |
+| 3306            | MariaDB                                                | Lokal (remote kalau diaktifkan)                                             |
+| 6379            | Redis (Rspamd)                                         | 127.0.0.1                                                                   |
+| 8081            | API PowerDNS                                           | 127.0.0.1                                                                   |
+| 11332–11334     | Rspamd                                                 | 127.0.0.1                                                                   |
 
 ## 4.6 Service systemd milik panel
 

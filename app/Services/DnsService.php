@@ -242,6 +242,44 @@ class DnsService
     }
 
     /**
+     * Put a mail domain's records into its zone: the DKIM key (replacing an
+     * older one of the selector), a DMARC policy and an MX record when the
+     * zone has none of its own yet, so customers' changes to those stay.
+     */
+    public function applyMailRecords(Domain $domain, string $selector, string $publicKey, ?User $actor): void
+    {
+        $zone = DnsZone::query()->with('account')->where('domain_id', $domain->id)->first();
+
+        if ($zone === null) {
+            return;
+        }
+
+        DB::transaction(function () use ($zone, $domain, $selector, $publicKey, $actor): void {
+            $dkim = "{$selector}._domainkey.{$domain->name}";
+            $zone->records()->where('name', $dkim)->where('type', 'TXT')->delete();
+            $zone->records()->create($this->record($dkim, 'TXT', "v=DKIM1; k=rsa; p={$publicKey}"));
+
+            if (! $zone->records()->where('name', "_dmarc.{$domain->name}")->where('type', 'TXT')->exists()) {
+                $zone->records()->create($this->record("_dmarc.{$domain->name}", 'TXT', 'v=DMARC1; p=none'));
+            }
+
+            if (! $zone->records()->where('name', $domain->name)->where('type', 'MX')->exists()) {
+                $zone->records()->create($this->record($domain->name, 'MX', "mail.{$domain->name}", 10));
+
+                $ip = $this->publicIp();
+
+                if ($ip !== null && ! $zone->records()->where('name', "mail.{$domain->name}")->exists()) {
+                    $zone->records()->create($this->record("mail.{$domain->name}", 'A', $ip));
+                }
+            }
+
+            if ($zone->account->status !== AccountStatus::Pending) {
+                $this->sync($zone, $actor);
+            }
+        });
+    }
+
+    /**
      * Add a record to the template new zones start with. Zones that exist
      * keep their records.
      *

@@ -567,3 +567,40 @@ func TestTransfersOnlyOpenRegularFilesAndNeverFollowLinks(t *testing.T) {
 		t.Fatal("accepted a transfer id with a path")
 	}
 }
+
+func TestRemoveDeletesForGoodAndStaysInTheHome(t *testing.T) {
+	h, home, outside := newHome(t)
+	writeFile(t, filepath.Join(home, "imap/example.com/info/Maildir/cur/1"), "mail", 0o600)
+	writeFile(t, filepath.Join(home, "imap/example.com/sales/Maildir/cur/1"), "mail", 0o600)
+	writeFile(t, filepath.Join(outside, "victim/keep"), "keep", 0o644)
+
+	if err := os.Symlink(outside, filepath.Join(home, "imap/link")); err != nil {
+		t.Fatal(err)
+	}
+
+	outcome := h.Remove([]string{"imap/example.com/info", "imap/example.com/gone", "imap/link/victim"})
+
+	if !slices.Equal(outcome.Done, []string{"imap/example.com/info", "imap/example.com/gone"}) || len(outcome.Failed) != 1 {
+		t.Fatalf("outcome = %+v", outcome)
+	}
+
+	if _, err := os.Stat(filepath.Join(home, "imap/example.com/info")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("the mailbox's mail is still there")
+	}
+
+	if _, err := os.Stat(filepath.Join(home, TrashDir)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("the mail went to the trash")
+	}
+
+	if readFile(t, filepath.Join(outside, "victim/keep")) != "keep" {
+		t.Fatal("a removal reached outside the home through a link")
+	}
+
+	if readFile(t, filepath.Join(home, "imap/example.com/sales/Maildir/cur/1")) != "mail" {
+		t.Fatal("another mailbox was touched")
+	}
+
+	if outcome := h.Remove([]string{"", TrashDir}); len(outcome.Failed) != 2 {
+		t.Fatalf("the home or the trash could be removed: %+v", outcome)
+	}
+}

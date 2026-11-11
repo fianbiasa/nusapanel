@@ -94,12 +94,13 @@ class ServiceController extends Controller
 
         $this->audit->record('server.rebuilt', null, $queued);
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Rewriting :websites websites, :quotas quotas, :crontabs crontabs, :ftp FTP folders and :zones DNS zones. Follow them under Tasks.', [
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Rewriting :websites websites, :quotas quotas, :crontabs crontabs, :ftp FTP folders, :zones DNS zones and :mail mail domains. Follow them under Tasks.', [
             'websites' => $queued['websites'],
             'quotas' => $queued['quotas'],
             'crontabs' => $queued['crontabs'],
             'ftp' => $queued['ftp_folders'],
             'zones' => $queued['dns_zones'],
+            'mail' => $queued['mail_domains'],
         ])]);
 
         return back();

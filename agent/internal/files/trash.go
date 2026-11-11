@@ -55,6 +55,30 @@ func (h *Home) Delete(paths []string) Outcome {
 	return outcome
 }
 
+// Remove deletes every path and everything in it for good, without the
+// trash. A path that is not there is not an error.
+func (h *Home) Remove(paths []string) Outcome {
+	outcome := newOutcome()
+
+	for _, p := range paths {
+		if err := h.checkSource(p); err != nil {
+			outcome.add(p, err)
+
+			continue
+		}
+
+		if _, err := h.root.Lstat(p); errors.Is(err, fs.ErrNotExist) {
+			outcome.add(p, nil)
+
+			continue
+		}
+
+		outcome.add(p, h.removeAll(p))
+	}
+
+	return outcome
+}
+
 func (h *Home) trash(p string) error {
 	if err := h.checkSource(p); err != nil {
 		return err

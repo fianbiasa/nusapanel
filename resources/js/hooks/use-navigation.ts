@@ -9,6 +9,7 @@ import {
     House,
     Milestone,
     ListChecks,
+    Mail,
     Network,
     Package,
     ScrollText,
@@ -28,6 +29,7 @@ import { index as serverSettingsIndex } from '@/routes/admin/server-settings';
 import { index as servicesIndex } from '@/routes/admin/services';
 import { index as tasksIndex } from '@/routes/admin/tasks';
 import { index as domainsIndex } from '@/routes/domains';
+import { index as emailIndex } from '@/routes/email';
 import { index as filesIndex } from '@/routes/files';
 import { index as ftpIndex } from '@/routes/ftp';
 import { edit as profileEdit } from '@/routes/profile';
@@ -134,6 +136,11 @@ export function useNavigation(): {
             href: dnsIndex(),
             icon: Network,
         };
+        const email: NavItem = {
+            title: 'Email',
+            href: emailIndex(),
+            icon: Mail,
+        };
         const databases: NavItem = {
             title: 'Databases',
             href: databasesIndex(),
@@ -166,6 +173,7 @@ export function useNavigation(): {
                 dashboardItem,
                 domains,
                 dns,
+                email,
                 files,
                 databases,
                 ftp,

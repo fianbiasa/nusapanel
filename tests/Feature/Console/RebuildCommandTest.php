@@ -34,7 +34,7 @@ class RebuildCommandTest extends TestCase
         User::factory()->admin()->create();
 
         $this->artisan('rayxo:rebuild')
-            ->expectsOutputToContain('Queued: 2 websites, 2 disk quotas, 2 crontabs, 2 FTP folders, 2 DNS zones.')
+            ->expectsOutputToContain('Queued: 2 websites, 2 disk quotas, 2 crontabs, 2 FTP folders, 2 DNS zones, 0 mail domains.')
             ->assertSuccessful();
 
         $this->assertEqualsCanonicalizing(

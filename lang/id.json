@@ -224,7 +224,6 @@
     ":service is stopped and no longer starts at boot.": ":service dihentikan dan tidak lagi menyala otomatis saat boot.",
     ":service is reloading its configuration.": ":service sedang memuat ulang konfigurasinya.",
     ":service is being restarted.": ":service sedang di-restart.",
-    "Rewriting :websites websites, :quotas quotas, :crontabs crontabs, :ftp FTP folders and :zones DNS zones. Follow them under Tasks.": "Menulis ulang :websites website, :quotas kuota, :crontabs crontab, :ftp folder FTP dan :zones zone DNS. Pantau di menu Tasks.",
     "The server could not change its timezone: :detail": "Server tidak bisa mengganti zona waktunya: :detail",
     "The server now runs on :timezone time.": "Server sekarang memakai waktu :timezone.",
     "The certificate is already being requested.": "Sertifikat sedang diminta.",
@@ -290,5 +289,14 @@
     "Only {domain} and {ip} can be filled in.": "Hanya {domain} dan {ip} yang bisa diisi otomatis.",
     "The template is saved; new zones start with it.": "Template disimpan; zone baru memakainya.",
     "The template is back to the default.": "Template kembali ke bawaan.",
-    "Only a domain can get a certificate for all its subdomains.": "Hanya domain yang bisa mendapat sertifikat untuk semua subdomainnya."
+    "Only a domain can get a certificate for all its subdomains.": "Hanya domain yang bisa mendapat sertifikat untuk semua subdomainnya.",
+    "Rewriting :websites websites, :quotas quotas, :crontabs crontabs, :ftp FTP folders, :zones DNS zones and :mail mail domains. Follow them under Tasks.": "Menulis ulang :websites website, :quotas kuota, :crontabs crontab, :ftp folder FTP, :zones zone DNS dan :mail domain email. Pantau di menu Tasks.",
+    "Use lowercase letters, digits and _+- with single dots between them.": "Pakai huruf kecil, angka dan _+- dengan satu titik di antaranya.",
+    "This address is already in use.": "Alamat ini sudah dipakai.",
+    "Email accounts can only be changed while the account is active.": "Akun email hanya bisa diubah selama akun aktif.",
+    "Your package allows :limit email accounts. Remove one or ask your provider for a bigger package.": "Paket kamu mengizinkan :limit akun email. Hapus salah satu atau minta paket yang lebih besar ke penyedia hosting kamu.",
+    "This account's package allows :limit email accounts.": "Paket akun ini mengizinkan :limit akun email.",
+    "Email account :address is created.": "Akun email :address dibuat.",
+    "Email account :address is updated.": "Akun email :address diubah.",
+    "Email account :address is deleted.": "Akun email :address dihapus."
 }

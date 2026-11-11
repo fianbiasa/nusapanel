@@ -42,6 +42,7 @@ class DomainService
         private AuditLogger $audit,
         private ServerSettingsService $serverSettings,
         private DnsService $dns,
+        private MailService $mail,
     ) {}
 
     /**
@@ -241,6 +242,7 @@ class DomainService
             $parent = $domain->parent;
 
             $this->dns->removeDomain($domain, $actor);
+            $this->mail->removeDomain($domain, $actor);
             $domain->delete();
 
             if ($parent?->status === DomainStatus::Deleting && ! $parent->children()->exists()) {

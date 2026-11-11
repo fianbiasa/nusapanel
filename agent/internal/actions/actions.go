@@ -10,6 +10,7 @@ import (
 	"rayxo/agent/internal/database"
 	"rayxo/agent/internal/dns"
 	"rayxo/agent/internal/files"
+	"rayxo/agent/internal/mail"
 	"rayxo/agent/internal/panelport"
 	"rayxo/agent/internal/quota"
 	"rayxo/agent/internal/reconfigure"
@@ -81,6 +82,13 @@ func Register(registry *rpc.Registry, config Config) {
 
 	helper := files.Runner{Executable: config.Files.Executable}
 	transfers := files.Transfers{Dir: config.Files.TransferDir, PanelUID: config.Files.PanelUID}
+
+	mailConfig := mail.DefaultConfig()
+	mailConfig.Remove = mail.RemoveWith(helper)
+
+	for name, method := range mailMethods(sysuser.System{}, mail.New(mailConfig)) {
+		registry.Register(name, method)
+	}
 
 	for name, method := range fileMethods(sysuser.System{}, helper, transfers) {
 		registry.Register(name, method)

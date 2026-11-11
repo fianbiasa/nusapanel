@@ -102,7 +102,7 @@ class DashboardTest extends TestCase
                 ->where('limits.package', 'Basic')
                 ->where('limits.ssl', false)
                 ->where('limits.quotas.domains', ['limit' => 3, 'used' => 1])
-                ->where('limits.quotas.email_accounts', ['limit' => 10, 'used' => null]));
+                ->where('limits.quotas.email_accounts', ['limit' => 10, 'used' => 0]));
     }
 
     public function test_hosting_accounts_see_their_disk_usage_as_last_measured()

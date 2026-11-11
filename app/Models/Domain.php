@@ -200,6 +200,16 @@ class Domain extends Model
     }
 
     /**
+     * The mail settings of a domain that takes email on this server.
+     *
+     * @return HasOne<MailDomain, $this>
+     */
+    public function mailDomain(): HasOne
+    {
+        return $this->hasOne(MailDomain::class);
+    }
+
+    /**
      * The website's URL redirects.
      *
      * @return HasMany<UrlRedirect, $this>
