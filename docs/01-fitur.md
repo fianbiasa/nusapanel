@@ -84,7 +84,7 @@ Pembagian level sama seperti DirectAdmin:
 | DKIM / SPF / DMARC | Dibuat otomatis + indikator status                                                                     | P2   |
 | MX & mode email    | Email ditangani server ini atau layanan luar (Google, Zoho, dll.)                                      | P2   |
 | Webmail            | Roundcube dengan SSO dari panel                                                                        | P2   |
-| Pemakaian email    | Ukuran per akun                                                                                        | P2   |
+| Pemakaian email    | ✅ Ukuran dan jumlah pesan per akun email, diukur tiap 15 menit                                        | P2   |
 | Konfigurasi klien  | Autoconfig (Thunderbird) & autodiscover (Outlook)                                                      | P3   |
 | Mailing list       |                                                                                                        | P6   |
 | Lacak pengiriman ★ | Cari log mail untuk domain sendiri                                                                     | P6   |
