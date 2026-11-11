@@ -47,6 +47,9 @@ return [
             'password' => env('MAIL_PASSWORD'),
             'timeout' => null,
             'local_domain' => env('MAIL_EHLO_DOMAIN', parse_url((string) env('APP_URL', 'http://localhost'), PHP_URL_HOST)),
+            // On a server the panel signs in to its own Postfix on 127.0.0.1,
+            // whose certificate is for the server's name (setup.sh sets false).
+            'verify_peer' => env('MAIL_VERIFY_PEER'),
         ],
 
         'ses' => [

@@ -1248,9 +1248,20 @@ OversignHeaders         From
 Domain                  $server_hostname
 Selector                $DKIM_SELECTOR
 KeyFile                 $private_key
-Socket                  inet:8891@127.0.0.1
+Socket                  local:/var/spool/postfix/opendkim/opendkim.sock
 PidFile                 /run/opendkim/opendkim.pid
+# Only mail that signed in (ORIGINATING) or came through the local
+# sendmail, whose senders Postfix limits per user (LOCAL), is signed; not
+# whatever reaches 127.0.0.1:25, which hosting accounts can open too.
+InternalHosts           192.0.2.1
+MacroList               daemon_name=ORIGINATING|LOCAL
 CONF
+
+    # The socket lives in Postfix's spool (its processes run chrooted there)
+    # and only the postfix group may open it: no other local user can have
+    # mail signed for this server.
+    install -d -m 0750 -o opendkim -g opendkim /var/spool/postfix/opendkim
+    usermod -aG opendkim postfix
 
     quietly systemctl enable opendkim
     systemctl restart opendkim
@@ -1281,7 +1292,7 @@ configure_mail() {
         "smtp_tls_security_level = may" \
         "disable_vrfy_command = yes" \
         "smtpd_banner = \$myhostname ESMTP" \
-        "smtpd_milters = inet:127.0.0.1:8891" \
+        "smtpd_milters = local:opendkim/opendkim.sock" \
         "non_smtpd_milters = \$smtpd_milters" \
         "milter_default_action = accept"
     quietly postfix check
@@ -1298,6 +1309,25 @@ configure_mail() {
         set_env_value MAIL_FROM_ADDRESS "rayxo@$server_hostname"
         set_env_value MAIL_FROM_NAME RAYXO
         info "Panel dipindah dari MAIL_MAILER=log ke Postfix lokal"
+    fi
+
+    # The panel signs in to Postfix's submission port as rayxo@<hostname>, a
+    # login Dovecot only accepts from this server (configure_mailboxes), so
+    # mail that reaches 127.0.0.1:25 without signing in is never signed for
+    # this server. Only the local Postfix setup setup.sh wrote is moved over;
+    # the password is written by the shell itself, never on a command line.
+    if [[ "$(env_value MAIL_MAILER)" == smtp && "$(env_value MAIL_HOST)" == 127.0.0.1 ]] &&
+        [[ "$(env_value MAIL_PORT)" == 25 || "$(env_value MAIL_USERNAME)" == rayxo@* ]]; then
+        set_env_value MAIL_PORT 587
+        set_env_value MAIL_USERNAME "rayxo@$server_hostname"
+        set_env_value MAIL_VERIFY_PEER false
+        if [[ -z "$(env_value MAIL_PASSWORD)" ]]; then
+            local mail_password
+            mail_password="$(openssl rand -hex 24)"
+            sed -i '/^MAIL_PASSWORD=/d' "$ENV_FILE"
+            printf 'MAIL_PASSWORD=%s\n' "$mail_password" >>"$ENV_FILE"
+        fi
+        info "Panel mengirim email lewat port 587 dengan login rayxo@$server_hostname"
     fi
 }
 
@@ -1777,6 +1807,7 @@ GRANT SELECT ON \`rayxo\`.\`v_mail_mailboxes\` TO '$MAIL_DB_USER'@'localhost';
 GRANT SELECT ON \`rayxo\`.\`v_mail_webmail_sessions\` TO '$MAIL_DB_USER'@'localhost';
 GRANT SELECT ON \`rayxo\`.\`v_mail_forwarders\` TO '$MAIL_DB_USER'@'localhost';
 GRANT SELECT ON \`rayxo\`.\`v_mail_catchalls\` TO '$MAIL_DB_USER'@'localhost';
+GRANT SELECT ON \`rayxo\`.\`v_mail_local_senders\` TO '$MAIL_DB_USER'@'localhost';
 SQL
 
     # Postfix's lookups, through proxymap (smtpd runs chrooted). Aliases
@@ -1806,7 +1837,19 @@ mail-senders SELECT address FROM v_mail_mailboxes WHERE address = '%s'
 mail-forwarders SELECT destination FROM v_mail_forwarders WHERE source = '%s'
 mail-addresses SELECT address FROM v_mail_mailboxes WHERE address = '%s'
 mail-catchalls SELECT destination FROM v_mail_catchalls WHERE source = '%s'
+local-senders SELECT senders FROM v_mail_local_senders WHERE login = '%s'
 MAPS
+
+    # The local sendmail checks a user's envelope sender itself (postdrop,
+    # setgid postdrop), without Postfix's proxymap: it gets its own copy of
+    # the lookup, readable by the postdrop group only. Other system users may
+    # send as themselves only; root and postfix as anyone.
+    install -d -m 0750 -o root -g postdrop /etc/postfix/rayxo-postdrop
+    install -m 0640 -o root -g postdrop "$POSTFIX_MAPS_DIR/local-senders.cf" /etc/postfix/rayxo-postdrop/local-senders.cf
+    rm -f "$POSTFIX_MAPS_DIR/local-senders.cf"
+    printf '# Written by RAYXO setup.sh on every run.\n/^(.+)$/ $1\n' >/etc/postfix/rayxo-postdrop/login-senders.regexp
+    chown root:postdrop /etc/postfix/rayxo-postdrop/login-senders.regexp
+    chmod 0640 /etc/postfix/rayxo-postdrop/login-senders.regexp
 
     quietly postconf -e \
         "inet_interfaces = all" \
@@ -1815,7 +1858,8 @@ MAPS
         "virtual_alias_maps = proxy:mysql:$POSTFIX_MAPS_DIR/mail-forwarders.cf, proxy:mysql:$POSTFIX_MAPS_DIR/mail-addresses.cf, proxy:mysql:$POSTFIX_MAPS_DIR/mail-catchalls.cf" \
         "virtual_alias_domains =" \
         "virtual_transport = lmtp:unix:private/dovecot-lmtp" \
-        "smtpd_sender_login_maps = proxy:mysql:$POSTFIX_MAPS_DIR/mail-senders.cf" \
+        "smtpd_sender_login_maps = inline:{ { rayxo@$server_hostname = rayxo@$server_hostname } }, proxy:mysql:$POSTFIX_MAPS_DIR/mail-senders.cf" \
+        "local_login_sender_maps = inline:{ { root = * }, { postfix = * } }, mysql:/etc/postfix/rayxo-postdrop/local-senders.cf, regexp:/etc/postfix/rayxo-postdrop/login-senders.regexp" \
         "smtpd_sasl_type = dovecot" \
         "smtpd_sasl_path = private/auth" \
         "smtpd_sasl_auth_enable = no" \
@@ -1827,7 +1871,7 @@ MAPS
         "smtpd_helo_required = yes" \
         "smtpd_relay_restrictions = permit_mynetworks, permit_sasl_authenticated, reject_unauth_destination" \
         "local_header_rewrite_clients = permit_inet_interfaces, permit_sasl_authenticated" \
-        "smtpd_milters = inet:127.0.0.1:11332, inet:127.0.0.1:8891" \
+        "smtpd_milters = unix:rspamd/milter.sock, local:opendkim/opendkim.sock" \
         "non_smtpd_milters = \$smtpd_milters" \
         "milter_protocol = 6" \
         "milter_default_action = accept" \
@@ -1850,6 +1894,11 @@ MAPS
             "$service/inet/milter_macro_daemon_name=ORIGINATING"
     done
     quietly postconf -P "submission/inet/smtpd_tls_security_level=encrypt" "smtps/inet/smtpd_tls_wrappermode=yes"
+
+    # Tell the milters where mail came in: port 25 (INBOUND, never signed,
+    # whether from the internet or a local process that did not sign in) or
+    # the local sendmail (LOCAL, senders limited per user above).
+    quietly postconf -P "smtp/inet/milter_macro_daemon_name=INBOUND" "cleanup/unix/milter_macro_daemon_name=LOCAL"
 
     (
         umask 027
@@ -1881,6 +1930,25 @@ SQLCONF
     chgrp dovecot /etc/dovecot/rayxo-webmail-sql.conf.ext.new
     mv -f /etc/dovecot/rayxo-webmail-sql.conf.ext.new /etc/dovecot/rayxo-webmail-sql.conf.ext
 
+    # The panel's own login for sending (configure_mail), from this server
+    # only. The password stays in the panel's .env; Dovecot gets its hash,
+    # made through stdin so it never shows up on a command line.
+    local panel_login panel_password panel_hash=""
+    panel_login="$(env_value MAIL_USERNAME)"
+    panel_password="$(env_value MAIL_PASSWORD)"
+    if [[ "$panel_login" == "rayxo@$server_hostname" && -n "$panel_password" ]]; then
+        panel_hash="$(printf '%s' "$panel_password" | openssl passwd -6 -stdin)"
+    fi
+    (
+        umask 027
+        printf '# Written by RAYXO setup.sh on every run; changes made here are lost.\n' >/etc/dovecot/rayxo-system.passwd.new
+        if [[ -n "$panel_hash" ]]; then
+            printf '%s:{SHA512-CRYPT}%s::::::allow_nets=127.0.0.1,::1\n' "$panel_login" "$panel_hash" >>/etc/dovecot/rayxo-system.passwd.new
+        fi
+    )
+    chgrp dovecot /etc/dovecot/rayxo-system.passwd.new
+    mv -f /etc/dovecot/rayxo-system.passwd.new /etc/dovecot/rayxo-system.passwd
+
     # The whole Dovecot configuration, without Debian's conf.d: system users
     # never sign in to IMAP, only the panel's mailboxes do.
     cat >/etc/dovecot/dovecot.conf <<CONF
@@ -1908,6 +1976,12 @@ passdb {
 passdb {
   driver = sql
   args = /etc/dovecot/rayxo-sql.conf.ext
+}
+
+# The panel's login for sending its own mail, from this server only.
+passdb {
+  driver = passwd-file
+  args = /etc/dovecot/rayxo-system.passwd
 }
 
 userdb {
@@ -1996,12 +2070,51 @@ SIEVE
 # Written by RAYXO setup.sh on every run; changes made here are lost.
 path = "$RSPAMD_DKIM_DIR/\$domain.\$selector.key";
 selector_map = "$RSPAMD_MAP_DIR/dkim_selectors.map";
-allow_username_mismatch = true;
+allow_username_mismatch = false;
 try_fallback = false;
 use_esld = false;
 CONF
     printf '# Written by RAYXO setup.sh on every run.\nenabled = false;\n' >/etc/rspamd/local.d/greylist.conf
-    printf '# Written by RAYXO setup.sh on every run.\nservers = "127.0.0.1";\n' >/etc/rspamd/local.d/redis.conf
+
+    # Mail that came in on port 25 (Postfix tags it INBOUND; Rspamd's milter
+    # passes Postfix's daemon name on as MTA-Name) is never signed:
+    # senders sign in on 587/465, or use the local sendmail, whose senders
+    # Postfix limits per user (LOCAL). Hosting accounts can open 127.0.0.1:25.
+    cat >/etc/rspamd/local.d/settings.conf <<'CONF'
+# Written by RAYXO setup.sh on every run; changes made here are lost.
+inbound_is_not_signed {
+  priority = high;
+  request_header = {
+    "MTA-Name" = "^INBOUND$";
+  }
+  apply {
+    symbols_disabled = ["DKIM_SIGNED", "ARC_SIGNED"];
+  }
+}
+CONF
+
+    # Rspamd and Redis listen on unix sockets only, so hosting accounts can
+    # reach neither (their sites and cron jobs can open 127.0.0.1): the
+    # milter in Postfix's spool for the postfix group, the scanner and the
+    # web interface for root (rspamc -h /run/rspamd/controller.sock), and
+    # Redis for Rspamd (the redis group). The milter scans by itself.
+    install -d -m 0750 -o _rspamd -g postfix /var/spool/postfix/rspamd
+    install -d -m 0755 /etc/rspamd/override.d
+    printf '# Written by RAYXO setup.sh on every run.\nbind_socket = "/var/spool/postfix/rspamd/milter.sock mode=0666 owner=_rspamd";\nupstream "local" {\n  default = yes;\n  self_scan = yes;\n}\n' \
+        >/etc/rspamd/override.d/worker-proxy.inc
+    printf '# Written by RAYXO setup.sh on every run.\nbind_socket = "/run/rspamd/normal.sock mode=0600 owner=_rspamd";\n' \
+        >/etc/rspamd/override.d/worker-normal.inc
+    printf '# Written by RAYXO setup.sh on every run.\nbind_socket = "/run/rspamd/controller.sock mode=0600 owner=_rspamd";\n' \
+        >/etc/rspamd/override.d/worker-controller.inc
+    printf '# Written by RAYXO setup.sh on every run.\nservers = "/run/redis/redis-server.sock";\n' >/etc/rspamd/local.d/redis.conf
+
+    printf '# Written by RAYXO setup.sh on every run: Redis is for Rspamd only.\nport 0\nunixsocket /run/redis/redis-server.sock\nunixsocketperm 770\n' \
+        >/etc/redis/rayxo.conf
+    chown root:redis /etc/redis/rayxo.conf
+    chmod 0640 /etc/redis/rayxo.conf
+    grep -qx 'include /etc/redis/rayxo.conf' /etc/redis/redis.conf ||
+        printf '\n# RAYXO: last, so its settings win.\ninclude /etc/redis/rayxo.conf\n' >>/etc/redis/redis.conf
+    usermod -aG redis _rspamd
     printf '# Written by RAYXO setup.sh on every run.\nuse = ["x-spamd-bar", "x-spam-level", "authentication-results"];\nskip_local = true;\nskip_authenticated = true;\n' \
         >/etc/rspamd/local.d/milter_headers.conf
 
@@ -2497,6 +2610,37 @@ PYTHON
         die "Postfix meneruskan email ke domain lain tanpa login (open relay); server bisa dipakai untuk spam"
     fi
     info "Postfix aktif dan menolak meneruskan email tanpa login"
+
+    # Hosting accounts can open 127.0.0.1, so the mail services that sign,
+    # scan or keep data must not listen there.
+    local open_ports
+    open_ports="$(ss -Hltn '( sport = :6379 or sport = :8891 or sport = :11332 or sport = :11333 or sport = :11334 or sport = :11335 )' | awk '{print $4}' | tr '\n' ' ')"
+    [[ -z "${open_ports// /}" ]] ||
+        die "Redis, OpenDKIM atau Rspamd masih mendengar lewat TCP ($open_ports); akun hosting bisa menjangkaunya"
+    info "Redis, OpenDKIM dan Rspamd hanya lewat socket yang terkunci"
+
+    # The panel signs in to send its mail, and nobody may send through the
+    # local sendmail as someone else.
+    if [[ "$(env_value MAIL_HOST)" == 127.0.0.1 && "$(env_value MAIL_PORT)" == 587 ]]; then
+        MAIL_USERNAME="$(env_value MAIL_USERNAME)" MAIL_PASSWORD="$(env_value MAIL_PASSWORD)" \
+            python3 - >>"$INSTALL_LOG" 2>&1 <<'PYTHON' ||
+import os, smtplib, ssl
+context = ssl.create_default_context()
+context.check_hostname = False
+context.verify_mode = ssl.CERT_NONE
+smtp = smtplib.SMTP("127.0.0.1", 587, timeout=20)
+smtp.starttls(context=context)
+smtp.login(os.environ["MAIL_USERNAME"], os.environ["MAIL_PASSWORD"])
+smtp.quit()
+PYTHON
+            die "panel tidak bisa login ke Postfix di port 587 untuk mengirim email (cek: $INSTALL_LOG)"
+        info "Panel mengirim email dengan login (port 587)"
+    fi
+    if printf 'Subject: RAYXO sender check\n\nThis should have been refused.\n' |
+        runuser -u nobody -- /usr/sbin/sendmail -f check@example.org root >>"$INSTALL_LOG" 2>&1; then
+        die "sendmail lokal menerima alamat pengirim sembarang dari user biasa (cek: postconf local_login_sender_maps)"
+    fi
+    info "Sendmail lokal hanya menerima alamat pengirim milik user itu sendiri"
 
     systemctl is-active --quiet opendkim || die "OpenDKIM tidak berjalan (cek: journalctl -u opendkim)"
     info "OpenDKIM aktif"

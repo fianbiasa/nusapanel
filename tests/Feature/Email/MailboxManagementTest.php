@@ -217,6 +217,20 @@ class MailboxManagementTest extends TestCase
         );
     }
 
+    public function test_the_local_sendmail_lets_an_account_send_only_from_its_own_domains()
+    {
+        Domain::factory()->for($this->account, 'account')->create(['name' => 'example.net']);
+        Domain::factory()->for(User::factory()->admin()->create(['username' => 'boss']), 'account')->create(['name' => 'admin.example']);
+        Domain::factory()->create(['name' => 'someone-else.example']);
+
+        $senders = DB::table('v_mail_local_senders')->where('login', 'budi')->value('senders');
+
+        $tokens = explode(' ', (string) $senders);
+        sort($tokens);
+        $this->assertSame(['<>', '@example.com', '@example.net', 'budi'], $tokens);
+        $this->assertNull(DB::table('v_mail_local_senders')->where('login', 'boss')->value('senders'));
+    }
+
     public function test_suspended_accounts_drop_out_of_the_mail_views()
     {
         $this->createMailbox();
