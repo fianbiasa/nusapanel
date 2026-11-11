@@ -2,6 +2,14 @@
   <img src="public/images/rayxo-logo.png" alt="RAYXO" width="360">
 </p>
 
+<p align="center">
+  <a href="https://rayxopanel.com">Website</a> ·
+  <a href="https://rayxopanel.com/docs/">Dokumentasi</a> ·
+  <a href="https://rayxopanel.com/docs/installation/">Panduan instalasi</a> ·
+  <a href="https://rayxopanel.com/changelog/">Changelog</a> ·
+  <a href="https://github.com/fianbiasa/rayxo/discussions">Diskusi</a>
+</p>
+
 # RAYXO — Webhosting Manager
 
 Panel hosting self-hosted dengan fitur **minimal setara DirectAdmin**: tiga level akses (Admin, Reseller, User), web, DNS, email, database, FTP, SSL, backup, migrasi, dan keamanan, tanpa biaya lisensi.
