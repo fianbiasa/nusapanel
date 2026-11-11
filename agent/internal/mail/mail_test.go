@@ -20,6 +20,7 @@ type fakeSystem struct {
 	paths   []sysuser.Path
 	chowns  []string
 	removed []string
+	written map[string]string
 }
 
 func newManager(t *testing.T) (*Manager, *fakeSystem, Config) {
@@ -55,6 +56,15 @@ func newManager(t *testing.T) (*Manager, *fakeSystem, Config) {
 		},
 		Remove: func(_ context.Context, account files.Account, paths []string) error {
 			system.removed = append(system.removed, account.Home+": "+strings.Join(paths, ","))
+
+			return nil
+		},
+		Write: func(_ context.Context, account files.Account, path, content string) error {
+			if system.written == nil {
+				system.written = map[string]string{}
+			}
+
+			system.written[account.Home+": "+path] = content
 
 			return nil
 		},
@@ -157,6 +167,59 @@ func TestRemoveMailboxDeletesItsMail(t *testing.T) {
 
 	if !slices.Equal(system.removed, []string{"/home/budi: imap/example.com/info.sales"}) {
 		t.Fatalf("removed = %v", system.removed)
+	}
+}
+
+func TestApplySieveWritesTheScriptInTheMailboxFolder(t *testing.T) {
+	manager, system, _ := newManager(t)
+	script := "require [\"fileinto\"];\nif header :contains \"subject\" \"invoice\" { fileinto \"Invoices\"; }\n"
+
+	if err := manager.ApplySieve(context.Background(), budi, "example.com", "info", script); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(system.paths) != 1 || !slices.Equal(system.paths[0].Dirs, []string{"imap", "example.com", "info"}) ||
+		system.paths[0].UID != 1001 || system.paths[0].Mode != 0o700 {
+		t.Fatalf("folder = %+v", system.paths)
+	}
+
+	if system.written["/home/budi: imap/example.com/info/rayxo.sieve"] != script {
+		t.Fatalf("written = %v", system.written)
+	}
+}
+
+func TestAnEmptySieveScriptRemovesItAndItsCompiledForm(t *testing.T) {
+	manager, system, _ := newManager(t)
+
+	if err := manager.ApplySieve(context.Background(), budi, "example.com", "info", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	if !slices.Equal(system.removed, []string{"/home/budi: imap/example.com/info/rayxo.sieve,imap/example.com/info/rayxo.svbin"}) {
+		t.Fatalf("removed = %v", system.removed)
+	}
+
+	if len(system.written) != 0 || len(system.paths) != 0 {
+		t.Fatalf("an empty script wrote something: %+v", system)
+	}
+}
+
+func TestSieveScriptsAreChecked(t *testing.T) {
+	manager, system, _ := newManager(t)
+	ctx := context.Background()
+
+	for _, script := range []string{strings.Repeat("a", MaxSieveBytes+1), "keep;\x00", "keep; \xff"} {
+		if err := manager.ApplySieve(ctx, budi, "example.com", "info", script); err == nil {
+			t.Errorf("script %q... was accepted", script[:min(len(script), 10)])
+		}
+	}
+
+	if err := manager.ApplySieve(ctx, budi, "example.com", "../x", "keep;"); err == nil {
+		t.Error("a bad local part was accepted")
+	}
+
+	if len(system.written)+len(system.paths)+len(system.removed) != 0 {
+		t.Fatalf("a refused script reached the system: %+v", system)
 	}
 }
 

@@ -85,6 +85,7 @@ func Register(registry *rpc.Registry, config Config) {
 
 	mailConfig := mail.DefaultConfig()
 	mailConfig.Remove = mail.RemoveWith(helper)
+	mailConfig.Write = mail.WriteWith(helper)
 
 	for name, method := range mailMethods(sysuser.System{}, mail.New(mailConfig)) {
 		registry.Register(name, method)

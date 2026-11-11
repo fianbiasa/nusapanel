@@ -16,6 +16,7 @@ type mailServer interface {
 	ApplyDomain(ctx context.Context, account sysuser.User, domain, selector string) (string, error)
 	RemoveDomain(ctx context.Context, account *sysuser.User, domain string) error
 	RemoveMailbox(ctx context.Context, account sysuser.User, domain, localPart string) error
+	ApplySieve(ctx context.Context, account sysuser.User, domain, localPart, script string) error
 }
 
 // mailDomainParams are the params of mail.domain_apply.
@@ -44,6 +45,25 @@ func (p mailboxParams) validate() error {
 	return firstError(validate.Username(p.Username), validate.Domain(p.Domain), mail.ValidateLocalPart(p.LocalPart))
 }
 
+// mailSieveParams are the params of mail.sieve_apply.
+type mailSieveParams struct {
+	Username  string `json:"username"`
+	Domain    string `json:"domain"`
+	LocalPart string `json:"local_part"`
+	Script    string `json:"script"`
+}
+
+func (p mailSieveParams) account() string { return p.Username }
+
+func (p mailSieveParams) validate() error {
+	return firstError(
+		validate.Username(p.Username),
+		validate.Domain(p.Domain),
+		mail.ValidateLocalPart(p.LocalPart),
+		mail.ValidateSieve(p.Script),
+	)
+}
+
 // mailDomainResult is the result of mail.domain_apply.
 type mailDomainResult struct {
 	DKIMPublicKey string `json:"dkim_public_key"`
@@ -64,7 +84,29 @@ func mailMethods(system accountSystem, server mailServer) map[string]rpc.Method 
 		"mail.domain_apply":   {Handler: actions.applyDomain, LockKey: webLockKey[mailDomainParams]},
 		"mail.domain_remove":  {Handler: actions.removeDomain, LockKey: webLockKey[domainParams]},
 		"mail.mailbox_remove": {Handler: actions.removeMailbox, LockKey: webLockKey[mailboxParams]},
+		"mail.sieve_apply":    {Handler: actions.applySieve, LockKey: webLockKey[mailSieveParams]},
 	}
+}
+
+// applySieve implements mail.sieve_apply: the mailbox's Sieve script (its
+// filters and autoreply) is written in its folder as the account, or
+// removed when empty.
+func (m mailActions) applySieve(ctx context.Context, raw json.RawMessage) (any, error) {
+	params, err := decodeWebParams[mailSieveParams](raw)
+	if err != nil {
+		return nil, err
+	}
+
+	account, err := m.accounts.requireAccount(ctx, params.Username)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := m.server.ApplySieve(ctx, account, params.Domain, params.LocalPart, params.Script); err != nil {
+		return nil, rpc.Errorf(rpc.CodeActionFailed, "the filters of %s@%s could not be saved: %v", params.LocalPart, params.Domain, err)
+	}
+
+	return struct{}{}, nil
 }
 
 // applyDomain implements mail.domain_apply: the folder of the domain's

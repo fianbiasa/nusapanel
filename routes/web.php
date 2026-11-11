@@ -17,6 +17,7 @@ use App\Http\Controllers\DomainController;
 use App\Http\Controllers\EmailController;
 use App\Http\Controllers\FileManagerController;
 use App\Http\Controllers\FtpAccountController;
+use App\Http\Controllers\MailboxRulesController;
 use App\Http\Controllers\MailForwarderController;
 use App\Http\Controllers\PhpMyAdminController;
 use App\Http\Controllers\PointerController;
@@ -60,6 +61,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('email/forwarders/{mailForwarder}', [MailForwarderController::class, 'update'])->name('email.forwarders.update');
         Route::delete('email/forwarders/{mailForwarder}', [MailForwarderController::class, 'destroy'])->name('email.forwarders.destroy');
         Route::put('email/catch-all/{mailDomain}', CatchAllController::class)->name('email.catch-all.update');
+        Route::get('email/{mailbox}/rules', [MailboxRulesController::class, 'show'])->name('email.rules');
+        Route::put('email/{mailbox}/autoreply', [MailboxRulesController::class, 'updateAutoreply'])->name('email.autoreply.update');
+        Route::post('email/{mailbox}/filters', [MailboxRulesController::class, 'storeFilter'])->name('email.filters.store');
+        Route::delete('email/filters/{mailFilter}', [MailboxRulesController::class, 'destroyFilter'])->name('email.filters.destroy');
         Route::get('dns', [DnsController::class, 'index'])->name('dns.index');
         Route::post('dns/{dnsZone}/records', [DnsController::class, 'store'])->name('dns.records.store');
         Route::put('dns/records/{dnsRecord}', [DnsController::class, 'update'])->name('dns.records.update');

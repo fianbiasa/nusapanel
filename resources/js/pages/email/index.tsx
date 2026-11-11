@@ -1,5 +1,12 @@
-import { Form, Head, useHttp } from '@inertiajs/react';
-import { ExternalLink, KeyRound, Mail, Pencil, Trash2 } from 'lucide-react';
+import { Form, Head, Link, useHttp } from '@inertiajs/react';
+import {
+    ExternalLink,
+    Filter,
+    KeyRound,
+    Mail,
+    Pencil,
+    Trash2,
+} from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { AffixInput } from '@/components/affix-input';
@@ -35,7 +42,13 @@ import {
 import { Spinner } from '@/components/ui/spinner';
 import { formatMegabytes } from '@/lib/format';
 import { openSignOnTab, postSignOnTicket } from '@/lib/sign-on';
-import { destroy, store, update, webmail as openWebmail } from '@/routes/email';
+import {
+    destroy,
+    rules,
+    store,
+    update,
+    webmail as openWebmail,
+} from '@/routes/email';
 import type { AccountLimits } from '@/types';
 
 type MailboxRow = {
@@ -239,6 +252,19 @@ export default function EmailIndex({
                                                         }
                                                     />
                                                 )}
+                                                <Button
+                                                    asChild
+                                                    variant="ghost"
+                                                    size="icon"
+                                                >
+                                                    <Link
+                                                        href={rules(mailbox.id)}
+                                                        aria-label={`Filter dan balasan otomatis ${mailbox.address}`}
+                                                        title="Filter dan balasan otomatis"
+                                                    >
+                                                        <Filter />
+                                                    </Link>
+                                                </Button>
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"

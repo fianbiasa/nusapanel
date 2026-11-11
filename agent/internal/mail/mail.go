@@ -26,6 +26,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"rayxo/agent/internal/files"
 	"rayxo/agent/internal/sysuser"
@@ -39,6 +40,14 @@ const (
 	imapDir = "imap"
 	// MaxLocalPart is the longest part of an address before the @.
 	MaxLocalPart = 64
+	// SieveFile is the Sieve script of a mailbox, in its folder: the
+	// panel's filters and autoreply. Dovecot runs it on delivery, after the
+	// server's own script (spam into Junk).
+	SieveFile = "rayxo.sieve"
+	// SieveBinary is what Dovecot compiles SieveFile to.
+	SieveBinary = "rayxo.svbin"
+	// MaxSieveBytes is the largest script the panel may write.
+	MaxSieveBytes = 64 << 10
 )
 
 var (
@@ -67,6 +76,22 @@ func ValidateLocalPart(localPart string) error {
 	return nil
 }
 
+// ValidateSieve returns an error unless script can be a mailbox's Sieve
+// script: UTF-8 text without NUL bytes, at most MaxSieveBytes. Empty means
+// no script. Dovecot itself refuses a script that does not compile, and
+// only runs it for the mailbox it belongs to.
+func ValidateSieve(script string) error {
+	if len(script) > MaxSieveBytes {
+		return fmt.Errorf("the Sieve script may have at most %d bytes", MaxSieveBytes)
+	}
+
+	if !utf8.ValidString(script) || strings.ContainsRune(script, 0) {
+		return errors.New("the Sieve script must be UTF-8 text")
+	}
+
+	return nil
+}
+
 // Config says where the DKIM keys go and how the system is changed.
 type Config struct {
 	// DKIMDir holds <domain>.<selector>.key, readable by KeyGroup.
@@ -85,6 +110,9 @@ type Config struct {
 	// Remove deletes paths inside an account's home for good, as the
 	// account (files.OpRemove).
 	Remove func(ctx context.Context, account files.Account, paths []string) error
+	// Write replaces a file inside an account's home, as the account
+	// (files.OpWrite).
+	Write func(ctx context.Context, account files.Account, path, content string) error
 }
 
 // DefaultConfig returns the locations setup.sh configures Rspamd with;
@@ -111,6 +139,15 @@ func RemoveWith(helper files.Runner) func(context.Context, files.Account, []stri
 		}
 
 		return nil
+	}
+}
+
+// WriteWith returns a Write that runs files.OpWrite in helper.
+func WriteWith(helper files.Runner) func(context.Context, files.Account, string, string) error {
+	return func(ctx context.Context, account files.Account, path, content string) error {
+		var written files.Content
+
+		return helper.Run(ctx, account, files.OpWrite, files.WriteParams{Path: path, Content: content}, nil, &written)
 	}
 }
 
@@ -222,6 +259,39 @@ func (m *Manager) RemoveMailbox(ctx context.Context, account sysuser.User, domai
 	}
 
 	return m.cfg.Remove(ctx, files.Account{UID: account.UID, GID: account.GID, Home: account.Home}, []string{imapDir + "/" + domain + "/" + localPart})
+}
+
+// ApplySieve makes script the Sieve script of localPart@domain, in the
+// mailbox's folder (made when missing), as account; an empty script
+// removes it and its compiled form, so only the server's own script runs.
+func (m *Manager) ApplySieve(ctx context.Context, account sysuser.User, domain, localPart, script string) error {
+	if err := validate.Domain(domain); err != nil {
+		return err
+	}
+
+	if err := ValidateLocalPart(localPart); err != nil {
+		return err
+	}
+
+	if err := ValidateSieve(script); err != nil {
+		return err
+	}
+
+	owner := files.Account{UID: account.UID, GID: account.GID, Home: account.Home}
+	folder := imapDir + "/" + domain + "/" + localPart
+
+	if script == "" {
+		return m.cfg.Remove(ctx, owner, []string{folder + "/" + SieveFile, folder + "/" + SieveBinary})
+	}
+
+	err := m.cfg.EnsurePath(ctx, sysuser.Path{
+		Home: account.Home, Dirs: []string{imapDir, domain, localPart}, UID: account.UID, GID: account.GID, Mode: 0o700,
+	})
+	if err != nil {
+		return fmt.Errorf("folder of %s@%s: %w", localPart, domain, err)
+	}
+
+	return m.cfg.Write(ctx, owner, folder+"/"+SieveFile, script)
 }
 
 // ensureKey returns the DKIM key of domain and selector, made when there

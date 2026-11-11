@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Carbon;
 
 /**
@@ -65,6 +66,24 @@ class Mailbox extends Model
     public function mailDomain(): BelongsTo
     {
         return $this->belongsTo(MailDomain::class);
+    }
+
+    /**
+     * @return HasOne<MailAutoreply, $this>
+     */
+    public function autoreply(): HasOne
+    {
+        return $this->hasOne(MailAutoreply::class);
+    }
+
+    /**
+     * In the order they run.
+     *
+     * @return HasMany<MailFilter, $this>
+     */
+    public function filters(): HasMany
+    {
+        return $this->hasMany(MailFilter::class)->orderBy('id');
     }
 
     /**

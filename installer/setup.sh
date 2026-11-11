@@ -909,7 +909,7 @@ DEBCONF
     quietly "${apt[@]}" install --no-install-recommends pdns-server pdns-backend-mysql
     # Dovecot would start with Debian's defaults (system users signing in to
     # IMAP); it stays stopped until configure_mailboxes has set it up.
-    quietly "${apt[@]}" install dovecot-core dovecot-imapd dovecot-pop3d dovecot-lmtpd dovecot-mysql
+    quietly "${apt[@]}" install dovecot-core dovecot-imapd dovecot-pop3d dovecot-lmtpd dovecot-mysql dovecot-sieve
     remove_policy_rc
 
     quietly "${apt[@]}" install postfix-mysql redis-server rspamd
@@ -1958,12 +1958,33 @@ protocol imap {
 
 protocol lmtp {
   postmaster_address = postmaster@$server_hostname
+  mail_plugins = \$mail_plugins sieve
 }
 
+# Sieve on delivery: the server's script first (spam into Junk), then the
+# mailbox's own (filters and automatic reply from the panel, written by the
+# agent as the account). Forwarded copies go out from the mailbox's address.
 plugin {
   quota = maildir:User quota
+  sieve = file:~/rayxo.sieve
+  sieve_before = /etc/dovecot/sieve/rayxo-spam.sieve
+  sieve_redirect_envelope_from = recipient
+  sieve_max_redirects = 10
 }
 CONF
+
+    install -d -m 0755 /etc/dovecot/sieve
+    cat >/etc/dovecot/sieve/rayxo-spam.sieve <<'SIEVE'
+# Written by RAYXO setup.sh on every run; changes made here are lost.
+# Rspamd marks mail it would add a spam header to with "X-Spam: Yes".
+require ["fileinto", "mailbox"];
+
+if header :is "X-Spam" "Yes" {
+    fileinto :create "Junk";
+    stop;
+}
+SIEVE
+    quietly sievec /etc/dovecot/sieve/rayxo-spam.sieve || die "skrip Sieve spam ditolak (cek: sievec /etc/dovecot/sieve/rayxo-spam.sieve)"
 
     # Rspamd: DKIM keys of the accounts' domains (written by the agent), no
     # greylisting (it delays first mail by minutes), Redis on localhost.

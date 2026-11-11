@@ -21,6 +21,7 @@ class RebuildService
         private PhpVersionService $phpVersions,
         private DnsService $dns,
         private MailService $mail,
+        private MailRulesService $mailRules,
     ) {}
 
     /**
@@ -32,13 +33,17 @@ class RebuildService
     {
         $this->phpVersions->forget();
 
+        // Mailbox filters and automatic replies follow their mail domains.
+        $mailDomains = $this->mail->reapplyAll($actor);
+        $this->mailRules->reapplyAll($actor);
+
         return [
             'websites' => $this->domains->reapplyAll($actor),
             'quotas' => $this->quotas->applyAll($actor),
             'crontabs' => $this->cronJobs->reapplyAll($actor),
             'ftp_folders' => $this->ftp->reapplyAll($actor),
             'dns_zones' => $this->dns->syncAll($actor),
-            'mail_domains' => $this->mail->reapplyAll($actor),
+            'mail_domains' => $mailDomains,
         ];
     }
 }
