@@ -1,0 +1,45 @@
+name: sync-fork
+
+# Keeps the rayxo-panel/rayxo fork level with main, so the RAYXO GitHub
+# account shows the same code as this repository. The workflow lives here, not
+# in the fork, so the fork never gets commits of its own and stays a plain
+# fast-forward of main. Releases and tags stay here only: setup.sh and
+# rayxopanel.com download from this repository.
+#
+# FORK_SYNC_TOKEN is a fine-grained token of the rayxo-panel account with
+# access to rayxo-panel/rayxo only, and Contents and Workflows set to read and
+# write (Workflows because main carries files in .github/workflows). Without
+# the secret this workflow does nothing.
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: sync-fork
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    # The fork receives this file too; never run it there.
+    if: github.repository == 'fianbiasa/rayxo'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Sync rayxo-panel/rayxo with main
+        env:
+          GH_TOKEN: ${{ secrets.FORK_SYNC_TOKEN }}
+        run: |
+          if [[ -z "$GH_TOKEN" ]]; then
+            echo "FORK_SYNC_TOKEN is not set; skipping the fork sync."
+            exit 0
+          fi
+
+          gh api --method POST repos/rayxo-panel/rayxo/merge-upstream \
+            --field branch=main \
+            --jq .message
