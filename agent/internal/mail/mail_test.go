@@ -30,9 +30,11 @@ func newManager(t *testing.T) (*Manager, *fakeSystem, Config) {
 	system := &fakeSystem{}
 
 	cfg := Config{
-		DKIMDir:     filepath.Join(base, "dkim"),
-		SelectorMap: filepath.Join(base, "rayxo", "dkim_selectors.map"),
-		KeyGroup:    "_rspamd",
+		DKIMDir:      filepath.Join(base, "dkim"),
+		SelectorMap:  filepath.Join(base, "rayxo", "dkim_selectors.map"),
+		SendLimitMap: filepath.Join(base, "rayxo", "send_limits.map"),
+		MailnamePath: filepath.Join(base, "mailname"),
+		KeyGroup:     "_rspamd",
 		LookupGroup: func(name string) (int, error) {
 			if name != "_rspamd" {
 				return 0, errors.New("unknown group")

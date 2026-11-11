@@ -227,7 +227,9 @@ class MailboxManagementTest extends TestCase
 
         $tokens = explode(' ', (string) $senders);
         sort($tokens);
-        $this->assertSame(['<>', '@example.com', '@example.net', 'budi'], $tokens);
+        // No empty sender (<>): such mail would name no account and escape
+        // the daily send limit.
+        $this->assertSame(['@example.com', '@example.net', 'budi'], $tokens);
         $this->assertNull(DB::table('v_mail_local_senders')->where('login', 'boss')->value('senders'));
     }
 

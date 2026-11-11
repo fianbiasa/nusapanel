@@ -51,14 +51,12 @@ jobs:
           go-version-file: agent/go.mod
           cache-dependency-path: agent/go.sum
 
-      # The runner's apt asks Azure's Ubuntu mirror first, whose name does not
-      # always resolve there, and then every download times out; QEMU comes
-      # from Ubuntu's own archive instead, tried again a few times. Setup Lima
-      # then finds it installed.
+      # Setup Lima installs QEMU with apt in one go, and Ubuntu's mirrors fail
+      # now and then; QEMU is installed here first, tried again a few times,
+      # so Setup Lima finds it installed.
       - name: Install QEMU
+        timeout-minutes: 20
         run: |
-          sudo sed -i 's/azure\.archive\.ubuntu\.com/archive.ubuntu.com/g' \
-            /etc/apt/apt-mirrors.txt /etc/apt/sources.list.d/*.sources 2>/dev/null || true
           for attempt in 1 2 3; do
             if sudo apt-get update -qq &&
               sudo apt-get install -qqy --no-install-recommends ovmf qemu-system-x86 qemu-utils; then

@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\AccountController;
 use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\DnsController as AdminDnsController;
+use App\Http\Controllers\Admin\MailQueueController;
 use App\Http\Controllers\Admin\PackageController;
 use App\Http\Controllers\Admin\ServerSettingController;
 use App\Http\Controllers\Admin\ServiceController;
@@ -137,6 +138,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('dns/template/reset', [AdminDnsController::class, 'resetTemplate'])->name('dns.template.reset');
         Route::put('dns/template/{dnsTemplateRecord}', [AdminDnsController::class, 'updateTemplate'])->name('dns.template.update');
         Route::delete('dns/template/{dnsTemplateRecord}', [AdminDnsController::class, 'destroyTemplate'])->name('dns.template.destroy');
+        Route::get('mail-queue', [MailQueueController::class, 'index'])->name('mail-queue.index');
+        Route::post('mail-queue/retry', [MailQueueController::class, 'retry'])
+            ->middleware('throttle:30,1,mail-queue')
+            ->name('mail-queue.retry');
+        Route::delete('mail-queue', [MailQueueController::class, 'destroy'])
+            ->middleware('throttle:30,1,mail-queue')
+            ->name('mail-queue.destroy');
         Route::get('server-settings', [ServerSettingController::class, 'index'])->name('server-settings.index');
         Route::put('server-settings/hostname', [ServerSettingController::class, 'updateHostname'])
             ->middleware('throttle:5,1,server-hostname')
@@ -159,6 +167,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('server-settings/php-uploads', [ServerSettingController::class, 'updatePhpUploads'])
             ->middleware('throttle:10,1,server-uploads')
             ->name('server-settings.php-uploads');
+        Route::put('server-settings/mail-limits', [ServerSettingController::class, 'updateMailSendLimits'])
+            ->middleware('throttle:10,1,server-mail-limits')
+            ->name('server-settings.mail-limits');
         Route::put('server-settings/nameservers', [ServerSettingController::class, 'updateNameservers'])
             ->middleware('throttle:10,1,server-nameservers')
             ->name('server-settings.nameservers');

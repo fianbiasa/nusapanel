@@ -2236,12 +2236,15 @@ protocol lmtp {
 
 # Sieve on delivery: the server's script first (spam into Junk), then the
 # mailbox's own (filters and automatic reply from the panel, written by the
-# agent as the account). Forwarded copies go out from the mailbox's address.
+# agent as the account). Forwarded copies and automatic replies go out from
+# the mailbox's address: the local sendmail takes no empty sender from
+# hosting accounts, since such mail would escape their daily send limit.
 plugin {
   quota = maildir:User quota
   sieve = file:~/rayxo.sieve
   sieve_before = /etc/dovecot/sieve/rayxo-spam.sieve
   sieve_redirect_envelope_from = recipient
+  sieve_vacation_send_from_recipient = yes
   sieve_max_redirects = 10
 }
 CONF
@@ -2274,6 +2277,9 @@ try_fallback = false;
 use_esld = false;
 CONF
     printf '# Written by RAYXO setup.sh on every run.\nenabled = false;\n' >/etc/rspamd/local.d/greylist.conf
+    # Rspamd reads changed map files (send limits, DKIM selectors) within
+    # 30 seconds instead of its default 5 minutes.
+    printf '# Written by RAYXO setup.sh on every run.\nmap_watch_interval = 30s;\n' >/etc/rspamd/local.d/options.inc
 
     # Mail that came in on port 25 (Postfix tags it INBOUND; Rspamd's milter
     # passes Postfix's daemon name on as MTA-Name) is never signed:
@@ -2290,6 +2296,97 @@ inbound_is_not_signed {
     symbols_disabled = ["DKIM_SIGNED", "ARC_SIGNED"];
   }
 }
+CONF
+
+    # Daily send limits of hosting accounts, through Rspamd's ratelimit
+    # module: ratelimit.lua names the account that sends a message and its
+    # limit, from send_limits.map, which the agent writes from the panel's
+    # settings (rayxo:sync-send-limits). Recipients are counted per 24 hours;
+    # over the limit, the message is refused for now (451) and tried again
+    # later. The limits stay as set: no growth for senders of ham.
+    [[ -f "$RSPAMD_MAP_DIR/send_limits.map" ]] ||
+        install -m 0640 -o root -g _rspamd /dev/null "$RSPAMD_MAP_DIR/send_limits.map"
+    cat >"$RSPAMD_MAP_DIR/ratelimit.lua" <<'LUA'
+-- Written by RAYXO setup.sh on every run; changes made here are lost.
+-- Custom keywords of Rspamd's ratelimit module: the daily send limits of
+-- hosting accounts. send_limits.map (written by rayxod) holds
+--   account <limit>               the limit of each account
+--   account:<username> <limit>    one account's own limit, when it has one
+--   server <limit>                all accounts together
+--   sender:@<domain> <username>   and sender:<username>@<hostname> <username>
+-- Mail counts for the account whose login sent it on 587/465 (a mailbox,
+-- by its domain) or, from the local sendmail, whose address it comes
+-- from, which Postfix limits to the account's own (local_login_sender_maps).
+-- Mail that came in on port 25, and mail of no account (the panel, root),
+-- is not limited.
+local map = rspamd_config:add_map({
+  type = 'map',
+  url = '/etc/rspamd/rayxo/send_limits.map',
+  description = 'RAYXO daily send limits',
+})
+
+local function account_of(task)
+  local address = task:get_user()
+  if not address then
+    local daemon = task:get_request_header('MTA-Name')
+    if not daemon or tostring(daemon) ~= 'LOCAL' then
+      return nil
+    end
+    local from = task:get_from('smtp')
+    address = from and from[1] and from[1].addr
+  end
+  if not address or address == '' then
+    return nil
+  end
+  address = string.lower(address)
+  local domain = address:match('@([^@]+)$')
+  return map:get_key('sender:' .. address) or (domain and map:get_key('sender:@' .. domain)) or nil
+end
+
+local function bucket(limit)
+  limit = tonumber(limit)
+  if not limit or limit < 1 then
+    return nil
+  end
+  return {
+    burst = limit,
+    rate = string.format('%d / 1d', limit),
+    message = 'Daily sending limit reached; the message will be sent later',
+  }
+end
+
+return {
+  rayxo_account = function(task)
+    local account = account_of(task)
+    if not account then
+      return nil
+    end
+    local limits = bucket(map:get_key('account:' .. account) or map:get_key('account'))
+    if not limits then
+      return nil
+    end
+    return 'rayxo_account:' .. account, limits
+  end,
+  rayxo_server = function(task)
+    if not account_of(task) then
+      return nil
+    end
+    local limits = bucket(map:get_key('server'))
+    if not limits then
+      return nil
+    end
+    return 'rayxo_server', limits
+  end,
+}
+LUA
+    chmod 0644 "$RSPAMD_MAP_DIR/ratelimit.lua"
+    cat >/etc/rspamd/local.d/ratelimit.conf <<CONF
+# Written by RAYXO setup.sh on every run; changes made here are lost.
+custom_keywords = "$RSPAMD_MAP_DIR/ratelimit.lua";
+ham_factor_rate = 1;
+ham_factor_burst = 1;
+spam_factor_rate = 1;
+spam_factor_burst = 1;
 CONF
 
     # Rspamd and Redis listen on unix sockets only, so hosting accounts can
@@ -2727,6 +2824,19 @@ sync_dns_zones() {
     fi
 }
 
+# The mail server gets the daily send limits and which domains belong to
+# which account (the scheduler keeps them current every five minutes).
+# Queued like rebuild_websites.
+sync_send_limits() {
+    step "Menerapkan batas kirim email"
+
+    if artisan rayxo:sync-send-limits >>"$INSTALL_LOG" 2>&1; then
+        info "Batas kirim email diterapkan di latar belakang (lihat Tasks di panel)"
+    else
+        warn "batas kirim email tidak bisa diterapkan; jalankan lagi: runuser -u $PANEL_USER -- $PHP_BIN $INSTALL_DIR/current/panel/artisan rayxo:sync-send-limits"
+    fi
+}
+
 # Accounts created before quotas existed, or before they were turned on
 # here, get the limits of their package. Queued like rebuild_websites; when
 # quotas are off the agent reports that they could not be applied.
@@ -3074,6 +3184,7 @@ main() {
     rebuild_websites
     apply_quotas
     sync_dns_zones
+    sync_send_limits
     # Last, right before the summary, so a failure in an earlier step can never
     # leave an admin whose generated password was not shown.
     create_admin

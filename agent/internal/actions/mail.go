@@ -17,6 +17,7 @@ type mailServer interface {
 	RemoveDomain(ctx context.Context, account *sysuser.User, domain string) error
 	RemoveMailbox(ctx context.Context, account sysuser.User, domain, localPart string) error
 	ApplySieve(ctx context.Context, account sysuser.User, domain, localPart, script string) error
+	ApplySendLimits(limits mail.SendLimits) error
 }
 
 // mailDomainParams are the params of mail.domain_apply.
@@ -85,7 +86,30 @@ func mailMethods(system accountSystem, server mailServer) map[string]rpc.Method 
 		"mail.domain_remove":  {Handler: actions.removeDomain, LockKey: webLockKey[domainParams]},
 		"mail.mailbox_remove": {Handler: actions.removeMailbox, LockKey: webLockKey[mailboxParams]},
 		"mail.sieve_apply":    {Handler: actions.applySieve, LockKey: webLockKey[mailSieveParams]},
+		// One map for the whole server, written by one call at a time.
+		"mail.send_limits_apply": {Handler: actions.applySendLimits, LockKey: func(json.RawMessage) (string, error) {
+			return "mail:send_limits", nil
+		}},
 	}
+}
+
+// applySendLimits implements mail.send_limits_apply: the daily send limits
+// and the accounts' domains go into the map Rspamd's ratelimit module reads.
+func (m mailActions) applySendLimits(_ context.Context, raw json.RawMessage) (any, error) {
+	var params mail.SendLimits
+	if err := rpc.DecodeParams(raw, &params); err != nil {
+		return nil, err
+	}
+
+	if err := params.Validate(); err != nil {
+		return nil, rpc.Errorf(rpc.CodeInvalidParams, "invalid params: %v", err)
+	}
+
+	if err := m.server.ApplySendLimits(params); err != nil {
+		return nil, rpc.Errorf(rpc.CodeActionFailed, "the send limits could not be saved: %v", err)
+	}
+
+	return struct{}{}, nil
 }
 
 // applySieve implements mail.sieve_apply: the mailbox's Sieve script (its

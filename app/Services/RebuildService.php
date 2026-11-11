@@ -8,7 +8,7 @@ use App\Models\User;
  * Writes the server's configuration again from the panel's database, like
  * DirectAdmin's rewrite_confs: every website (Nginx, Apache and its PHP
  * pool), every account's disk quota and crontab, every FTP login's folder
- * every DNS zone and every mail domain. Each task renders the full state, so a rebuild changes nothing
+ * every DNS zone, every mail domain and the daily send limits. Each task renders the full state, so a rebuild changes nothing
  * on a server that matches the database, however often it runs.
  */
 class RebuildService
@@ -22,6 +22,7 @@ class RebuildService
         private DnsService $dns,
         private MailService $mail,
         private MailRulesService $mailRules,
+        private MailSendLimitService $sendLimits,
     ) {}
 
     /**
@@ -36,6 +37,7 @@ class RebuildService
         // Mailbox filters and automatic replies follow their mail domains.
         $mailDomains = $this->mail->reapplyAll($actor);
         $this->mailRules->reapplyAll($actor);
+        $this->sendLimits->sync($actor, force: true);
 
         return [
             'websites' => $this->domains->reapplyAll($actor),

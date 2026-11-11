@@ -325,5 +325,12 @@
     "This account's package allows :limit email accounts.": "Paket akun ini mengizinkan :limit akun email.",
     "Email account :address is created.": "Akun email :address dibuat.",
     "Email account :address is updated.": "Akun email :address diubah.",
-    "Email account :address is deleted.": "Akun email :address dihapus."
+    "Email account :address is deleted.": "Akun email :address dihapus.",
+    "Send limits saved.": "Batas kirim email disimpan.",
+    "Every waiting message is being tried again.": "Semua email yang menunggu sedang dicoba kirim lagi.",
+    "Message :id is being tried again.": "Email :id sedang dicoba kirim lagi.",
+    ":count message deleted from the queue.|:count messages deleted from the queue.": ":count email dihapus dari antrean.|:count email dihapus dari antrean.",
+    ":deleted of :total messages deleted; the others were no longer in the queue.": ":deleted dari :total email dihapus; sisanya sudah tidak ada di antrean.",
+    "The mail could not be tried again: :detail": "Email tidak bisa dicoba kirim lagi: :detail",
+    "The mail could not be deleted: :detail": "Email tidak bisa dihapus: :detail"
 }

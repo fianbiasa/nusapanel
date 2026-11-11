@@ -10,6 +10,7 @@ import {
     Milestone,
     ListChecks,
     Mail,
+    MailWarning,
     Network,
     Package,
     ScrollText,
@@ -24,6 +25,7 @@ import { index as dnsIndex } from '@/routes/dns';
 import { index as accountsIndex } from '@/routes/admin/accounts';
 import { index as auditLogsIndex } from '@/routes/admin/audit-logs';
 import { index as adminDnsIndex } from '@/routes/admin/dns';
+import { index as mailQueueIndex } from '@/routes/admin/mail-queue';
 import { index as packagesIndex } from '@/routes/admin/packages';
 import { index as serverSettingsIndex } from '@/routes/admin/server-settings';
 import { index as servicesIndex } from '@/routes/admin/services';
@@ -100,6 +102,11 @@ export function useNavigation(): {
             href: servicesIndex(),
             icon: Activity,
         };
+        const mailQueue: NavItem = {
+            title: 'Antrean Email',
+            href: mailQueueIndex(),
+            icon: MailWarning,
+        };
         const serverSettings: NavItem = {
             title: 'Pengaturan Server',
             href: serverSettingsIndex(),
@@ -113,7 +120,7 @@ export function useNavigation(): {
             },
             {
                 label: 'Server',
-                items: [services, serverSettings, tasks, auditLog],
+                items: [services, mailQueue, serverSettings, tasks, auditLog],
             },
         );
         dockItems = [

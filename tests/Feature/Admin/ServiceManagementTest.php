@@ -121,7 +121,9 @@ class ServiceManagementTest extends TestCase
             ->assertSessionHasNoErrors()
             ->assertInertiaFlash('toast.message', 'Rewriting 1 websites, 1 quotas, 1 crontabs, 0 FTP folders, 1 DNS zones and 0 mail domains. Follow them under Tasks.');
 
-        $this->assertSame(4, Task::query()->where('actor_id', $admin->id)->count());
+        // The website, quota, crontab and DNS zone, and the send limits.
+        $this->assertSame(5, Task::query()->where('actor_id', $admin->id)->count());
+        $this->assertTrue(Task::query()->where('action', 'mail.send_limits_apply')->exists());
         $this->assertSame(
             ['websites' => 1, 'quotas' => 1, 'crontabs' => 1, 'ftp_folders' => 0, 'dns_zones' => 1, 'mail_domains' => 0],
             AuditLog::query()->where('action', 'server.rebuilt')->where('actor_id', $admin->id)->sole()->changes,

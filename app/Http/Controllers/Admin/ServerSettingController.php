@@ -5,12 +5,14 @@ namespace App\Http\Controllers\Admin;
 use App\Agent\AgentException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\TryPanelPortRequest;
+use App\Http\Requests\Admin\UpdateMailSendLimitsRequest;
 use App\Http\Requests\Admin\UpdateNameserversRequest;
 use App\Http\Requests\Admin\UpdatePhpUploadLimitsRequest;
 use App\Http\Requests\Admin\UpdateServerHostnameRequest;
 use App\Http\Requests\Admin\UpdateServerTimezoneRequest;
 use App\Services\DnsService;
 use App\Services\DomainService;
+use App\Services\MailSendLimitService;
 use App\Services\ServerSettingsService;
 use App\Support\PhpSettings;
 use DateTimeZone;
@@ -31,6 +33,7 @@ class ServerSettingController extends Controller
         private ServerSettingsService $settings,
         private DomainService $domains,
         private DnsService $dns,
+        private MailSendLimitService $sendLimits,
     ) {}
 
     public function index(): Response
@@ -57,6 +60,10 @@ class ServerSettingController extends Controller
             ],
             'nameservers' => $this->dns->nameservers(),
             'public_ip' => config('hosting.public_ip') ?: null,
+            'mail_limits' => [
+                ...$this->settings->mailSendLimits(),
+                'default_account' => ServerSettingsService::DEFAULT_MAIL_SEND_LIMIT_ACCOUNT,
+            ],
         ]);
     }
 
@@ -207,6 +214,27 @@ class ServerSettingController extends Controller
         $this->settings->requestHostnameCertificate($request->user());
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('The hostname certificate is being requested. This takes up to a minute.')]);
+
+        return back();
+    }
+
+    /**
+     * Change the daily send limits of hosting accounts (empty: no limit);
+     * the mail server gets them at once.
+     */
+    public function updateMailSendLimits(UpdateMailSendLimitsRequest $request): RedirectResponse
+    {
+        $changed = $this->settings->setMailSendLimits(
+            $request->filled('account') ? $request->integer('account') : null,
+            $request->filled('server') ? $request->integer('server') : null,
+            $request->user(),
+        );
+
+        if ($changed) {
+            $this->sendLimits->sync($request->user());
+        }
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => $changed ? __('Send limits saved.') : __('Nothing changed.')]);
 
         return back();
     }

@@ -11,6 +11,7 @@ Artisan::command('inspire', function () {
 
 Schedule::command('rayxo:collect-usage')->everyFifteenMinutes()->withoutOverlapping();
 Schedule::command('rayxo:close-phpmyadmin-sessions')->everyFiveMinutes()->withoutOverlapping();
+Schedule::command('rayxo:sync-send-limits')->everyFiveMinutes()->withoutOverlapping();
 Schedule::command('rayxo:clean-transfers')->hourly()->withoutOverlapping();
 Schedule::command('model:prune', ['--model' => [WebmailSession::class]])->hourly()->withoutOverlapping();
 Schedule::command('rayxo:recount-ftp-quotas')->dailyAt('03:40')->withoutOverlapping();

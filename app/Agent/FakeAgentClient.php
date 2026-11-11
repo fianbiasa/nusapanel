@@ -41,6 +41,9 @@ final class FakeAgentClient implements AgentClient
             'ftp.ensure_dir' => $this->ftpFolder((string) ($params['username'] ?? '')),
             'php.versions' => ['versions' => ['7.4', '8.0', '8.1', '8.2', '8.3', '8.4', '8.5'], 'simulated' => true],
             'service.status' => $this->serviceReport(),
+            'mail.queue_list' => $this->mailQueue(),
+            'mail.queue_retry' => ['id' => $params['id'] ?? '', 'simulated' => true],
+            'mail.queue_delete' => ['done' => $params['ids'] ?? [], 'failed' => [], 'simulated' => true],
             'service.action' => ['unit' => $params['unit'] ?? '', 'action' => $params['action'] ?? '', 'simulated' => true],
             'fs.list' => $this->fileListing((string) ($params['username'] ?? ''), (string) ($params['path'] ?? '')),
             'fs.read' => ['content' => "<?php\n\necho 'Hello from RAYXO';\n", 'size' => 33, 'version' => 'simulated-1'],
@@ -61,6 +64,38 @@ final class FakeAgentClient implements AgentClient
             ],
             default => ['simulated' => true],
         };
+    }
+
+    /**
+     * A mail queue as the agent reports it: one message held back by the
+     * daily send limit and one waiting for a server that does not answer.
+     *
+     * @return array<string, mixed>
+     */
+    private function mailQueue(): array
+    {
+        return [
+            'total' => 2,
+            'messages' => [
+                [
+                    'queue' => 'deferred',
+                    'id' => '4C2E520ABA',
+                    'arrived_at' => now()->subMinutes(42)->getTimestamp(),
+                    'size' => 1830,
+                    'sender' => 'news@example.com',
+                    'recipients' => [['address' => 'someone@example.org', 'reason' => 'connect to mx.example.org[192.0.2.1]:25: Connection timed out']],
+                ],
+                [
+                    'queue' => 'maildrop',
+                    'id' => 'D659820AD2',
+                    'arrived_at' => now()->subHours(3)->getTimestamp(),
+                    'size' => 229,
+                    'sender' => 'info@example.com',
+                    'recipients' => [['address' => 'other@example.net']],
+                ],
+            ],
+            'simulated' => true,
+        ];
     }
 
     /**

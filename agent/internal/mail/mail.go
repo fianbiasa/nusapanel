@@ -98,6 +98,12 @@ type Config struct {
 	DKIMDir string
 	// SelectorMap is Rspamd's map of "<domain> <selector>" lines.
 	SelectorMap string
+	// SendLimitMap is the map of daily send limits Rspamd's ratelimit
+	// module reads (ApplySendLimits), readable by KeyGroup.
+	SendLimitMap string
+	// MailnamePath holds the server's mail name, the domain of mail its
+	// local users send under their login name.
+	MailnamePath string
 	// KeyGroup is the group of the DKIM keys: Rspamd's.
 	KeyGroup string
 	// LookupGroup returns the gid of a group; nil uses the system's.
@@ -119,10 +125,12 @@ type Config struct {
 // Remove still has to be set.
 func DefaultConfig() Config {
 	return Config{
-		DKIMDir:     "/var/lib/rspamd/dkim",
-		SelectorMap: "/etc/rspamd/rayxo/dkim_selectors.map",
-		KeyGroup:    "_rspamd",
-		EnsurePath:  sysuser.System{}.EnsurePath,
+		DKIMDir:      "/var/lib/rspamd/dkim",
+		SelectorMap:  "/etc/rspamd/rayxo/dkim_selectors.map",
+		SendLimitMap: "/etc/rspamd/rayxo/send_limits.map",
+		MailnamePath: "/etc/mailname",
+		KeyGroup:     "_rspamd",
+		EnsurePath:   sysuser.System{}.EnsurePath,
 	}
 }
 

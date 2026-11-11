@@ -2,6 +2,7 @@ import { Form, Head, router, usePoll } from '@inertiajs/react';
 import {
     CheckCircle2,
     Clock,
+    MailCheck,
     Network,
     PencilLine,
     ShieldAlert,
@@ -42,6 +43,7 @@ import { formatDateTime, formatRelative } from '@/lib/format';
 import {
     hostname as updateHostname,
     hostnameCertificate,
+    mailLimits as updateMailLimits,
     nameservers as updateNameservers,
     phpUploads,
     port as tryPort,
@@ -96,6 +98,13 @@ type Props = {
     php_uploads: { limit: string; default: string; sizes: string[] };
     nameservers: string[];
     public_ip: string | null;
+    mail_limits: MailLimits;
+};
+
+type MailLimits = {
+    account: number | null;
+    server: number | null;
+    default_account: number;
 };
 
 export default function ServerSettings({
@@ -106,6 +115,7 @@ export default function ServerSettings({
     php_uploads,
     nameservers,
     public_ip,
+    mail_limits,
 }: Props) {
     const { start, stop } = usePoll(
         5_000,
@@ -133,7 +143,7 @@ export default function ServerSettings({
 
             <PageHeader
                 title="Pengaturan Server"
-                description="Hostname dan SSL panel, zona waktu server, ukuran upload yang boleh dipakai website, dan nameserver DNS."
+                description="Hostname dan SSL panel, zona waktu server, ukuran upload yang boleh dipakai website, batas kirim email, dan nameserver DNS."
             />
 
             {error !== null && (
@@ -179,6 +189,8 @@ export default function ServerSettings({
                 )}
                 <UploadPanel uploads={php_uploads} />
             </div>
+
+            <MailLimitPanel limits={mail_limits} />
 
             <NameserverPanel current={nameservers} publicIp={public_ip} />
         </>
@@ -784,6 +796,86 @@ function UploadPanel({
                             >
                                 {processing ? <Spinner /> : <Upload />}
                                 Simpan batas upload
+                            </Button>
+                        </div>
+                    </>
+                )}
+            </Form>
+        </Panel>
+    );
+}
+
+/**
+ * How many recipients the mail of hosting accounts may reach per 24 hours,
+ * per account and for all accounts together. Empty is no limit.
+ */
+function MailLimitPanel({ limits }: { limits: MailLimits }) {
+    const [account, setAccount] = useState(limits.account?.toString() ?? '');
+    const [server, setServer] = useState(limits.server?.toString() ?? '');
+
+    return (
+        <Panel
+            title="Batas kirim email"
+            description={`Dihitung per penerima dalam 24 jam, untuk email yang dikirim akun hosting (lewat login SMTP, webmail, maupun PHP mail() dan cron). Email yang melewati batas ditolak sementara dan dicoba lagi nanti, tidak dibuang. Kosongkan untuk tanpa batas. Bawaan per akun: ${limits.default_account}.`}
+        >
+            <Form
+                {...updateMailLimits.form()}
+                options={{ preserveScroll: true }}
+                className="grid gap-4"
+            >
+                {({ processing, errors }) => (
+                    <>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <Field
+                                id="account"
+                                label="Per akun hosting"
+                                error={errors.account}
+                            >
+                                <Input
+                                    id="account"
+                                    name="account"
+                                    type="number"
+                                    min={1}
+                                    placeholder="Tanpa batas"
+                                    value={account}
+                                    onChange={(event) =>
+                                        setAccount(event.target.value)
+                                    }
+                                    className="rounded-xl"
+                                />
+                            </Field>
+                            <Field
+                                id="server"
+                                label="Seluruh server (semua akun digabung)"
+                                error={errors.server}
+                            >
+                                <Input
+                                    id="server"
+                                    name="server"
+                                    type="number"
+                                    min={1}
+                                    placeholder="Tanpa batas"
+                                    value={server}
+                                    onChange={(event) =>
+                                        setServer(event.target.value)
+                                    }
+                                    className="rounded-xl"
+                                />
+                            </Field>
+                        </div>
+                        <div>
+                            <Button
+                                type="submit"
+                                disabled={
+                                    processing ||
+                                    (account ===
+                                        (limits.account?.toString() ?? '') &&
+                                        server ===
+                                            (limits.server?.toString() ?? ''))
+                                }
+                            >
+                                {processing ? <Spinner /> : <MailCheck />}
+                                Simpan batas kirim
                             </Button>
                         </div>
                     </>

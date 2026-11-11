@@ -162,8 +162,8 @@ Pembagian level sama seperti DirectAdmin:
 | Rebuild config                        | Tulis ulang semua config dari database (setara `rewrite_confs`)                      | P1   |
 | Nameserver default                    |                                                                                      | P2   |
 | DNS administration                    | Semua zone, template DNS default                                                     | P2   |
-| Mail queue                            | Lihat, kirim ulang, hapus                                                            | P2   |
-| Batas kirim email                     | Per user dan per server per hari                                                     | P2   |
+| Mail queue                            | ✅ Lihat (dengan alasan tertunda), kirim ulang, hapus (admin, menu Antrean Email)    | P2   |
+| Batas kirim email                     | ✅ Per akun (bawaan 300) dan seluruh server per 24 jam, diatur di Pengaturan Server  | P2   |
 | Process monitor                       | Lihat & hentikan proses                                                              | P3   |
 | Statistik pemakaian                   | Ranking akun per disk & bandwidth                                                    | P3   |
 | Manajemen IP                          | Tambah/hapus IPv4/IPv6, berikan ke reseller                                          | P3   |

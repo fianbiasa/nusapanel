@@ -26,6 +26,28 @@ class ServerSettingsService
      */
     public const PHP_UPLOAD_DEFAULT = 'php.upload_default';
 
+    /**
+     * How many recipients each hosting account may send mail to per 24
+     * hours; null is no limit.
+     */
+    public const MAIL_SEND_LIMIT_ACCOUNT = 'mail.send_limit_account';
+
+    /**
+     * How many recipients all hosting accounts together may send mail to
+     * per 24 hours; null is no limit.
+     */
+    public const MAIL_SEND_LIMIT_SERVER = 'mail.send_limit_server';
+
+    /**
+     * The limit of each account until the admin changes it.
+     */
+    public const DEFAULT_MAIL_SEND_LIMIT_ACCOUNT = 300;
+
+    /**
+     * The largest limit the agent takes.
+     */
+    public const MAX_MAIL_SEND_LIMIT = 10_000_000;
+
     public function __construct(
         private AgentClient $agent,
         private AuditLogger $audit,
@@ -81,6 +103,46 @@ class ServerSettingsService
         $this->put(self::PHP_UPLOAD_DEFAULT, $default);
 
         $this->audit->record('server.php_uploads_changed', null, ['from' => $before, 'to' => $after], $actor);
+
+        return true;
+    }
+
+    /**
+     * The daily send limits, in recipients per 24 hours (null: no limit).
+     * Each account has DEFAULT_MAIL_SEND_LIMIT_ACCOUNT until the admin sets
+     * another limit or none; the server has none until the admin sets one.
+     *
+     * @return array{account: int|null, server: int|null}
+     */
+    public function mailSendLimits(): array
+    {
+        $account = Setting::query()->where('key', self::MAIL_SEND_LIMIT_ACCOUNT)->first();
+
+        return [
+            'account' => $account === null ? self::DEFAULT_MAIL_SEND_LIMIT_ACCOUNT : $this->limitOrNull($account->value),
+            'server' => $this->limitOrNull($this->get(self::MAIL_SEND_LIMIT_SERVER)),
+        ];
+    }
+
+    /**
+     * Store the daily send limits (null: no limit).
+     *
+     * @return bool Whether anything changed, so the server must get them.
+     */
+    public function setMailSendLimits(?int $account, ?int $server, User $actor): bool
+    {
+        $before = $this->mailSendLimits();
+        $after = ['account' => $account, 'server' => $server];
+
+        if ($before === $after) {
+            return false;
+        }
+
+        // No limit is stored as 0: a setting's value cannot be empty.
+        $this->put(self::MAIL_SEND_LIMIT_ACCOUNT, $account ?? 0);
+        $this->put(self::MAIL_SEND_LIMIT_SERVER, $server ?? 0);
+
+        $this->audit->record('server.mail_send_limits_changed', null, ['from' => $before, 'to' => $after], $actor);
 
         return true;
     }
@@ -185,6 +247,11 @@ class ServerSettingsService
             'pending' => in_array($task?->status, [TaskStatus::Queued, TaskStatus::Running], true),
             'error' => $task?->status === TaskStatus::Failed ? ($task->error ?? '') : null,
         ];
+    }
+
+    private function limitOrNull(mixed $value): ?int
+    {
+        return is_int($value) && $value >= 1 && $value <= self::MAX_MAIL_SEND_LIMIT ? $value : null;
     }
 
     private function get(string $key): mixed

@@ -11,6 +11,7 @@ import (
 	"rayxo/agent/internal/dns"
 	"rayxo/agent/internal/files"
 	"rayxo/agent/internal/mail"
+	"rayxo/agent/internal/mailqueue"
 	"rayxo/agent/internal/panelport"
 	"rayxo/agent/internal/quota"
 	"rayxo/agent/internal/reconfigure"
@@ -88,6 +89,10 @@ func Register(registry *rpc.Registry, config Config) {
 	mailConfig.Write = mail.WriteWith(helper)
 
 	for name, method := range mailMethods(sysuser.System{}, mail.New(mailConfig)) {
+		registry.Register(name, method)
+	}
+
+	for name, method := range mailQueueMethods(mailqueue.New(mailqueue.DefaultConfig())) {
 		registry.Register(name, method)
 	}
 
