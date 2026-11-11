@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\MailboxStatus;
 use App\Enums\MailDomainStatus;
 use App\Http\Requests\StoreMailboxRequest;
 use App\Http\Requests\UpdateMailboxRequest;
@@ -9,6 +10,7 @@ use App\Models\Domain;
 use App\Models\Mailbox;
 use App\Models\MailForwarder;
 use App\Services\MailService;
+use App\Services\ServerSettingsService;
 use App\Services\WebmailService;
 use App\Support\AccountLimits;
 use App\Support\MailAddress;
@@ -41,6 +43,8 @@ class EmailController extends Controller
                 'address' => $this->mail->address($mailbox),
                 'domain' => $mailbox->mailDomain->domain->name,
                 'quota_mb' => $mailbox->quota_mb,
+                'daily_send_limit' => $mailbox->daily_send_limit,
+                'suspended' => $mailbox->status === MailboxStatus::Suspended,
                 'ready' => $mailbox->mailDomain->status === MailDomainStatus::Active,
                 'created_at' => $mailbox->created_at?->toIso8601String(),
             ])
@@ -79,6 +83,7 @@ class EmailController extends Controller
             ], $domains),
             'max_destinations' => MailAddress::MAX_DESTINATIONS,
             'max_quota_mb' => MailService::MAX_QUOTA_MB,
+            'account_send_limit' => app(ServerSettingsService::class)->mailSendLimits()['account'],
             'limits' => AccountLimits::for($account)->toArray(),
             'server' => parse_url((string) config('app.url'), PHP_URL_HOST) ?: 'localhost',
             'webmail' => [
@@ -121,6 +126,18 @@ class EmailController extends Controller
             $request->filled('quota_mb') ? $request->integer('quota_mb') : null,
             $request->user(),
         );
+
+        if ($request->has('daily_send_limit')) {
+            $this->mail->setMailboxSendLimit(
+                $mailbox,
+                $request->filled('daily_send_limit') ? $request->integer('daily_send_limit') : null,
+                $request->user(),
+            );
+        }
+
+        if ($request->has('suspended')) {
+            $this->mail->setMailboxSuspended($mailbox, $request->boolean('suspended'), $request->user());
+        }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Email account :address is updated.', ['address' => $this->mail->address($mailbox)])]);
 

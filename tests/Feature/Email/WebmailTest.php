@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Email;
 
+use App\Enums\MailboxStatus;
 use App\Enums\MailDomainStatus;
 use App\Models\AuditLog;
 use App\Models\Domain;
@@ -85,6 +86,19 @@ class WebmailTest extends TestCase
         );
 
         $this->assertDatabaseHas(AuditLog::class, ['action' => 'mailbox.webmail_opened', 'actor_id' => $this->account->id]);
+    }
+
+    public function test_a_suspended_mailbox_cannot_open_webmail_or_use_a_session()
+    {
+        WebmailSession::factory()->for($this->mailbox)->create();
+        $this->mailbox->forceFill(['status' => MailboxStatus::Suspended])->save();
+
+        $this->actingAs($this->account)
+            ->postJson(route('email.webmail', $this->mailbox))
+            ->assertJsonValidationErrors(['webmail' => 'This email account is suspended: it cannot sign in until it is unsuspended.']);
+
+        // Dovecot takes no session token for it either.
+        $this->assertDatabaseCount('v_mail_webmail_sessions', 0);
     }
 
     public function test_every_opening_gets_another_token_and_a_mailbox_keeps_its_ten_newest_sessions()

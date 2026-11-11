@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\MailboxStatus;
 use App\Support\CryptPassword;
 use Database\Factories\MailboxFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -23,7 +24,8 @@ use Illuminate\Support\Carbon;
  * @property string $local_part
  * @property string $password_hash SHA512-CRYPT, as Dovecot checks it.
  * @property int|null $quota_mb Null is no limit.
- * @property string $status
+ * @property int|null $daily_send_limit Recipients per 24 hours; null is the account's limit.
+ * @property MailboxStatus $status
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
@@ -57,6 +59,8 @@ class Mailbox extends Model
     {
         return [
             'quota_mb' => 'integer',
+            'daily_send_limit' => 'integer',
+            'status' => MailboxStatus::class,
         ];
     }
 

@@ -29,6 +29,15 @@ type SendLimits struct {
 	// Accounts are the hosting accounts and their domains, so Rspamd knows
 	// whose mail it sees.
 	Accounts []SendLimitAccount `json:"accounts"`
+	// Mailboxes are the mailboxes with their own limit, for the mail they
+	// send signed in.
+	Mailboxes []SendLimitMailbox `json:"mailboxes"`
+}
+
+// SendLimitMailbox is a mailbox with its own daily send limit.
+type SendLimitMailbox struct {
+	Address string `json:"address"`
+	Limit   int    `json:"limit"`
 }
 
 // SendLimitAccount is a hosting account and the domains its mail may come
@@ -78,6 +87,44 @@ func (s SendLimits) Validate() error {
 		}
 	}
 
+	if len(s.Mailboxes) > maxSendLimitAccounts {
+		return fmt.Errorf("at most %d mailboxes", maxSendLimitAccounts)
+	}
+
+	addresses := map[string]bool{}
+
+	for _, mailbox := range s.Mailboxes {
+		localPart, domain, ok := strings.Cut(mailbox.Address, "@")
+		if !ok {
+			return fmt.Errorf("mailbox %q is not an address", mailbox.Address)
+		}
+
+		if err := firstError(ValidateLocalPart(localPart), validate.Domain(domain)); err != nil {
+			return err
+		}
+
+		if mailbox.Limit < 1 || mailbox.Limit > MaxSendLimit {
+			return fmt.Errorf("the limit of %s must be 1 to %d", mailbox.Address, MaxSendLimit)
+		}
+
+		if addresses[mailbox.Address] {
+			return fmt.Errorf("mailbox %q is named twice", mailbox.Address)
+		}
+
+		addresses[mailbox.Address] = true
+	}
+
+	return nil
+}
+
+// firstError returns the first error that is not nil.
+func firstError(errs ...error) error {
+	for _, err := range errs {
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -116,6 +163,10 @@ func (m *Manager) ApplySendLimits(limits SendLimits) error {
 		for _, domain := range account.Domains {
 			lines = append(lines, "sender:@"+domain+" "+account.Username)
 		}
+	}
+
+	for _, mailbox := range limits.Mailboxes {
+		lines = append(lines, "mailbox:"+mailbox.Address+" "+strconv.Itoa(mailbox.Limit))
 	}
 
 	slices.Sort(lines)

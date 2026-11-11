@@ -2106,7 +2106,7 @@ MAPS
 driver = mysql
 connect = host=/run/mysqld/mysqld.sock dbname=rayxo user=$MAIL_DB_USER password=$password
 default_pass_scheme = SHA512-CRYPT
-password_query = SELECT address AS user, password FROM v_mail_mailboxes WHERE address = '%u'
+password_query = SELECT address AS user, password FROM v_mail_mailboxes WHERE address = '%u' AND can_login = 1
 user_query = SELECT home, uid, gid, quota_rule FROM v_mail_mailboxes WHERE address = '%u'
 iterate_query = SELECT address AS user FROM v_mail_mailboxes
 SQLCONF
@@ -2313,6 +2313,7 @@ CONF
 --   account <limit>               the limit of each account
 --   account:<username> <limit>    one account's own limit, when it has one
 --   server <limit>                all accounts together
+--   mailbox:<address> <limit>     a mailbox's own limit, for what it sends signed in
 --   sender:@<domain> <username>   and sender:<username>@<hostname> <username>
 -- Mail counts for the account whose login sent it on 587/465 (a mailbox,
 -- by its domain) or, from the local sendmail, whose address it comes
@@ -2366,6 +2367,18 @@ return {
       return nil
     end
     return 'rayxo_account:' .. account, limits
+  end,
+  rayxo_mailbox = function(task)
+    local user = task:get_user()
+    if not user then
+      return nil
+    end
+    user = string.lower(user)
+    local limits = bucket(map:get_key('mailbox:' .. user))
+    if not limits then
+      return nil
+    end
+    return 'rayxo_mailbox:' .. user, limits
   end,
   rayxo_server = function(task)
     if not account_of(task) then

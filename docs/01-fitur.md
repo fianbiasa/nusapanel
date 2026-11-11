@@ -72,22 +72,22 @@ Pembagian level sama seperti DirectAdmin:
 
 ### Email
 
-| Fitur              | Keterangan                                                               | Fase |
-| ------------------ | ------------------------------------------------------------------------ | ---- |
-| Akun email         | Buat/hapus, password, quota, batas kirim per hari, suspend               | P2   |
-| Forwarder          | Satu alamat ke banyak tujuan                                             | P2   |
-| Catch-all          | Tolak (bawaan) atau teruskan ke satu alamat                              | P2   |
-| Autoresponder      | Balasan otomatis                                                         | P2   |
-| Vacation message   | Dengan tanggal mulai dan selesai                                         | P2   |
-| Spam filter        | Ambang skor, aksi (pindah ke Junk/hapus), whitelist & blacklist (Rspamd) | P2   |
-| Email filter       | Aturan per akun (Sieve)                                                  | P2   |
-| DKIM / SPF / DMARC | Dibuat otomatis + indikator status                                       | P2   |
-| MX & mode email    | Email ditangani server ini atau layanan luar (Google, Zoho, dll.)        | P2   |
-| Webmail            | Roundcube dengan SSO dari panel                                          | P2   |
-| Pemakaian email    | Ukuran per akun                                                          | P2   |
-| Konfigurasi klien  | Autoconfig (Thunderbird) & autodiscover (Outlook)                        | P3   |
-| Mailing list       |                                                                          | P6   |
-| Lacak pengiriman ★ | Cari log mail untuk domain sendiri                                       | P6   |
+| Fitur              | Keterangan                                                                                             | Fase |
+| ------------------ | ------------------------------------------------------------------------------------------------------ | ---- |
+| Akun email         | ✅ Buat/hapus, password, quota, batas kirim per hari (≤ batas akun), suspend login (email tetap masuk) | P2   |
+| Forwarder          | Satu alamat ke banyak tujuan                                                                           | P2   |
+| Catch-all          | Tolak (bawaan) atau teruskan ke satu alamat                                                            | P2   |
+| Autoresponder      | Balasan otomatis                                                                                       | P2   |
+| Vacation message   | Dengan tanggal mulai dan selesai                                                                       | P2   |
+| Spam filter        | Ambang skor, aksi (pindah ke Junk/hapus), whitelist & blacklist (Rspamd)                               | P2   |
+| Email filter       | Aturan per akun (Sieve)                                                                                | P2   |
+| DKIM / SPF / DMARC | Dibuat otomatis + indikator status                                                                     | P2   |
+| MX & mode email    | Email ditangani server ini atau layanan luar (Google, Zoho, dll.)                                      | P2   |
+| Webmail            | Roundcube dengan SSO dari panel                                                                        | P2   |
+| Pemakaian email    | Ukuran per akun                                                                                        | P2   |
+| Konfigurasi klien  | Autoconfig (Thunderbird) & autodiscover (Outlook)                                                      | P3   |
+| Mailing list       |                                                                                                        | P6   |
+| Lacak pengiriman ★ | Cari log mail untuk domain sendiri                                                                     | P6   |
 
 ### Fitur lanjutan
 

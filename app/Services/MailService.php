@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\AccountStatus;
 use App\Enums\DomainStatus;
 use App\Enums\DomainType;
+use App\Enums\MailboxStatus;
 use App\Enums\MailDomainStatus;
 use App\Enums\Role;
 use App\Listeners\ApplyMailTaskResult;
@@ -44,6 +45,7 @@ class MailService
         private AuditLogger $audit,
         private DnsService $dns,
         private WebmailService $webmail,
+        private MailSendLimitService $sendLimits,
     ) {}
 
     /**
@@ -90,7 +92,7 @@ class MailService
                 $mailDomain = $this->ensureMailDomain($domain, $account, $actor);
 
                 $mailbox = $mailDomain->mailboxes()->make(['local_part' => $localPart, 'quota_mb' => $quotaMb]);
-                $mailbox->forceFill(['password_hash' => Mailbox::hashPassword($password), 'status' => 'active'])->save();
+                $mailbox->forceFill(['password_hash' => Mailbox::hashPassword($password), 'status' => MailboxStatus::Active])->save();
 
                 $this->audit->record('mailbox.created', $mailbox, [
                     'address' => "{$localPart}@{$domain->name}",
@@ -136,6 +138,54 @@ class MailService
         }
 
         $this->audit->record('mailbox.updated', $mailbox, ['address' => $this->address($mailbox), ...$changes], $actor);
+    }
+
+    /**
+     * Give a mailbox its own daily send limit for what it sends signed in
+     * (recipients per 24 hours), or the account's when null; the mail
+     * server gets it at once.
+     *
+     * @throws ValidationException
+     */
+    public function setMailboxSendLimit(Mailbox $mailbox, ?int $limit, User $actor): void
+    {
+        $this->ensureAccountIsActive($mailbox->mailDomain->domain->account, 'daily_send_limit');
+
+        if ($limit === $mailbox->daily_send_limit) {
+            return;
+        }
+
+        $mailbox->forceFill(['daily_send_limit' => $limit])->save();
+
+        $this->audit->record('mailbox.send_limit_changed', $mailbox, ['address' => $this->address($mailbox), 'daily_send_limit' => $limit], $actor);
+
+        $this->sendLimits->sync($actor);
+    }
+
+    /**
+     * Suspend a mailbox, or let it sign in again. A suspended mailbox may
+     * not sign in (IMAP, POP3, SMTP, webmail), so it sends nothing, but its
+     * mail still arrives; its webmail sessions end.
+     *
+     * @throws ValidationException
+     */
+    public function setMailboxSuspended(Mailbox $mailbox, bool $suspended, User $actor): void
+    {
+        $this->ensureAccountIsActive($mailbox->mailDomain->domain->account, 'suspended');
+
+        $status = $suspended ? MailboxStatus::Suspended : MailboxStatus::Active;
+
+        if ($mailbox->status === $status) {
+            return;
+        }
+
+        $mailbox->forceFill(['status' => $status])->save();
+
+        if ($suspended) {
+            $this->webmail->endSessions($mailbox);
+        }
+
+        $this->audit->record($suspended ? 'mailbox.suspended' : 'mailbox.unsuspended', $mailbox, ['address' => $this->address($mailbox)], $actor);
     }
 
     /**

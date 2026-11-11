@@ -23,6 +23,7 @@ func TestApplySendLimitsWritesWhoseMailIsWhose(t *testing.T) {
 			{Username: "budi", Domains: []string{"example.com", "blog.example.com"}},
 			{Username: "sari", Domains: []string{"sari.example"}},
 		},
+		Mailboxes: []SendLimitMailbox{{Address: "info@example.com", Limit: 50}},
 	}
 
 	if err := manager.ApplySendLimits(limits); err != nil {
@@ -36,6 +37,7 @@ func TestApplySendLimitsWritesWhoseMailIsWhose(t *testing.T) {
 
 	want := "# Written by rayxod: the daily send limits (recipients per 24 hours) and whose mail is whose.\n" +
 		"account 300\n" +
+		"mailbox:info@example.com 50\n" +
 		"sender:@blog.example.com budi\n" +
 		"sender:@example.com budi\n" +
 		"sender:@sari.example sari\n" +
@@ -94,6 +96,14 @@ func TestBadSendLimitsAreRefused(t *testing.T) {
 		"username with space": {Accounts: []SendLimitAccount{{Username: "budi x"}}},
 		"bad domain":          {Accounts: []SendLimitAccount{{Username: "budi", Domains: []string{"example.com\nserver 1"}}}},
 		"account twice":       {Accounts: []SendLimitAccount{{Username: "budi"}, {Username: "budi"}}},
+		"mailbox no address":  {Mailboxes: []SendLimitMailbox{{Address: "info", Limit: 5}}},
+		"mailbox bad part":    {Mailboxes: []SendLimitMailbox{{Address: "in fo@example.com", Limit: 5}}},
+		"mailbox newline":     {Mailboxes: []SendLimitMailbox{{Address: "info@example.com\nserver", Limit: 5}}},
+		"mailbox zero limit":  {Mailboxes: []SendLimitMailbox{{Address: "info@example.com", Limit: 0}}},
+		"mailbox twice": {Mailboxes: []SendLimitMailbox{
+			{Address: "info@example.com", Limit: 5},
+			{Address: "info@example.com", Limit: 6},
+		}},
 		"domain twice": {Accounts: []SendLimitAccount{
 			{Username: "budi", Domains: []string{"example.com"}},
 			{Username: "sari", Domains: []string{"example.com"}},

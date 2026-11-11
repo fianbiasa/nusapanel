@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\Role;
 use App\Enums\TaskStatus;
 use App\Models\Domain;
+use App\Models\Mailbox;
 use App\Models\Task;
 use App\Models\User;
 
@@ -28,7 +29,7 @@ class MailSendLimitService
     /**
      * What the agent's mail.send_limits_apply writes, 0 being no limit.
      *
-     * @return array{account_limit: int, server_limit: int, accounts: list<array{username: string, domains: list<string>}>}
+     * @return array{account_limit: int, server_limit: int, accounts: list<array{username: string, domains: list<string>}>, mailboxes: list<array{address: string, limit: int}>}
      */
     public function payload(): array
     {
@@ -49,10 +50,27 @@ class MailSendLimitService
             ];
         }
 
+        // Mailboxes with their own limit, for what they send signed in.
+        $mailboxes = [];
+
+        $limited = Mailbox::query()
+            ->whereNotNull('daily_send_limit')
+            ->with('mailDomain.domain')
+            ->get()
+            ->sortBy(fn (Mailbox $mailbox): string => $mailbox->local_part.'@'.$mailbox->mailDomain->domain->name);
+
+        foreach ($limited as $mailbox) {
+            $mailboxes[] = [
+                'address' => $mailbox->local_part.'@'.$mailbox->mailDomain->domain->name,
+                'limit' => (int) $mailbox->daily_send_limit,
+            ];
+        }
+
         return [
             'account_limit' => $limits['account'] ?? 0,
             'server_limit' => $limits['server'] ?? 0,
             'accounts' => $accounts,
+            'mailboxes' => $mailboxes,
         ];
     }
 

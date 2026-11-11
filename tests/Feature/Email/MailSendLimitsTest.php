@@ -68,6 +68,7 @@ class MailSendLimitsTest extends TestCase
                     ['username' => 'budi', 'domains' => ['example.com', 'example.net']],
                     ['username' => 'sari', 'domains' => []],
                 ],
+                'mailboxes' => [],
             ],
         ], $this->sentPayloads());
         $this->assertDatabaseHas(AuditLog::class, ['action' => 'server.mail_send_limits_changed', 'actor_id' => $this->admin->id]);
@@ -84,7 +85,7 @@ class MailSendLimitsTest extends TestCase
             ->assertSessionHasNoErrors()
             ->assertInertiaFlash('toast.message', 'Send limits saved.');
 
-        $this->assertSame([['account_limit' => 0, 'server_limit' => 0, 'accounts' => []]], $this->sentPayloads());
+        $this->assertSame([['account_limit' => 0, 'server_limit' => 0, 'accounts' => [], 'mailboxes' => []]], $this->sentPayloads());
 
         $this->actingAs($this->admin)
             ->get(route('admin.server-settings.index'))

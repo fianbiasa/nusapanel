@@ -31,6 +31,9 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import { StatusBadge } from '@/components/status-badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
     Select,
@@ -56,6 +59,10 @@ type MailboxRow = {
     address: string;
     domain: string;
     quota_mb: number | null;
+    /** Its own daily send limit; null follows the hosting account's. */
+    daily_send_limit: number | null;
+    /** Suspended: it may not sign in, but its mail still arrives. */
+    suspended: boolean;
     /** Whether its domain takes mail yet (the agent prepared it). */
     ready: boolean;
     created_at: string | null;
@@ -69,6 +76,8 @@ type Props = {
     domains: Domain[];
     max_quota_mb: number;
     max_destinations: number;
+    /** Each hosting account's daily send limit; null is none. */
+    account_send_limit: number | null;
     limits: AccountLimits;
     server: string;
     webmail: {
@@ -90,6 +99,7 @@ export default function EmailIndex({
     domains,
     max_quota_mb,
     max_destinations,
+    account_send_limit,
     limits,
     server,
     webmail,
@@ -232,6 +242,14 @@ export default function EmailIndex({
                                                     sedang disiapkan
                                                 </p>
                                             )}
+                                            {mailbox.suspended && (
+                                                <div className="mt-1">
+                                                    <StatusBadge
+                                                        status="suspended"
+                                                        label="Login nonaktif"
+                                                    />
+                                                </div>
+                                            )}
                                         </td>
                                         <td
                                             className={`${tableStyles.td} whitespace-nowrap text-muted-foreground`}
@@ -244,14 +262,15 @@ export default function EmailIndex({
                                         </td>
                                         <td className={tableStyles.td}>
                                             <div className="flex items-center justify-end gap-1">
-                                                {webmail.available && (
-                                                    <WebmailButton
-                                                        mailbox={mailbox}
-                                                        sessionHours={
-                                                            webmail.session_hours
-                                                        }
-                                                    />
-                                                )}
+                                                {webmail.available &&
+                                                    !mailbox.suspended && (
+                                                        <WebmailButton
+                                                            mailbox={mailbox}
+                                                            sessionHours={
+                                                                webmail.session_hours
+                                                            }
+                                                        />
+                                                    )}
                                                 <Button
                                                     asChild
                                                     variant="ghost"
@@ -363,6 +382,7 @@ export default function EmailIndex({
                             key={`edit-${action.mailbox.id}`}
                             mailbox={action.mailbox}
                             maxQuotaMb={max_quota_mb}
+                            accountSendLimit={account_send_limit}
                             onSuccess={closeDialog}
                         />
                     )}
@@ -562,16 +582,24 @@ function CreateMailboxForm({
 function EditMailboxForm({
     mailbox,
     maxQuotaMb,
+    accountSendLimit,
     onSuccess,
 }: {
     mailbox: MailboxRow;
     maxQuotaMb: number;
+    accountSendLimit: number | null;
     onSuccess: () => void;
 }) {
     const [password, setPassword] = useState('');
     const [quota, setQuota] = useState(
         mailbox.quota_mb === null ? '' : String(mailbox.quota_mb),
     );
+    const [sendLimit, setSendLimit] = useState(
+        mailbox.daily_send_limit === null
+            ? ''
+            : String(mailbox.daily_send_limit),
+    );
+    const [suspended, setSuspended] = useState(mailbox.suspended);
 
     return (
         <Form
@@ -612,6 +640,59 @@ function EditMailboxForm({
                         maxQuotaMb={maxQuotaMb}
                         error={errors.quota_mb}
                     />
+
+                    <div className="grid gap-2">
+                        <Label htmlFor="edit-mail-send-limit">
+                            Batas kirim harian
+                        </Label>
+                        <Input
+                            id="edit-mail-send-limit"
+                            name="daily_send_limit"
+                            type="number"
+                            min={1}
+                            max={accountSendLimit ?? undefined}
+                            value={sendLimit}
+                            onChange={(event) =>
+                                setSendLimit(event.target.value)
+                            }
+                            placeholder={
+                                accountSendLimit === null
+                                    ? 'Tanpa batas'
+                                    : `Ikuti batas akun (${accountSendLimit})`
+                            }
+                            className="rounded-xl"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                            Penerima per 24 jam untuk email yang dikirim dengan
+                            login akun email ini.
+                        </p>
+                        <InputError message={errors.daily_send_limit} />
+                    </div>
+
+                    <div className="flex items-start gap-3 rounded-xl border p-3">
+                        <input
+                            type="hidden"
+                            name="suspended"
+                            value={suspended ? '1' : '0'}
+                        />
+                        <Checkbox
+                            id="edit-mail-suspended"
+                            checked={suspended}
+                            onCheckedChange={(checked) =>
+                                setSuspended(checked === true)
+                            }
+                        />
+                        <div className="grid gap-1">
+                            <Label htmlFor="edit-mail-suspended">
+                                Nonaktifkan login
+                            </Label>
+                            <p className="text-xs text-muted-foreground">
+                                Tidak bisa login (aplikasi email, webmail) dan
+                                mengirim; email masuk tetap diterima.
+                            </p>
+                            <InputError message={errors.suspended} />
+                        </div>
+                    </div>
 
                     <DialogFooter className="gap-2">
                         <DialogClose asChild>

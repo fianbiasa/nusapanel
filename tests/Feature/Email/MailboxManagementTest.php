@@ -3,6 +3,7 @@
 namespace Tests\Feature\Email;
 
 use App\Enums\AccountStatus;
+use App\Enums\MailboxStatus;
 use App\Enums\MailDomainStatus;
 use App\Enums\TaskStatus;
 use App\Events\AgentTaskFinished;
@@ -14,6 +15,7 @@ use App\Models\MailDomain;
 use App\Models\Package;
 use App\Models\Task;
 use App\Models\User;
+use App\Models\WebmailSession;
 use App\Services\AccountService;
 use App\Services\DomainService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -231,6 +233,55 @@ class MailboxManagementTest extends TestCase
         // the daily send limit.
         $this->assertSame(['@example.com', '@example.net', 'budi'], $tokens);
         $this->assertNull(DB::table('v_mail_local_senders')->where('login', 'boss')->value('senders'));
+    }
+
+    public function test_a_suspended_mailbox_still_gets_mail_but_cannot_sign_in()
+    {
+        $mailbox = $this->createMailbox();
+        $this->finishMailDomainApply();
+        WebmailSession::factory()->for($mailbox)->create();
+
+        $this->actingAs($this->account)
+            ->put(route('email.update', $mailbox), ['password' => '', 'quota_mb' => '', 'suspended' => '1'])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(MailboxStatus::Suspended, $mailbox->fresh()->status);
+        // Postfix still delivers to it; Dovecot no longer lets it sign in.
+        $this->assertSame(['info@example.com'], DB::table('v_mail_mailboxes')->pluck('address')->all());
+        $this->assertSame(0, (int) DB::table('v_mail_mailboxes')->value('can_login'));
+        $this->assertDatabaseCount('webmail_sessions', 0);
+        $this->assertDatabaseHas(AuditLog::class, ['action' => 'mailbox.suspended', 'actor_id' => $this->account->id]);
+
+        $this->actingAs($this->account)
+            ->put(route('email.update', $mailbox), ['suspended' => '0'])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(1, (int) DB::table('v_mail_mailboxes')->value('can_login'));
+        $this->assertDatabaseHas(AuditLog::class, ['action' => 'mailbox.unsuspended']);
+    }
+
+    public function test_a_mailbox_gets_its_own_send_limit_up_to_the_hosting_accounts()
+    {
+        $mailbox = $this->createMailbox();
+
+        $this->actingAs($this->account)
+            ->put(route('email.update', $mailbox), ['daily_send_limit' => 301])
+            ->assertSessionHasErrors(['daily_send_limit' => 'An email account may send to at most 300 recipients a day, the limit of the hosting account.']);
+
+        $this->actingAs($this->account)
+            ->put(route('email.update', $mailbox), ['daily_send_limit' => 50])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(50, $mailbox->fresh()->daily_send_limit);
+        $latest = fn (): array => Task::query()->where('action', 'mail.send_limits_apply')->latest('id')->firstOrFail()->payload;
+        $this->assertSame([['address' => 'info@example.com', 'limit' => 50]], $latest()['mailboxes']);
+
+        $this->actingAs($this->account)
+            ->put(route('email.update', $mailbox), ['daily_send_limit' => ''])
+            ->assertSessionHasNoErrors();
+
+        $this->assertNull($mailbox->fresh()->daily_send_limit);
+        $this->assertSame([], $latest()['mailboxes']);
     }
 
     public function test_suspended_accounts_drop_out_of_the_mail_views()

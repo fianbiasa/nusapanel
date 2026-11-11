@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\AccountStatus;
+use App\Enums\MailboxStatus;
 use App\Enums\MailDomainStatus;
 use App\Enums\Role;
 use App\Models\Mailbox;
@@ -109,9 +110,15 @@ class WebmailService
             ]);
         }
 
-        if ($mailDomain->status !== MailDomainStatus::Active || $mailbox->status !== 'active') {
+        if ($mailDomain->status !== MailDomainStatus::Active) {
             throw ValidationException::withMessages([
                 'webmail' => __('This email account is not ready yet. Try again in a moment.'),
+            ]);
+        }
+
+        if ($mailbox->status === MailboxStatus::Suspended) {
+            throw ValidationException::withMessages([
+                'webmail' => __('This email account is suspended: it cannot sign in until it is unsuspended.'),
             ]);
         }
 
