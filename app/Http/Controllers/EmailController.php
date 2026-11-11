@@ -59,6 +59,7 @@ class EmailController extends Controller
                 return [
                     'id' => $forwarder->id,
                     'address' => $address,
+                    'domain' => $forwarder->mailDomain->domain->name,
                     'destinations' => $forwarder->destinationList(),
                     'keeps_copy' => in_array($address, $mailboxAddresses, true),
                     'ready' => $forwarder->mailDomain->status === MailDomainStatus::Active,

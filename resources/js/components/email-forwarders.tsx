@@ -34,6 +34,7 @@ import {
 export type ForwarderRow = {
     id: number;
     address: string;
+    domain: string;
     destinations: string[];
     /** Whether a mailbox has the same address and keeps a copy. */
     keeps_copy: boolean;
@@ -65,12 +66,15 @@ type ForwarderAction =
 export function ForwardersPanel({
     forwarders,
     domains,
+    selectedDomainId,
     maxDestinations,
     limit,
     used,
 }: {
     forwarders: ForwarderRow[];
     domains: MailDomainOption[];
+    /** The domain chosen at the top of the page, which the form follows. */
+    selectedDomainId: number | null;
     maxDestinations: number;
     limit: number | null;
     used: number;
@@ -105,6 +109,7 @@ export function ForwardersPanel({
                 ) : (
                     <CreateForwarderForm
                         domains={domains}
+                        selectedDomainId={selectedDomainId}
                         maxDestinations={maxDestinations}
                         disabled={isAtLimit}
                     />
@@ -212,7 +217,10 @@ export function ForwardersPanel({
                         <Form
                             key={`delete-${action.forwarder.id}`}
                             {...destroyForwarder.form(action.forwarder.id)}
-                            options={{ preserveScroll: true }}
+                            options={{
+                                preserveScroll: true,
+                                preserveState: true,
+                            }}
                             onSuccess={() => setDialogOpen(false)}
                             className="grid gap-4"
                         >
@@ -296,22 +304,35 @@ function DestinationsField({
 
 function CreateForwarderForm({
     domains,
+    selectedDomainId,
     maxDestinations,
     disabled,
 }: {
     domains: MailDomainOption[];
+    selectedDomainId: number | null;
     maxDestinations: number;
     disabled: boolean;
 }) {
     const [localPart, setLocalPart] = useState('');
-    const [domainId, setDomainId] = useState(String(domains[0].id));
+    const [domainId, setDomainId] = useState(
+        String(selectedDomainId ?? domains[0].id),
+    );
+    const [followedDomainId, setFollowedDomainId] = useState(selectedDomainId);
     const [formKey, setFormKey] = useState(0);
+
+    if (selectedDomainId !== followedDomainId) {
+        setFollowedDomainId(selectedDomainId);
+
+        if (selectedDomainId !== null) {
+            setDomainId(String(selectedDomainId));
+        }
+    }
 
     return (
         <Form
             key={formKey}
             {...storeForwarder.form()}
-            options={{ preserveScroll: true }}
+            options={{ preserveScroll: true, preserveState: true }}
             onSuccess={() => {
                 setLocalPart('');
                 setFormKey((key) => key + 1);
@@ -412,7 +433,7 @@ function EditForwarderForm({
     return (
         <Form
             {...updateForwarder.form(forwarder.id)}
-            options={{ preserveScroll: true }}
+            options={{ preserveScroll: true, preserveState: true }}
             onSuccess={onSuccess}
             className="grid gap-5"
         >
@@ -536,7 +557,10 @@ export function CatchAllPanel({ domains }: { domains: MailDomainOption[] }) {
                         <Form
                             key={`catch-all-${editing.id}`}
                             {...updateCatchAll.form(editing.mail_domain_id)}
-                            options={{ preserveScroll: true }}
+                            options={{
+                                preserveScroll: true,
+                                preserveState: true,
+                            }}
                             onSuccess={() => setDialogOpen(false)}
                             className="grid gap-5"
                         >

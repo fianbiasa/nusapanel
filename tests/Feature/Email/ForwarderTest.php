@@ -89,6 +89,7 @@ class ForwarderTest extends TestCase
             ->get(route('email.index'))
             ->assertInertia(fn (Assert $page) => $page
                 ->where('forwarders.0.address', 'info@example.com')
+                ->where('forwarders.0.domain', 'example.com')
                 ->where('forwarders.0.destinations', ['budi@gmail.com'])
                 ->where('forwarders.0.keeps_copy', true)
                 ->where('domains.0.mail_domain_id', $mailDomain->id)

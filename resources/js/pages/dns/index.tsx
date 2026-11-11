@@ -12,13 +12,7 @@ import { PageHeader } from '@/components/page-header';
 import { Panel } from '@/components/panel';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
+import { DomainSwitcher } from '@/components/domain-switcher';
 import { index as dnsIndex, reset as resetZone } from '@/routes/dns';
 import { destroy, store, update } from '@/routes/dns/records';
 
@@ -101,6 +95,17 @@ export default function DnsIndex({
                 }
             />
 
+            {zone !== null && zones.length > 1 && (
+                <DomainSwitcher
+                    options={zones.map((option) => ({
+                        value: String(option.id),
+                        label: option.name,
+                    }))}
+                    value={String(zone.id)}
+                    onChange={chooseZone}
+                />
+            )}
+
             <DnsSyncState sync={sync} />
 
             {zone === null ? (
@@ -141,39 +146,12 @@ export default function DnsIndex({
                         title={`Record ${zone.name}`}
                         description={`${records.length} dari ${max_records} record`}
                         action={
-                            <div className="flex flex-wrap items-center gap-2">
-                                {zones.length > 1 && (
-                                    <Select
-                                        value={String(zone.id)}
-                                        onValueChange={chooseZone}
-                                    >
-                                        <SelectTrigger
-                                            aria-label="Pilih zone"
-                                            className="w-full rounded-xl bg-card px-3.5 font-mono sm:w-auto sm:min-w-56"
-                                        >
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent className="rounded-xl">
-                                            {zones.map((option) => (
-                                                <SelectItem
-                                                    key={option.id}
-                                                    value={String(option.id)}
-                                                >
-                                                    {option.name}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                )}
-                                <Button
-                                    variant="outline"
-                                    onClick={() =>
-                                        openDialog({ type: 'reset' })
-                                    }
-                                >
-                                    <RotateCcw /> Reset
-                                </Button>
-                            </div>
+                            <Button
+                                variant="outline"
+                                onClick={() => openDialog({ type: 'reset' })}
+                            >
+                                <RotateCcw /> Reset
+                            </Button>
                         }
                         flush
                     >

@@ -3,6 +3,7 @@ import { ExternalLink, KeyRound, Mail, Pencil, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { AffixInput } from '@/components/affix-input';
+import { DomainSwitcher } from '@/components/domain-switcher';
 import {
     CatchAllPanel,
     ForwardersPanel,
@@ -90,6 +91,24 @@ export default function EmailIndex({
 
     const closeDialog = () => setDialogOpen(false);
 
+    // The domain the lists show and the forms start with; "all" shows every
+    // domain. The forms keep the page's state, so it stays after a change.
+    const [domainFilter, setDomainFilter] = useState('all');
+    const selectedDomain =
+        domains.find((domain) => String(domain.id) === domainFilter) ?? null;
+    const shownMailboxes =
+        selectedDomain === null
+            ? mailboxes
+            : mailboxes.filter(
+                  (mailbox) => mailbox.domain === selectedDomain.name,
+              );
+    const shownForwarders =
+        selectedDomain === null
+            ? forwarders
+            : forwarders.filter(
+                  (forwarder) => forwarder.domain === selectedDomain.name,
+              );
+
     const limit = limits.quotas.email_accounts.limit;
     const used = limits.quotas.email_accounts.used ?? mailboxes.length;
     const isAtLimit = limit !== null && used >= limit;
@@ -102,6 +121,20 @@ export default function EmailIndex({
                 title="Email"
                 description="Akun email untuk domain kamu, dibuka lewat webmail atau aplikasi email (IMAP/POP3 dan SMTP)."
             />
+
+            {domains.length > 1 && (
+                <DomainSwitcher
+                    options={[
+                        { value: 'all', label: 'Semua', plain: true },
+                        ...domains.map((domain) => ({
+                            value: String(domain.id),
+                            label: domain.name,
+                        })),
+                    ]}
+                    value={selectedDomain === null ? 'all' : domainFilter}
+                    onChange={setDomainFilter}
+                />
+            )}
 
             <Panel
                 title="Buat akun email"
@@ -122,6 +155,7 @@ export default function EmailIndex({
                 ) : (
                     <CreateMailboxForm
                         domains={domains}
+                        selectedDomainId={selectedDomain?.id ?? null}
                         maxQuotaMb={max_quota_mb}
                         disabled={isAtLimit}
                     />
@@ -139,16 +173,22 @@ export default function EmailIndex({
 
             <Panel
                 title="Daftar akun email"
-                description={`${mailboxes.length} akun email`}
+                description={
+                    selectedDomain === null
+                        ? `${mailboxes.length} akun email`
+                        : `${shownMailboxes.length} akun email di ${selectedDomain.name}`
+                }
                 flush
             >
-                {mailboxes.length === 0 ? (
+                {shownMailboxes.length === 0 ? (
                     <div className="flex flex-col items-center gap-3 px-6 pt-4 pb-10 text-center">
                         <span className="flex size-14 items-center justify-center rounded-full bg-accent text-accent-foreground">
                             <Mail className="size-6" />
                         </span>
                         <p className="max-w-sm text-sm text-muted-foreground">
-                            Belum ada akun email.
+                            {selectedDomain === null
+                                ? 'Belum ada akun email.'
+                                : `Belum ada akun email di ${selectedDomain.name}.`}
                         </p>
                     </div>
                 ) : (
@@ -164,7 +204,7 @@ export default function EmailIndex({
                                 </tr>
                             </thead>
                             <tbody className="divide-y">
-                                {mailboxes.map((mailbox) => (
+                                {shownMailboxes.map((mailbox) => (
                                     <tr
                                         key={mailbox.id}
                                         className={tableStyles.row}
@@ -236,14 +276,17 @@ export default function EmailIndex({
             </Panel>
 
             <ForwardersPanel
-                forwarders={forwarders}
+                forwarders={shownForwarders}
                 domains={domains}
+                selectedDomainId={selectedDomain?.id ?? null}
                 maxDestinations={max_destinations}
                 limit={limits.quotas.email_forwarders.limit}
                 used={limits.quotas.email_forwarders.used ?? forwarders.length}
             />
 
-            <CatchAllPanel domains={domains} />
+            <CatchAllPanel
+                domains={selectedDomain === null ? domains : [selectedDomain]}
+            />
 
             <Panel
                 title="Cara terhubung"
@@ -301,7 +344,10 @@ export default function EmailIndex({
                         <Form
                             key={`delete-${action.mailbox.id}`}
                             {...destroy.form(action.mailbox.id)}
-                            options={{ preserveScroll: true }}
+                            options={{
+                                preserveScroll: true,
+                                preserveState: true,
+                            }}
                             onSuccess={closeDialog}
                             className="grid gap-4"
                         >
@@ -349,15 +395,30 @@ export default function EmailIndex({
 
 function CreateMailboxForm({
     domains,
+    selectedDomainId,
     maxQuotaMb,
     disabled,
 }: {
     domains: Domain[];
+    /** The domain chosen at the top of the page, which the form follows. */
+    selectedDomainId: number | null;
     maxQuotaMb: number;
     disabled: boolean;
 }) {
     const [localPart, setLocalPart] = useState('');
-    const [domainId, setDomainId] = useState(String(domains[0].id));
+    const [domainId, setDomainId] = useState(
+        String(selectedDomainId ?? domains[0].id),
+    );
+    const [followedDomainId, setFollowedDomainId] = useState(selectedDomainId);
+
+    if (selectedDomainId !== followedDomainId) {
+        setFollowedDomainId(selectedDomainId);
+
+        if (selectedDomainId !== null) {
+            setDomainId(String(selectedDomainId));
+        }
+    }
+
     const [password, setPassword] = useState('');
     const [quota, setQuota] = useState('');
 
@@ -370,7 +431,7 @@ function CreateMailboxForm({
     return (
         <Form
             {...store.form()}
-            options={{ preserveScroll: true }}
+            options={{ preserveScroll: true, preserveState: true }}
             onSuccess={reset}
             className="grid max-w-2xl gap-5"
         >
@@ -489,7 +550,7 @@ function EditMailboxForm({
     return (
         <Form
             {...update.form(mailbox.id)}
-            options={{ preserveScroll: true }}
+            options={{ preserveScroll: true, preserveState: true }}
             onSuccess={onSuccess}
             className="grid gap-5"
         >
