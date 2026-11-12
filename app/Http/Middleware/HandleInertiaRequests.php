@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Vite;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -23,7 +24,10 @@ class HandleInertiaRequests extends Middleware
      */
     public function version(Request $request): ?string
     {
-        return parent::version($request);
+        // Inertia's own version only looks for public/build/manifest.json;
+        // the manifest is in public/assets, so a new release still makes
+        // open pages load the new assets.
+        return Vite::manifestHash();
     }
 
     /**

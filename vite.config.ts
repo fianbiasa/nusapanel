@@ -11,6 +11,9 @@ export default defineConfig({
     plugins: lazyPlugins(() => [
         laravel({
             input: ['resources/css/app.css', 'resources/js/app.tsx'],
+            // Built files are served at /assets/<file>, not Laravel's default
+            // /build/assets/<file>; AppServiceProvider points Laravel there too.
+            buildDirectory: 'assets',
             refresh: true,
             fonts: [
                 bunny('Plus Jakarta Sans', {
@@ -28,6 +31,10 @@ export default defineConfig({
             formVariants: true,
         }),
     ]),
+    build: {
+        // The build directory is already "assets", so nothing is nested in it.
+        assetsDir: '',
+    },
     server: {
         watch: {
             ignored: [

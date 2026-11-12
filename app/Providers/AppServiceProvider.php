@@ -8,6 +8,7 @@ use App\Agent\SocketAgentClient;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 use InvalidArgumentException;
@@ -40,6 +41,10 @@ class AppServiceProvider extends ServiceProvider
     protected function configureDefaults(): void
     {
         Date::use(CarbonImmutable::class);
+
+        // Built front-end files live in public/assets and are served at
+        // /assets/<file> (buildDirectory in vite.config.ts).
+        Vite::useBuildDirectory('assets');
 
         DB::prohibitDestructiveCommands(
             app()->isProduction(),
