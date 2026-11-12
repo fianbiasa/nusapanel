@@ -21,7 +21,7 @@ export default function AppSidebarLayout({
                 className="rayxo-page-bg min-w-0 overflow-x-clip bg-background"
             >
                 <AppSidebarHeader breadcrumbs={breadcrumbs} />
-                <div className="mx-auto flex w-full max-w-[1440px] flex-1 flex-col gap-6 px-4 pt-2 pb-10 md:px-8 md:pb-32">
+                <div className="mx-auto flex w-full max-w-[1440px] flex-1 flex-col gap-6 px-4 pt-2 pb-10 md:px-8">
                     {children}
                 </div>
                 <AppDock />

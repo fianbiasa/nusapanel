@@ -57,8 +57,8 @@ const settingsItem: NavItem = {
 
 /**
  * The menu for the signed-in account's role. The sidebar, the dock and the
- * search all read it, so they always offer the same pages. Only pages that
- * exist are listed; new features add their entry here.
+ * search all read it, so they always offer the same pages, in the same
+ * order. Only pages that exist are listed; new features add their entry here.
  */
 export function useNavigation(): {
     sections: NavSection[];
@@ -69,7 +69,6 @@ export function useNavigation(): {
     const role = auth.user.role;
 
     const sections: NavSection[] = [];
-    let dockItems: NavItem[];
 
     if (role === 'admin') {
         const accounts: NavItem = {
@@ -123,14 +122,6 @@ export function useNavigation(): {
                 items: [services, mailQueue, serverSettings, tasks, auditLog],
             },
         );
-        dockItems = [
-            dashboardItem,
-            accounts,
-            packages,
-            tasks,
-            auditLog,
-            settingsItem,
-        ];
     } else if (role === 'user') {
         const domains: NavItem = {
             title: 'Domains',
@@ -188,24 +179,13 @@ export function useNavigation(): {
                 redirects,
             ],
         });
-        dockItems = [
-            dashboardItem,
-            domains,
-            files,
-            databases,
-            ftp,
-            settingsItem,
-        ];
     } else {
         sections.push({ label: 'Menu', items: [dashboardItem] });
-        dockItems = [dashboardItem, settingsItem];
     }
 
     sections.push({ label: 'Akun', items: [settingsItem] });
 
-    return {
-        sections,
-        dockItems,
-        allItems: sections.flatMap((section) => section.items),
-    };
+    const allItems = sections.flatMap((section) => section.items);
+
+    return { sections, dockItems: allItems, allItems };
 }

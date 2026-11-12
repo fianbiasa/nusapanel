@@ -1,13 +1,14 @@
 import { Link } from '@inertiajs/react';
-import { Globe, Server, ShieldCheck } from 'lucide-react';
+import { Globe, Mail, Server, ShieldCheck } from 'lucide-react';
 import AppLogo, { AppLogoMark } from '@/components/app-logo';
 import { home } from '@/routes';
 import type { AuthLayoutProps } from '@/types';
 
 const highlights = [
-    { icon: Server, text: 'Kelola server, akun hosting, dan website' },
-    { icon: Globe, text: 'Domain, PHP, dan SSL dari satu tempat' },
-    { icon: ShieldCheck, text: 'Setiap akun terisolasi dan aman' },
+    { icon: Server, text: 'Akun hosting, paket, dan kuota' },
+    { icon: Globe, text: 'Domain, SSL, PHP, dan database' },
+    { icon: Mail, text: 'Email dan DNS server' },
+    { icon: ShieldCheck, text: 'Setiap akun berjalan terisolasi' },
 ];
 
 /**
@@ -31,11 +32,11 @@ export default function AuthSimpleLayout({
                     <AppLogoMark className="size-28 drop-shadow-[0_20px_40px_rgb(22_136_255/0.45)]" />
                     <div className="space-y-3">
                         <h2 className="text-4xl leading-tight font-extrabold tracking-tight">
-                            Panel hosting milik sendiri.
+                            Satu panel untuk seluruh layanan hosting.
                         </h2>
                         <p className="max-w-md text-[15px] text-white/70">
-                            Semua yang dibutuhkan untuk menjalankan server
-                            hosting, tanpa biaya lisensi.
+                            Website, email, DNS, dan database dalam satu server,
+                            tanpa biaya lisensi.
                         </p>
                     </div>
                     <ul className="space-y-3">
