@@ -11,6 +11,7 @@ use App\Http\Controllers\Admin\ServiceController;
 use App\Http\Controllers\Admin\StatisticsController;
 use App\Http\Controllers\Admin\TaskController;
 use App\Http\Controllers\CatchAllController;
+use App\Http\Controllers\CertificateRequestController;
 use App\Http\Controllers\CronJobController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DatabaseController;
@@ -47,6 +48,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('domains/{domain}/ssl', [DomainController::class, 'requestSsl'])->name('domains.ssl.store');
         Route::delete('domains/{domain}/ssl', [DomainController::class, 'removeSsl'])->name('domains.ssl.destroy');
         Route::post('domains/{domain}/certificate', [DomainController::class, 'installCertificate'])->name('domains.certificate.store');
+        Route::post('domains/{domain}/certificate-request', [CertificateRequestController::class, 'store'])->name('domains.certificate-request.store');
+        Route::delete('domains/{domain}/certificate-request', [CertificateRequestController::class, 'destroy'])->name('domains.certificate-request.destroy');
+        Route::post('domains/{domain}/self-signed-certificate', [CertificateRequestController::class, 'selfSigned'])->name('domains.self-signed-certificate.store');
         Route::put('domains/{domain}/force-https', [DomainController::class, 'updateForceHttps'])->name('domains.force-https.update');
         Route::put('domains/{domain}/www', [DomainController::class, 'updateWww'])->name('domains.www.update');
         Route::put('domains/{domain}/php-enabled', [DomainController::class, 'updatePhpEnabled'])->name('domains.php-enabled.update');
@@ -66,6 +70,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('domains/{domain}/hotlink', [DomainWebSettingsController::class, 'updateHotlink'])->name('domains.hotlink.update');
         Route::put('domains/{domain}/mime-types', [DomainWebSettingsController::class, 'updateMimeTypes'])->name('domains.mime-types.update');
         Route::put('domains/{domain}/php-extensions', [DomainWebSettingsController::class, 'updatePhpExtensions'])->name('domains.php-extensions.update');
+        Route::put('domains/{domain}/cgi', [DomainWebSettingsController::class, 'updateCgi'])->name('domains.cgi.update');
+        Route::put('domains/{domain}/limits', [DomainWebSettingsController::class, 'updateLimits'])->name('domains.limits.update');
         Route::get('databases', [DatabaseController::class, 'index'])->name('databases.index');
         Route::post('databases', [DatabaseController::class, 'store'])->name('databases.store');
         Route::delete('databases/{database}', [DatabaseController::class, 'destroy'])->name('databases.destroy');

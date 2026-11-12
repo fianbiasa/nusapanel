@@ -44,6 +44,7 @@ trait PackageValidationRules
             'disk_mb' => $quotaRules,
             'inodes' => $quotaRules,
             'ssl' => ['required', 'boolean'],
+            'cgi' => ['sometimes', 'boolean'],
         ];
     }
 }

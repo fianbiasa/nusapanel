@@ -935,7 +935,7 @@ class DomainService
      * ({@see WebSettings}). Each is pending until the agent applied it.
      * Callers hold a transaction.
      */
-    public function reapplyWebsite(Domain $domain, User $actor): void
+    public function reapplyWebsite(Domain $domain, ?User $actor): void
     {
         $account = $domain->account;
 
@@ -951,6 +951,25 @@ class DomainService
                 $pointer->forceFill(['status' => DomainStatus::Pending])->save();
                 $this->dispatchApply($pointer, $account, $actor);
             });
+    }
+
+    /**
+     * Queue again the websites that turned CGI on, of the accounts the query
+     * selects, after whether they may run CGI could have changed (their
+     * package, owner or reseller package): the agent's configuration
+     * follows {@see AccountLimits::allowsCgi()}, so CGI stops, or starts
+     * again, everywhere at once. Callers hold a transaction.
+     *
+     * @param  Builder<User>  $accounts
+     */
+    public function reapplyCgiWebsites(Builder $accounts, ?User $actor): void
+    {
+        Domain::query()
+            ->whereIn('user_id', $accounts->select('id'))
+            ->where('cgi_enabled', true)
+            ->whereIn('status', [DomainStatus::Active, DomainStatus::Pending, DomainStatus::Failed])
+            ->orderBy('id')
+            ->each(fn (Domain $domain) => $this->reapplyWebsite($domain, $actor));
     }
 
     /**

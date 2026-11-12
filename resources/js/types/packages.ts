@@ -22,6 +22,7 @@ export type HostingPackage = {
     description: string | null;
     limits: PackageLimits;
     ssl: boolean;
+    cgi: boolean;
     accounts_count: number;
 };
 
@@ -42,6 +43,7 @@ export type PackageOption = {
 export type AccountLimits = {
     package: string | null;
     ssl: boolean;
+    cgi: boolean;
     quotas: Record<QuotaKey, { limit: number | null; used: number | null }>;
     measured_at: string | null;
     quota_enabled: boolean | null;
@@ -57,16 +59,18 @@ export type ResellerPackage = {
     description: string | null;
     limits: Record<ResellerQuotaKey, number | null>;
     ssl: boolean;
+    cgi: boolean;
     oversell: boolean;
     resellers_count: number;
 };
 
 /**
  * For a reseller: the limits of its reseller package, which its own
- * packages may not go over; `ssl` is 1 when it may give SSL.
+ * packages may not go over; `ssl` and `cgi` are 1 when it may give them.
  */
 export type ResellerPackageLimits = Record<QuotaKey, number | null> & {
     ssl: number;
+    cgi: number;
 };
 
 /**
@@ -78,6 +82,7 @@ export type ResellerLimits = {
     package: string | null;
     oversell: boolean;
     ssl: boolean;
+    cgi: boolean;
     quotas: Record<
         ResellerQuotaKey,
         {

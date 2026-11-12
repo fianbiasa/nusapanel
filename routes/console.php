@@ -17,6 +17,7 @@ Schedule::command('rayxo:collect-bandwidth')->everyFifteenMinutes()->withoutOver
 Schedule::command('rayxo:close-phpmyadmin-sessions')->everyFiveMinutes()->withoutOverlapping();
 Schedule::command('rayxo:sync-send-limits')->everyFiveMinutes()->withoutOverlapping();
 Schedule::command('rayxo:clean-transfers')->hourly()->withoutOverlapping();
+Schedule::command('rayxo:measure-domain-disk')->hourly()->withoutOverlapping();
 Schedule::command('model:prune', ['--model' => [WebmailSession::class, BandwidthUsage::class, DomainBandwidth::class, UsageSnapshot::class]])->hourly()->withoutOverlapping();
 Schedule::command('rayxo:recount-ftp-quotas')->dailyAt('03:40')->withoutOverlapping();
 Schedule::command('rayxo:sync-mail-ssl')->dailyAt('04:20')->withoutOverlapping();

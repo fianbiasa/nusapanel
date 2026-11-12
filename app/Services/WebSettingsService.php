@@ -10,6 +10,7 @@ use App\Models\Domain;
 use App\Models\ProtectedDirectory;
 use App\Models\ProtectedDirectoryUser;
 use App\Models\User;
+use App\Support\AccountLimits;
 use App\Support\WebSettings;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
@@ -331,7 +332,24 @@ class WebSettingsService
     }
 
     /**
-     * Store one of the JSON settings of the website and apply it when it
+     * Run the scripts in the website's cgi-bin, as the account, or stop.
+     * Only a package that includes CGI lets it be turned on.
+     *
+     * @throws ValidationException
+     */
+    public function setCgi(Domain $website, bool $enabled, User $actor): void
+    {
+        if ($enabled && ! AccountLimits::for($website->account)->allowsCgi()) {
+            throw ValidationException::withMessages([
+                'cgi_enabled' => __('CGI is not included in your package.'),
+            ]);
+        }
+
+        $this->update($website, 'cgi_enabled', $enabled, $enabled ? 'domain.cgi_enabled' : 'domain.cgi_disabled', $actor);
+    }
+
+    /**
+     * Store one of the settings of the website and apply it when it
      * changed.
      *
      * @throws ValidationException

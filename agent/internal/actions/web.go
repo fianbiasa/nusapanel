@@ -72,6 +72,11 @@ type applyDomainParams struct {
 	MIMETypes []mimeTypeParams `json:"mime_types"`
 	// PHPExtensions also run as PHP, on top of .php and .phtml.
 	PHPExtensions []string `json:"php_extensions"`
+	// CGI runs the scripts in cgi-bin as the account.
+	CGI bool `json:"cgi"`
+	// Suspended shows the unavailable page instead of the website, which
+	// reached a limit of its own.
+	Suspended bool `json:"suspended"`
 }
 
 // protectedDirectoryParams are one protected directory of
@@ -184,6 +189,8 @@ func (p applyDomainParams) site(user sysuser.User) webserver.Site {
 		Hotlink:              hotlink,
 		MIMETypes:            mimeTypes,
 		PHPExtensions:        p.PHPExtensions,
+		CGI:                  p.CGI,
+		Suspended:            p.Suspended,
 	}
 }
 

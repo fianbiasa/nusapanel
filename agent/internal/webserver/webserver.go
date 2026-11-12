@@ -297,6 +297,13 @@ type Site struct {
 	MIMETypes []MIMEType
 	// PHPExtensions also run as PHP, on top of .php and .phtml.
 	PHPExtensions []string
+	// CGI runs the scripts in <document root>/cgi-bin as the account,
+	// through suEXEC. An alias carries that of the website it shows.
+	CGI bool
+	// Suspended answers every request with the page of a suspended
+	// account: the website reached a limit of its own. An alias carries
+	// that of the website it shows.
+	Suspended bool
 }
 
 // kind returns the Kind of the site, KindDomain when it is not set.

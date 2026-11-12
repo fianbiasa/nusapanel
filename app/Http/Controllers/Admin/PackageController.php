@@ -142,11 +142,12 @@ class PackageController extends Controller
         return [
             ...array_combine(Package::LIMITS, array_map(fn (string $key): ?int => $limits->limit($key), Package::LIMITS)),
             'ssl' => $limits->allowsSsl() ? 1 : 0,
+            'cgi' => $limits->allowsCgi() ? 1 : 0,
         ];
     }
 
     /**
-     * @return array{id: int, name: string, description: string|null, limits: array<string, int|null>, ssl: bool, accounts_count: int}
+     * @return array{id: int, name: string, description: string|null, limits: array<string, int|null>, ssl: bool, cgi: bool, accounts_count: int}
      */
     private function packageData(Package $package): array
     {
@@ -162,6 +163,7 @@ class PackageController extends Controller
             'description' => $package->description,
             'limits' => $limits,
             'ssl' => $package->ssl,
+            'cgi' => $package->cgi,
             'accounts_count' => (int) $package->getAttribute('accounts_count'),
         ];
     }

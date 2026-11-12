@@ -35,11 +35,12 @@ use InvalidArgumentException;
  * @property int|null $ftp_accounts
  * @property int|null $cron_jobs
  * @property bool $ssl Whether the reseller's accounts may have SSL.
+ * @property bool $cgi Whether the reseller's accounts may run CGI scripts.
  * @property bool $oversell Whether the reseller may give out more than its limits.
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['name', 'description', 'accounts', 'disk_mb', 'inodes', 'bandwidth_mb', 'domains', 'subdomains', 'pointers', 'email_accounts', 'email_forwarders', 'databases', 'ftp_accounts', 'cron_jobs', 'ssl', 'oversell'])]
+#[Fillable(['name', 'description', 'accounts', 'disk_mb', 'inodes', 'bandwidth_mb', 'domains', 'subdomains', 'pointers', 'email_accounts', 'email_forwarders', 'databases', 'ftp_accounts', 'cron_jobs', 'ssl', 'cgi', 'oversell'])]
 class ResellerPackage extends Model
 {
     /** @use HasFactory<ResellerPackageFactory> */
@@ -58,6 +59,7 @@ class ResellerPackage extends Model
      */
     protected $attributes = [
         'ssl' => true,
+        'cgi' => false,
         'oversell' => false,
     ];
 
@@ -71,6 +73,7 @@ class ResellerPackage extends Model
         return [
             ...array_fill_keys(self::LIMITS, 'integer'),
             'ssl' => 'boolean',
+            'cgi' => 'boolean',
             'oversell' => 'boolean',
         ];
     }

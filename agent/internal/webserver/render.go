@@ -70,6 +70,10 @@ type siteData struct {
 	MIMETypes []mimeData
 	// PHPPattern matches the files Apache runs as PHP.
 	PHPPattern string
+	// CGI runs the scripts in cgi-bin as User.
+	CGI bool
+	// Suspended answers every request with the unavailable page.
+	Suspended bool
 }
 
 // staticData is what the template of the static files location sees.
@@ -192,6 +196,8 @@ func (m *Manager) siteData(site Site) siteData {
 		StaticTypes:       mimeTypesData(site.MIMETypes, isStaticExtension),
 		MIMETypes:         mimeTypesData(site.MIMETypes, nil),
 		PHPPattern:        phpPattern(site.PHPExtensions),
+		CGI:               site.CGI,
+		Suspended:         site.Suspended,
 	}
 }
 

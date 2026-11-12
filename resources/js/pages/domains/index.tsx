@@ -4,6 +4,7 @@ import {
     CornerDownRight,
     ExternalLink,
     FileKey,
+    FileSignature,
     FolderOpen,
     Globe,
     Info,
@@ -11,6 +12,7 @@ import {
     LockOpen,
     MoreHorizontal,
     RotateCw,
+    ShieldAlert,
     SlidersHorizontal,
     Trash2,
     X,
@@ -19,6 +21,11 @@ import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { AddWebsitePanel } from '@/components/add-website-panel';
+import type { CertificateDomain } from '@/components/certificate-generator';
+import {
+    CertificateRequestForm,
+    SelfSignedCertificateForm,
+} from '@/components/certificate-generator';
 import InputError from '@/components/input-error';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/page-header';
@@ -95,6 +102,7 @@ type DomainRow = {
     ssl_trusted: boolean | null;
     ssl_expires_at: string | null;
     ssl_error: string | null;
+    certificate_request: CertificateDomain['certificate_request'];
     force_https: boolean;
     www_mode: WwwMode;
     /** Whether the website runs PHP; a pointer shows its domain's. */
@@ -112,6 +120,8 @@ type DomainAction = {
     type:
         | 'request-ssl'
         | 'custom-certificate'
+        | 'certificate-request'
+        | 'self-signed'
         | 'php-settings'
         | 'document-root'
         | 'remove-ssl'
@@ -364,6 +374,24 @@ export default function DomainsIndex({
                             key={`request-ssl-${action.domain.id}`}
                             domain={action.domain}
                             publicIp={public_ip}
+                            onSuccess={() => setDialogOpen(false)}
+                        />
+                    )}
+                    {action?.type === 'certificate-request' && (
+                        <CertificateRequestForm
+                            key={`certificate-request-${action.domain.id}`}
+                            domain={
+                                domains.find(
+                                    (domain) => domain.id === action.domain.id,
+                                ) ?? action.domain
+                            }
+                            onClose={() => setDialogOpen(false)}
+                        />
+                    )}
+                    {action?.type === 'self-signed' && (
+                        <SelfSignedCertificateForm
+                            key={`self-signed-${action.domain.id}`}
+                            domain={action.domain}
                             onSuccess={() => setDialogOpen(false)}
                         />
                     )}
@@ -765,6 +793,25 @@ function RowActions({
                                 : 'Pasang sertifikat sendiri'}
                         </DropdownMenuItem>
                     )}
+                    {canInstallCertificate && (
+                        <DropdownMenuItem
+                            onSelect={() =>
+                                onAction('certificate-request', domain)
+                            }
+                        >
+                            <FileSignature />
+                            {domain.certificate_request
+                                ? 'Lihat CSR…'
+                                : 'Buat CSR…'}
+                        </DropdownMenuItem>
+                    )}
+                    {canInstallCertificate && (
+                        <DropdownMenuItem
+                            onSelect={() => onAction('self-signed', domain)}
+                        >
+                            <ShieldAlert /> Self-signed…
+                        </DropdownMenuItem>
+                    )}
                     {hasActiveSsl && (
                         <DropdownMenuCheckboxItem
                             checked={domain.force_https}
@@ -1162,7 +1209,7 @@ function CustomCertificateForm({
                         <textarea
                             id="private_key"
                             name="private_key"
-                            required
+                            required={domain.certificate_request === null}
                             spellCheck={false}
                             autoComplete="off"
                             placeholder={
@@ -1172,6 +1219,9 @@ function CustomCertificateForm({
                             aria-invalid={errors.private_key ? true : undefined}
                         />
                         <p className="text-xs text-muted-foreground">
+                            {domain.certificate_request
+                                ? 'Kosongkan untuk memakai key dari CSR yang dibuat di panel. '
+                                : ''}
                             Tanpa password. Disimpan hanya di server, tidak bisa
                             dilihat lagi dari panel.
                         </p>

@@ -31,7 +31,8 @@ class StoreCustomCertificateRequest extends FormRequest
     {
         return [
             'certificate' => ['required', 'string', 'max:'.CustomCertificate::MAX_CERTIFICATE_BYTES],
-            'private_key' => ['required', 'string', 'max:'.CustomCertificate::MAX_KEY_BYTES],
+            // A certificate signed for the website's CSR uses its stored key.
+            'private_key' => [$this->storedKey() === null ? 'required' : 'nullable', 'string', 'max:'.CustomCertificate::MAX_KEY_BYTES],
         ];
     }
 
@@ -52,7 +53,7 @@ class StoreCustomCertificateRequest extends FormRequest
                 $result = CustomCertificate::inspect(
                     $this->domain()->name,
                     $this->string('certificate')->toString(),
-                    $this->string('private_key')->toString(),
+                    $this->privateKey(),
                     now()->getTimestamp(),
                 );
 
@@ -63,6 +64,24 @@ class StoreCustomCertificateRequest extends FormRequest
                 }
             },
         ];
+    }
+
+    /**
+     * The private key that was sent, or else the key of the website's CSR.
+     */
+    public function privateKey(): string
+    {
+        $key = $this->string('private_key')->toString();
+
+        return $key !== '' ? $key : ($this->storedKey() ?? '');
+    }
+
+    /**
+     * The key of the website's certificate signing request, if it has one.
+     */
+    private function storedKey(): ?string
+    {
+        return $this->domain()->certificateRequest?->private_key;
     }
 
     /**

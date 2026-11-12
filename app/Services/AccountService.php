@@ -136,6 +136,8 @@ class AccountService
             $reseller->forceFill(['reseller_package_id' => $package?->id])->save();
             $reseller->setRelation('resellerPackage', $package);
 
+            $this->domains->reapplyCgiWebsites(User::query()->where('owner_id', $reseller->id), $actor);
+
             $this->audit->record('account.reseller_package_changed', $reseller, [
                 'username' => $reseller->username,
                 'from' => $previous?->name,
@@ -186,6 +188,8 @@ class AccountService
             if ($previousPackage?->id !== $package?->id) {
                 $this->quotas->apply($account, $actor);
             }
+
+            $this->domains->reapplyCgiWebsites(User::query()->whereKey($account->id), $actor);
 
             $this->audit->record('account.transferred', $account, [
                 'username' => $account->username,
@@ -324,6 +328,7 @@ class AccountService
             $account->setRelation('package', $package);
 
             $this->quotas->apply($account, $actor);
+            $this->domains->reapplyCgiWebsites(User::query()->whereKey($account->id), $actor);
 
             $this->audit->record('account.package_changed', $account, [
                 'username' => $account->username,

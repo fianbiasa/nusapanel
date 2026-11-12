@@ -37,6 +37,7 @@ function keyLimits(pkg: HostingPackage): string {
             : `${formatMegabytes(disk_mb)} disk`,
         inodes !== null && `${inodes.toLocaleString('id-ID')} inode`,
         pkg.ssl ? 'SSL' : 'Tanpa SSL',
+        pkg.cgi && 'CGI',
     ]
         .filter(Boolean)
         .join(' · ');

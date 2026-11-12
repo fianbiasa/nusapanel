@@ -56,6 +56,7 @@ export type PackageFormValues = {
     description: string | null;
     limits: Partial<Record<ResellerQuotaKey, number | null>>;
     ssl: boolean;
+    cgi?: boolean;
     oversell?: boolean;
 };
 
@@ -82,10 +83,12 @@ export function PackageForm({
     const [ssl, setSsl] = useState(
         pkg?.ssl ?? (resellerLimits === null || resellerLimits.ssl === 1),
     );
+    const [cgi, setCgi] = useState(pkg?.cgi ?? false);
     const [oversell, setOversell] = useState(pkg?.oversell ?? false);
     const keys: ResellerQuotaKey[] =
         kind === 'reseller' ? ['accounts', ...quotaKeys] : quotaKeys;
     const sslAllowed = resellerLimits === null || resellerLimits.ssl === 1;
+    const cgiAllowed = resellerLimits === null || resellerLimits.cgi === 1;
 
     return (
         <Form
@@ -215,6 +218,37 @@ export function PackageForm({
                                 </div>
                                 <InputError
                                     message={errors.ssl}
+                                    className="mt-2"
+                                />
+                            </div>
+
+                            <div>
+                                <input
+                                    type="hidden"
+                                    name="cgi"
+                                    value={cgi ? 1 : 0}
+                                />
+                                <div className="flex items-start gap-3">
+                                    <Checkbox
+                                        id="cgi"
+                                        checked={cgi}
+                                        disabled={!cgiAllowed && !cgi}
+                                        onCheckedChange={(checked) =>
+                                            setCgi(checked === true)
+                                        }
+                                        className="mt-0.5"
+                                    />
+                                    <div className="grid gap-1">
+                                        <Label htmlFor="cgi">Skrip CGI</Label>
+                                        <p className="text-xs text-muted-foreground">
+                                            {!cgiAllowed
+                                                ? 'Paket reseller Anda tidak termasuk CGI.'
+                                                : 'Skrip di folder cgi-bin website bisa dijalankan. Skrip CGI bisa menjalankan program apa pun sebagai akun itu, setara akses shell. Mematikannya menghentikan CGI di semua website akun ini.'}
+                                        </p>
+                                    </div>
+                                </div>
+                                <InputError
+                                    message={errors.cgi}
                                     className="mt-2"
                                 />
                             </div>

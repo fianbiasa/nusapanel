@@ -131,6 +131,18 @@ final class WebSettings
             $params['php_extensions'] = $website->php_extensions;
         }
 
+        // Over one of its limits, the website (and an alias that shows it)
+        // only shows the page of a suspended account.
+        if ($website->limit_reached !== null) {
+            $params['suspended'] = true;
+        }
+
+        // CGI can start any program as the account, so it only runs while
+        // the account's package allows it.
+        if ($website->cgi_enabled && AccountLimits::for($website->account)->allowsCgi()) {
+            $params['cgi'] = true;
+        }
+
         return $params;
     }
 }

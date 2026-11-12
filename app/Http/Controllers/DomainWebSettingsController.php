@@ -7,6 +7,8 @@ use App\Enums\PointerMode;
 use App\Http\Requests\SaveErrorPageRequest;
 use App\Http\Requests\StoreProtectedDirectoryRequest;
 use App\Http\Requests\StoreProtectedLoginRequest;
+use App\Http\Requests\UpdateCgiRequest;
+use App\Http\Requests\UpdateDomainLimitsRequest;
 use App\Http\Requests\UpdateHotlinkRequest;
 use App\Http\Requests\UpdateMimeTypesRequest;
 use App\Http\Requests\UpdatePhpExtensionsRequest;
@@ -14,7 +16,10 @@ use App\Http\Requests\UpdateProtectedLoginRequest;
 use App\Models\Domain;
 use App\Models\ProtectedDirectory;
 use App\Models\ProtectedDirectoryUser;
+use App\Services\BandwidthService;
+use App\Services\DomainLimitService;
 use App\Services\WebSettingsService;
+use App\Support\AccountLimits;
 use App\Support\WebSettings;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -29,7 +34,10 @@ use Inertia\Response;
  */
 class DomainWebSettingsController extends Controller
 {
-    public function __construct(private WebSettingsService $settings) {}
+    public function __construct(
+        private WebSettingsService $settings,
+        private DomainLimitService $limits,
+    ) {}
 
     /**
      * Show the web settings of the website. The content of its error pages
@@ -71,6 +79,18 @@ class DomainWebSettingsController extends Controller
             'hotlink' => $domain->hotlink,
             'mime_types' => $domain->mime_types ?? [],
             'php_extensions' => $domain->php_extensions ?? [],
+            'limits' => [
+                'bandwidth_limit_mb' => $domain->bandwidth_limit_mb,
+                'disk_limit_mb' => $domain->disk_limit_mb,
+                'bandwidth_used_mb' => intdiv($this->limits->monthBytes($domain), BandwidthService::BYTES_PER_MB),
+                'disk_used_mb' => $domain->disk_used_mb,
+                'disk_measured_at' => $domain->disk_measured_at?->toIso8601String(),
+                'reached' => $domain->limit_reached,
+            ],
+            'cgi' => [
+                'enabled' => $domain->cgi_enabled,
+                'allowed' => AccountLimits::for($domain->account)->allowsCgi(),
+            ],
             'options' => [
                 'error_page_statuses' => WebSettings::ERROR_PAGE_STATUSES,
                 'static_extensions' => WebSettings::STATIC_EXTENSIONS,
@@ -194,6 +214,30 @@ class DomainWebSettingsController extends Controller
         $this->settings->updatePhpExtensions($domain, $request->phpExtensions(), $request->user());
 
         return $this->applied(__('The PHP extensions of :domain are being applied.', ['domain' => $domain->display_name]));
+    }
+
+    /**
+     * Run the scripts in the website's cgi-bin, or stop.
+     */
+    public function updateCgi(UpdateCgiRequest $request, Domain $domain): RedirectResponse
+    {
+        $enabled = $request->boolean('cgi_enabled');
+
+        $this->settings->setCgi($domain, $enabled, $request->user());
+
+        return $this->applied($enabled
+            ? __('CGI is being turned on for :domain.', ['domain' => $domain->display_name])
+            : __('CGI is being turned off for :domain.', ['domain' => $domain->display_name]));
+    }
+
+    /**
+     * Set the bandwidth and disk limits of the website.
+     */
+    public function updateLimits(UpdateDomainLimitsRequest $request, Domain $domain): RedirectResponse
+    {
+        $this->limits->setLimits($domain, $request->limit('bandwidth_limit_mb'), $request->limit('disk_limit_mb'), $request->user());
+
+        return $this->applied(__('The limits of :domain were saved.', ['domain' => $domain->display_name]));
     }
 
     /**

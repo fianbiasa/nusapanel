@@ -8,6 +8,7 @@ use App\Enums\PointerMode;
 use App\Enums\SslSource;
 use App\Enums\SslStatus;
 use App\Enums\WwwMode;
+use App\Services\DomainLimitService;
 use App\Support\PhpSettings;
 use App\Support\WebSettings;
 use Database\Factories\DomainFactory;
@@ -60,6 +61,13 @@ use Illuminate\Support\Carbon;
  * @property array{extensions: list<string>, domains: list<string>, allow_direct: bool, redirect_to: string|null}|null $hotlink Hotlink protection; null is off.
  * @property list<array{extension: string, type: string}>|null $mime_types Content types the website sets itself.
  * @property list<string>|null $php_extensions Extensions that also run as PHP.
+ * @property bool $cgi_enabled Whether the scripts in cgi-bin run, while the package allows CGI.
+ * @property int|null $bandwidth_limit_mb The bandwidth the website may use in a calendar month.
+ * @property int|null $disk_limit_mb The disk its folder may take.
+ * @property int|null $disk_used_mb What its folder took when last measured, for a website with a disk limit.
+ * @property Carbon|null $disk_measured_at
+ * @property string|null $limit_reached Which of its limits stopped the website: bandwidth or disk ({@see DomainLimitService}).
+ * @property Carbon|null $limit_reached_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
@@ -91,6 +99,7 @@ class Domain extends Model
         'force_https' => false,
         'www_mode' => 'both',
         'php_enabled' => true,
+        'cgi_enabled' => false,
     ];
 
     /**
@@ -118,6 +127,12 @@ class Domain extends Model
             'hotlink' => 'array',
             'mime_types' => 'array',
             'php_extensions' => 'array',
+            'cgi_enabled' => 'boolean',
+            'bandwidth_limit_mb' => 'integer',
+            'disk_limit_mb' => 'integer',
+            'disk_used_mb' => 'integer',
+            'disk_measured_at' => 'datetime',
+            'limit_reached_at' => 'datetime',
         ];
     }
 
@@ -175,6 +190,17 @@ class Domain extends Model
     public function canHaveRedirects(): bool
     {
         return $this->pointer_mode !== PointerMode::Redirect;
+    }
+
+    /**
+     * The certificate signing request the website waits on a certificate
+     * authority for, if any.
+     *
+     * @return HasOne<CertificateRequest, $this>
+     */
+    public function certificateRequest(): HasOne
+    {
+        return $this->hasOne(CertificateRequest::class);
     }
 
     /**

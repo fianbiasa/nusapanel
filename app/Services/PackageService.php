@@ -19,6 +19,7 @@ class PackageService
     public function __construct(
         private AuditLogger $audit,
         private QuotaService $quotas,
+        private DomainService $domains,
     ) {}
 
     /**
@@ -79,6 +80,10 @@ class PackageService
 
             if (array_intersect($changed, ['disk_mb', 'inodes']) !== []) {
                 $this->quotas->applyToPackage($package, $actor);
+            }
+
+            if (in_array('cgi', $changed, true)) {
+                $this->domains->reapplyCgiWebsites(User::query()->where('package_id', $package->id), $actor);
             }
         });
     }

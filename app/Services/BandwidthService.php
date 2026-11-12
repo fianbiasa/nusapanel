@@ -40,7 +40,7 @@ class BandwidthService
      */
     private const MAX_COUNTS = 10;
 
-    private const BYTES_PER_MB = 1048576;
+    public const BYTES_PER_MB = 1048576;
 
     public function __construct(
         private AgentClient $agent,

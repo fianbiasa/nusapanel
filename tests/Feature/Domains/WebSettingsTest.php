@@ -121,6 +121,10 @@ class WebSettingsTest extends TestCase
             'hotlink' => ['put', 'domains.hotlink.update', ['enabled' => false, 'allow_direct' => true]],
             'content types' => ['put', 'domains.mime-types.update', ['mime_types' => []]],
             'php extensions' => ['put', 'domains.php-extensions.update', ['php_extensions' => []]],
+            'cgi' => ['put', 'domains.cgi.update', ['cgi_enabled' => false]],
+            'limits' => ['put', 'domains.limits.update', ['bandwidth_limit_mb' => 5]],
+            'csr' => ['post', 'domains.certificate-request.store', ['key_type' => 'rsa2048']],
+            'self-signed' => ['post', 'domains.self-signed-certificate.store', ['key_type' => 'rsa2048', 'days' => 30]],
         ];
     }
 

@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Agent\AgentException;
 use App\Services\BandwidthService;
+use App\Services\DomainLimitService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Number;
 
@@ -26,7 +27,7 @@ class CollectBandwidthCommand extends Command
      */
     protected $description = 'Count the bandwidth of hosting accounts from the server logs';
 
-    public function handle(BandwidthService $bandwidth): int
+    public function handle(BandwidthService $bandwidth, DomainLimitService $limits): int
     {
         try {
             $added = $bandwidth->collect();
@@ -44,6 +45,12 @@ class CollectBandwidthCommand extends Command
 
         if ($suspended > 0 || $unsuspended > 0) {
             $this->components->info("Suspended for bandwidth: {$suspended}; suspension lifted for a new month: {$unsuspended}.");
+        }
+
+        $websites = $limits->checkBandwidth();
+
+        if ($websites > 0) {
+            $this->components->info("Websites stopped or started again by their bandwidth limit: {$websites}.");
         }
 
         return self::SUCCESS;

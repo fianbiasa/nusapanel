@@ -251,6 +251,72 @@ func TestMIMETypesAndPHPExtensions(t *testing.T) {
 	assertNotContains(t, "apache vhost", env.read(env.apacheVhost("budi", "example.com")), "html|inc")
 }
 
+func TestCGIRunsInApacheAsTheAccount(t *testing.T) {
+	env := newEnv(t)
+
+	site := budiSite
+	site.CGI = true
+	site.ProtectedDirectories = []ProtectedDirectory{{Path: "/admin", Realm: "Admin"}}
+	env.mustApply(site)
+
+	// After the protected folders, which still ask for a login, and before
+	// the static files, so no script is ever served as text.
+	assertInOrder(t, env.read(env.nginxVhost("budi", "example.com")),
+		"location ~ ^/admin(?:/|$) {",
+		"    location ~ ^/cgi-bin/ {\n        proxy_pass http://127.0.0.1:8080;",
+		"\n    location ~* \\.(?:css|js|",
+	)
+
+	assertContains(t, "apache vhost", env.read(env.apacheVhost("budi", "example.com")),
+		"    SuexecUserGroup budi budi\n"+
+			"    <Directory \"/home/budi/domains/example.com/public_html/cgi-bin\">\n"+
+			"        Options +ExecCGI\n"+
+			"        SetHandler cgi-script\n"+
+			"    </Directory>",
+	)
+
+	site.CGI = false
+	env.mustApply(site)
+
+	assertNotContains(t, "apache vhost", env.read(env.apacheVhost("budi", "example.com")), "Suexec", "ExecCGI")
+	assertNotContains(t, "nginx vhost", env.read(env.nginxVhost("budi", "example.com")), "cgi-bin")
+}
+
+func TestASuspendedWebsiteShowsTheUnavailablePage(t *testing.T) {
+	env := newEnv(t)
+
+	site := budiSite
+	site.Suspended = true
+	env.mustApply(site)
+
+	nginx := env.read(env.nginxVhost("budi", "example.com"))
+
+	// The same page as a suspended account, before any location.
+	assertInOrder(t, nginx,
+		"suspended*.inc;",
+		"    default_type text/html;\n    return 503 '<!doctype html>",
+		"temporarily unavailable",
+		"</html>';\n",
+		"location ~ /\\.(?:ht|ftpquota$)",
+	)
+
+	if err := env.manager.SuspendAccount(context.Background(), "budi"); err != nil {
+		t.Fatal(err)
+	}
+
+	page := env.read(env.manager.suspendedFile("budi"))
+	start := strings.Index(nginx, "return 503 '")
+	end := strings.Index(nginx[start:], "';") + start
+
+	if !strings.Contains(page, nginx[start:end]) {
+		t.Fatalf("the website and the account show different pages:\n%s\n%s", page, nginx[start:end])
+	}
+
+	site.Suspended = false
+	env.mustApply(site)
+	assertNotContains(t, "nginx vhost", env.read(env.nginxVhost("budi", "example.com")), "return 503")
+}
+
 func TestSiteValidateRefusesUnsafeWebSettings(t *testing.T) {
 	directory := func(path, realm string, users ...ProtectedUser) Site {
 		return Site{ProtectedDirectories: []ProtectedDirectory{{Path: path, Realm: realm, Users: users}}}
@@ -271,6 +337,8 @@ func TestSiteValidateRefusesUnsafeWebSettings(t *testing.T) {
 		"error page twice":          {ErrorPages: []int{404, 404}},
 		"forward with error pages":  {Kind: KindForward, Parent: "example.org", ErrorPages: []int{404}},
 		"forward with php ext":      {Kind: KindForward, Parent: "example.org", PHPExtensions: []string{"html"}},
+		"forward with cgi":          {Kind: KindForward, Parent: "example.org", CGI: true},
+		"forward suspended":         {Kind: KindForward, Parent: "example.org", Suspended: true},
 		"too many directories":      tooManyDirectories,
 		"too many users":            tooManyUsers,
 		"same directory twice":      {ProtectedDirectories: []ProtectedDirectory{{Path: "/a", Realm: "x"}, {Path: "/a", Realm: "y"}}},
@@ -322,6 +390,8 @@ func TestSiteValidateRefusesUnsafeWebSettings(t *testing.T) {
 			site.Hotlink = fields.Hotlink
 			site.MIMETypes = fields.MIMETypes
 			site.PHPExtensions = fields.PHPExtensions
+			site.CGI = fields.CGI
+			site.Suspended = fields.Suspended
 
 			if err := site.Validate(); err == nil {
 				t.Fatal("Validate accepted it")

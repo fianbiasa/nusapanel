@@ -18,8 +18,8 @@ Pembagian level sama seperti DirectAdmin:
 | Fitur                          | Keterangan                                                                                                                                             | Fase |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ---- |
 | Domain setup                   | ✅ Tambah/ubah/hapus domain; on/off PHP dan SSL                                                                                                        | P1   |
-| CGI                            | Skrip CGI di `cgi-bin`, on/off per domain                                                                                                              | P3   |
-| Batas per domain               | Batas disk & bandwidth per domain                                                                                                                      | P3   |
+| CGI                            | ✅ Skrip CGI di `cgi-bin`, on/off per domain, jalan sebagai akun lewat suEXEC; diizinkan per paket                                                     | P3   |
+| Batas per domain               | ✅ Batas disk & bandwidth per domain; website yang melewatinya dihentikan sampai di bawah batas lagi                                                   | P3   |
 | Subdomain                      | ✅ Buat/hapus, document root kustom, versi PHP sendiri                                                                                                 | P1   |
 | Domain pointer                 | ✅ Alias (konten sama) dan pointer (redirect ke domain utama)                                                                                          | P1   |
 | Pengaturan www                 | ✅ Layani www & non-www, atau paksa salah satu                                                                                                         | P1   |
@@ -40,7 +40,7 @@ Pembagian level sama seperti DirectAdmin:
 | Sertifikat kustom    | ✅ Upload cert + private key + CA bundle, dicek kecocokannya                                                           | P1   |
 | Wildcard SSL         | ✅ Lewat DNS-01 (kalau DNS domain di server ini)                                                                       | P2   |
 | SSL untuk mail & FTP | ✅ mail.<domain> dengan SNI di Postfix & Dovecot; FTP dengan sertifikat hostname (login FTP sudah dibatasi per folder) | P2   |
-| CSR & self-signed    | Generator CSR dan sertifikat self-signed                                                                               | P3   |
+| CSR & self-signed    | ✅ Generator CSR (key disimpan terenkripsi, dipakai saat sertifikatnya dipasang) dan sertifikat self-signed            | P3   |
 
 ### DNS
 

@@ -115,7 +115,7 @@ var alwaysPHP = []string{"php", "phtml"}
 // serves no files, so it has none of them.
 func validateWebSettings(site Site) error {
 	if site.kind() == KindForward && (len(site.ErrorPages) > 0 || len(site.ProtectedDirectories) > 0 ||
-		site.Hotlink != nil || len(site.MIMETypes) > 0 || len(site.PHPExtensions) > 0) {
+		site.Hotlink != nil || len(site.MIMETypes) > 0 || len(site.PHPExtensions) > 0 || site.CGI || site.Suspended) {
 		return errors.New("a forwarding pointer serves no files, so it has no web settings")
 	}
 

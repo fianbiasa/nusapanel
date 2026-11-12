@@ -1105,7 +1105,9 @@ DEBCONF
     # on every address of port 53, where systemd-resolved may already listen
     # on 127.0.0.53; it stays stopped until configure_dns has set it up.
     block_service_starts
-    quietly "${apt[@]}" install apache2 pure-ftpd-mysql
+    # apache2-suexec-custom: CGI scripts of websites run as their account,
+    # with the document root set to /home (configure_web).
+    quietly "${apt[@]}" install apache2 apache2-suexec-custom pure-ftpd-mysql
     # Without the bind backend PowerDNS recommends: its settings stop
     # PowerDNS from starting when only the MySQL backend is launched.
     quietly "${apt[@]}" install --no-install-recommends pdns-server pdns-backend-mysql
@@ -2648,6 +2650,8 @@ CONF
 
     # security: loads after rayxo.conf and would undo its ServerTokens
     # and ServerSignature (rayxo.conf carries its settings instead).
+    # serve-cgi-bin: with mod_cgid it maps /cgi-bin/ of every website to
+    # /usr/lib/cgi-bin; a website's own cgi-bin runs through suEXEC instead.
     # other-vhosts-access-log: Nginx already logs every request.
     # php-fpm: PHP only runs in the per-account pools, never in a shared one.
     local conf v php_confs=()
@@ -2655,14 +2659,22 @@ CONF
         php_confs+=("php$v-fpm")
     done
 
-    for conf in security other-vhosts-access-log "${php_confs[@]}"; do
+    for conf in security other-vhosts-access-log serve-cgi-bin "${php_confs[@]}"; do
         if [[ -e "/etc/apache2/conf-enabled/$conf.conf" ]]; then
             quietly a2disconf -q "$conf"
         fi
     done
 
+    # suEXEC runs CGI scripts as the account that owns the website, and only
+    # inside /home; the second line (#) refuses ~user requests. A website
+    # only runs CGI when the agent turns it on in its vhost.
+    install -d -m 0755 /etc/apache2/suexec
+    printf '%s\n' /home '#public_html/cgi-bin' \
+        '# Managed by rayxo setup.sh: suEXEC document root, and no userdir.' \
+        >/etc/apache2/suexec/www-data
+
     quietly a2dismod -q mpm_prefork mpm_worker
-    quietly a2enmod -q mpm_event proxy_fcgi remoteip rewrite headers setenvif
+    quietly a2enmod -q mpm_event proxy_fcgi remoteip rewrite headers setenvif cgid suexec
     quietly a2enconf -q rayxo
 
     {

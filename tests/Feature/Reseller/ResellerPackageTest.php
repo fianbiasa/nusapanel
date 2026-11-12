@@ -54,11 +54,12 @@ class ResellerPackageTest extends TestCase
         $reseller = $this->reseller(['disk_mb' => 1500, 'ssl' => false]);
 
         $this->actingAs($reseller)
-            ->post(route('reseller.packages.store'), $this->packageData(['disk_mb' => 2000, 'domains' => null, 'ssl' => true]))
+            ->post(route('reseller.packages.store'), $this->packageData(['disk_mb' => 2000, 'domains' => null, 'ssl' => true, 'cgi' => true]))
             ->assertSessionHasErrors([
                 'disk_mb' => 'At most 1500, the limit of your reseller package.',
                 'domains' => 'At most 30, the limit of your reseller package.',
                 'ssl' => 'Your reseller package does not include SSL.',
+                'cgi' => 'Your reseller package does not include CGI.',
             ]);
 
         $this->assertDatabaseCount('packages', 0);

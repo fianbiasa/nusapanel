@@ -39,6 +39,7 @@ class PackageManagementTest extends TestCase
                     ->where('limits.inodes', 50000)
                     ->has('limits', 11)
                     ->where('ssl', true)
+                    ->where('cgi', false)
                     ->where('accounts_count', 2))
                 ->where('packages.1.id', $pro->id)
                 ->where('packages.1.limits.domains', null)

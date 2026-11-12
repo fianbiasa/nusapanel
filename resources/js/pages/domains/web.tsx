@@ -35,6 +35,9 @@ import {
     destroy as destroyErrorPage,
     update as updateErrorPage,
 } from '@/routes/domains/error-pages';
+import { formatDateTime } from '@/lib/format';
+import { update as updateCgi } from '@/routes/domains/cgi';
+import { update as updateLimits } from '@/routes/domains/limits';
 import { update as updateHotlink } from '@/routes/domains/hotlink';
 import { update as updateMimeTypes } from '@/routes/domains/mime-types';
 import { update as updatePhpExtensions } from '@/routes/domains/php-extensions';
@@ -82,6 +85,15 @@ type Props = {
     hotlink: Hotlink | null;
     mime_types: MimeType[];
     php_extensions: string[];
+    cgi: { enabled: boolean; allowed: boolean };
+    limits: {
+        bandwidth_limit_mb: number | null;
+        disk_limit_mb: number | null;
+        bandwidth_used_mb: number;
+        disk_used_mb: number | null;
+        disk_measured_at: string | null;
+        reached: 'bandwidth' | 'disk' | null;
+    };
     options: {
         error_page_statuses: number[];
         static_extensions: string[];
@@ -143,6 +155,8 @@ export default function DomainWebSettings({
     hotlink,
     mime_types,
     php_extensions,
+    cgi,
+    limits,
     options,
 }: Props) {
     const isBusy = domain.status === 'pending';
@@ -200,6 +214,18 @@ export default function DomainWebSettings({
                 }
             />
 
+            {limits.reached !== null && (
+                <div className="rounded-2xl border border-amber-300 bg-amber-50 px-5 py-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+                    <span className="font-semibold">
+                        Website sedang dihentikan:
+                    </span>{' '}
+                    {limits.reached === 'bandwidth'
+                        ? 'batas bandwidth bulan ini sudah terpakai. Website jalan lagi di awal bulan berikutnya, atau setelah batasnya dinaikkan.'
+                        : 'folder website lebih besar dari batas disk-nya. Website jalan lagi setelah file dikurangi (dicek tiap jam) atau batasnya dinaikkan.'}{' '}
+                    Pengunjung melihat halaman “sementara tidak tersedia”.
+                </div>
+            )}
+
             <ErrorPagesPanel
                 domain={domain}
                 enabled={error_pages}
@@ -235,6 +261,15 @@ export default function DomainWebSettings({
                     extensions={php_extensions}
                     max={options.max_php_extensions}
                 />
+            </div>
+
+            <div className="grid gap-6 xl:grid-cols-2">
+                <LimitsPanel
+                    key={`${limits.bandwidth_limit_mb}-${limits.disk_limit_mb}`}
+                    domain={domain}
+                    limits={limits}
+                />
+                <CgiPanel domain={domain} cgi={cgi} />
             </div>
         </>
     );
@@ -1215,6 +1250,147 @@ function PhpExtensionsPanel({
                                 Simpan
                             </Button>
                         </div>
+                    </>
+                )}
+            </Form>
+        </Panel>
+    );
+}
+
+function LimitsPanel({
+    domain,
+    limits,
+}: {
+    domain: Props['domain'];
+    limits: Props['limits'];
+}) {
+    return (
+        <Panel
+            title="Batas website"
+            description="Batas pemakaian website ini saja, di dalam batas paket akun. Kosongkan untuk tanpa batas."
+        >
+            <Form
+                {...updateLimits.form(domain.id)}
+                options={{ preserveScroll: true }}
+                className="grid gap-4"
+            >
+                {({ processing, errors }) => (
+                    <>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="grid gap-2">
+                                <Label htmlFor="bandwidth_limit_mb">
+                                    Bandwidth per bulan (MB)
+                                </Label>
+                                <Input
+                                    id="bandwidth_limit_mb"
+                                    name="bandwidth_limit_mb"
+                                    type="number"
+                                    min={1}
+                                    defaultValue={
+                                        limits.bandwidth_limit_mb ?? ''
+                                    }
+                                    placeholder="Tanpa batas"
+                                    aria-invalid={
+                                        errors.bandwidth_limit_mb
+                                            ? true
+                                            : undefined
+                                    }
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    Bulan ini terpakai{' '}
+                                    {limits.bandwidth_used_mb.toLocaleString(
+                                        'id-ID',
+                                    )}{' '}
+                                    MB.
+                                </p>
+                                <InputError
+                                    message={errors.bandwidth_limit_mb}
+                                />
+                            </div>
+                            <div className="grid gap-2">
+                                <Label htmlFor="disk_limit_mb">Disk (MB)</Label>
+                                <Input
+                                    id="disk_limit_mb"
+                                    name="disk_limit_mb"
+                                    type="number"
+                                    min={1}
+                                    defaultValue={limits.disk_limit_mb ?? ''}
+                                    placeholder="Tanpa batas"
+                                    aria-invalid={
+                                        errors.disk_limit_mb ? true : undefined
+                                    }
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    {limits.disk_used_mb !== null &&
+                                    limits.disk_measured_at
+                                        ? `Terpakai ${limits.disk_used_mb.toLocaleString('id-ID')} MB (diukur ${formatDateTime(limits.disk_measured_at)}).`
+                                        : 'Folder website diukur tiap jam setelah batasnya diatur.'}
+                                </p>
+                                <InputError message={errors.disk_limit_mb} />
+                            </div>
+                        </div>
+                        <div>
+                            <Button disabled={processing}>
+                                {processing && <Spinner />}
+                                Simpan
+                            </Button>
+                        </div>
+                    </>
+                )}
+            </Form>
+        </Panel>
+    );
+}
+
+function CgiPanel({
+    domain,
+    cgi,
+}: {
+    domain: Props['domain'];
+    cgi: Props['cgi'];
+}) {
+    return (
+        <Panel
+            title="CGI"
+            description={`Jalankan skrip di folder ${domain.document_root}/cgi-bin (Perl, Python, shell, dan lainnya) sebagai akun kamu. Skrip harus bisa dieksekusi (chmod 755) dan tidak boleh bisa diubah orang lain.`}
+        >
+            <Form
+                {...updateCgi.form(domain.id)}
+                options={{ preserveScroll: true }}
+                transform={() => ({ cgi_enabled: !cgi.enabled })}
+                className="flex flex-wrap items-center gap-4"
+            >
+                {({ processing, errors }) => (
+                    <>
+                        <StatusBadge
+                            status={
+                                cgi.enabled && cgi.allowed
+                                    ? 'active'
+                                    : 'neutral'
+                            }
+                            label={
+                                cgi.enabled && cgi.allowed
+                                    ? 'Menyala'
+                                    : cgi.enabled
+                                      ? 'Berhenti: paket tidak termasuk CGI'
+                                      : 'Mati'
+                            }
+                        />
+                        {(cgi.allowed || cgi.enabled) && (
+                            <Button
+                                variant={cgi.enabled ? 'outline' : 'default'}
+                                disabled={processing}
+                            >
+                                {processing && <Spinner />}
+                                {cgi.enabled ? 'Matikan CGI' : 'Nyalakan CGI'}
+                            </Button>
+                        )}
+                        {!cgi.allowed && (
+                            <p className="text-sm text-muted-foreground">
+                                Paket kamu tidak termasuk CGI.
+                            </p>
+                        )}
+                        <InputError message={errors.cgi_enabled} />
                     </>
                 )}
             </Form>

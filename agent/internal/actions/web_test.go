@@ -399,6 +399,7 @@ func TestApplyDomainSetsUpTheWebSettings(t *testing.T) {
 		"hotlink":        map[string]any{"extensions": []string{"jpg"}, "domains": []string{"example.org"}, "allow_direct": true, "redirect_to": "https://example.net/no.png"},
 		"mime_types":     []map[string]any{{"extension": "foo", "type": "application/x-foo"}},
 		"php_extensions": []string{"html"},
+		"cgi":            true,
 	}
 
 	if _, err := env.call("web.apply_domain", params); err != nil {
@@ -426,7 +427,7 @@ func TestApplyDomainSetsUpTheWebSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, want := range []string{"ErrorDocument 404 /.errors/404.html", "AddType application/x-foo .foo", `<FilesMatch "\.(php|phtml|html)$">`, `<Directory "/home/budi/domains/example.com/public_html/admin">`} {
+	for _, want := range []string{"ErrorDocument 404 /.errors/404.html", "AddType application/x-foo .foo", `<FilesMatch "\.(php|phtml|html)$">`, `<Directory "/home/budi/domains/example.com/public_html/admin">`, "SuexecUserGroup budi budi"} {
 		if !strings.Contains(string(apache), want) {
 			t.Errorf("the apache vhost lacks %q:\n%s", want, apache)
 		}

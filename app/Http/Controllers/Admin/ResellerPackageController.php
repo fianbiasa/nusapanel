@@ -98,7 +98,7 @@ class ResellerPackageController extends Controller
     }
 
     /**
-     * @return array{id: int, name: string, description: string|null, limits: array<string, int|null>, ssl: bool, oversell: bool, resellers_count: int}
+     * @return array{id: int, name: string, description: string|null, limits: array<string, int|null>, ssl: bool, cgi: bool, oversell: bool, resellers_count: int}
      */
     private function packageData(ResellerPackage $package): array
     {
@@ -114,6 +114,7 @@ class ResellerPackageController extends Controller
             'description' => $package->description,
             'limits' => $limits,
             'ssl' => $package->ssl,
+            'cgi' => $package->cgi,
             'oversell' => $package->oversell,
             'resellers_count' => (int) $package->getAttribute('resellers_count'),
         ];

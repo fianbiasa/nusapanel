@@ -92,6 +92,12 @@ server {
     disable_symlinks if_not_owner;
     client_max_body_size {{.ClientMaxBodySize}};
 {{- template "suspended" .}}
+{{- if .Suspended}}
+
+    # The website reached a limit its account set for it.
+    default_type text/html;
+    return 503 '{{template "unavailable-page"}}';
+{{- end}}
 {{- with .Hotlink}}
 
     # Hotlink protection: other websites may not embed these files.
@@ -144,6 +150,13 @@ server {
         auth_basic_user_file {{.File}};
 {{- template "static" ($.Static "    ")}}
 {{template "proxy" $}}
+    }
+{{- end}}
+{{- if .CGI}}
+
+    # CGI scripts always run in Apache, whatever their name ends in.
+    location ~ ^/cgi-bin/ {
+{{- template "proxy" .}}
     }
 {{- end}}
 {{- template "static" (.Static "")}}

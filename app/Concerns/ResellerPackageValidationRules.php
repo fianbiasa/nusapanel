@@ -30,6 +30,7 @@ trait ResellerPackageValidationRules
             'disk_mb' => $atLeastOne,
             'inodes' => $atLeastOne,
             'ssl' => ['required', 'boolean'],
+            'cgi' => ['sometimes', 'boolean'],
             'oversell' => ['required', 'boolean'],
         ];
     }

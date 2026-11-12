@@ -51,6 +51,16 @@
         Require valid-user
     </Directory>
 {{- end}}
+{{- if .CGI}}
+
+    # CGI scripts in cgi-bin run as the account through suEXEC, which also
+    # refuses scripts that others could change.
+    SuexecUserGroup {{.User}} {{.User}}
+    <Directory "{{.DocumentRoot}}/cgi-bin">
+        Options +ExecCGI
+        SetHandler cgi-script
+    </Directory>
+{{- end}}
 {{- if and .ErrorPages .Protected}}
 
     # The error pages show without a login, also that of a wrong login.

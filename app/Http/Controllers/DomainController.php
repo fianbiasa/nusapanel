@@ -43,7 +43,7 @@ class DomainController extends Controller
         $phpDefaults = $this->serverSettings->phpDefaults();
         $uploadLimit = $this->serverSettings->phpUploadLimit();
 
-        $websites = $account->domains()->orderBy('name')->get();
+        $websites = $account->domains()->with('certificateRequest')->orderBy('name')->get();
         $childrenByParent = $websites->whereNotNull('parent_id')->groupBy('parent_id');
 
         $domains = $websites
@@ -78,6 +78,12 @@ class DomainController extends Controller
                 'ssl_trusted' => $domain->ssl_trusted,
                 'ssl_expires_at' => $domain->ssl_expires_at?->toIso8601String(),
                 'ssl_error' => $domain->ssl_error,
+                'certificate_request' => $domain->certificateRequest === null ? null : [
+                    'names' => $domain->certificateRequest->names,
+                    'key_type' => $domain->certificateRequest->key_type,
+                    'csr' => $domain->certificateRequest->csr,
+                    'created_at' => $domain->certificateRequest->created_at?->toIso8601String(),
+                ],
                 'force_https' => $domain->force_https,
                 'www_mode' => $domain->www_mode->value,
                 'document_root' => $domain->type === DomainType::Pointer ? null : ($domain->document_root ?? "domains/{$domain->name}/public_html"),
@@ -166,7 +172,7 @@ class DomainController extends Controller
         $this->domains->installCustomCertificate(
             $domain,
             $request->string('certificate')->toString(),
-            $request->string('private_key')->toString(),
+            $request->privateKey(),
             $request->user(),
         );
 

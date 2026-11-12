@@ -411,5 +411,15 @@
     "The login :login was removed.": "Login :login dihapus.",
     "The hotlink protection of :domain is being applied.": "Proteksi hotlink :domain sedang diterapkan.",
     "The content types of :domain are being applied.": "Tipe MIME :domain sedang diterapkan.",
-    "The PHP extensions of :domain are being applied.": "Ekstensi PHP :domain sedang diterapkan."
+    "The PHP extensions of :domain are being applied.": "Ekstensi PHP :domain sedang diterapkan.",
+    "Enter the country as two letters, such as ID.": "Isi negara dengan dua huruf, misalnya ID.",
+    "Certificates can only be made for active websites.": "Sertifikat hanya bisa dibuat untuk website yang aktif.",
+    "The CSR for :domain is ready. Copy it to your certificate authority.": "CSR untuk :domain sudah dibuat. Salin ke certificate authority kamu.",
+    "The CSR for :domain was deleted.": "CSR untuk :domain dihapus.",
+    "The self-signed certificate for :domain is being installed.": "Sertifikat self-signed untuk :domain sedang dipasang.",
+    "Your reseller package does not include CGI.": "Paket reseller Anda tidak termasuk CGI.",
+    "CGI is not included in your package.": "Paket kamu tidak termasuk CGI.",
+    "CGI is being turned on for :domain.": "CGI untuk :domain sedang dinyalakan.",
+    "CGI is being turned off for :domain.": "CGI untuk :domain sedang dimatikan.",
+    "The limits of :domain were saved.": "Batas :domain disimpan."
 }
