@@ -174,12 +174,12 @@ Semua fitur P1 sudah ada. Yang dipindah ke fase lain: CGI dan batas disk & bandw
 - Akun email, forwarder, catch-all, autoresponder, vacation, filter, spam filter.
 - DKIM/SPF/DMARC otomatis, batas kirim, mail queue, SSL untuk mail & FTP.
 
-Semua fitur P2 sudah ada dan terpasang di server produksi (0.6.0-dev17, 12 November 2026). SSL FTP tetap memakai sertifikat hostname (sejak P1); SNI per domain hanya untuk email.
+Semua fitur P2 sudah ada, terpasang di server produksi dan dirilis sebagai v0.6.0 (12 November 2026). SSL FTP tetap memakai sertifikat hostname (sejak P1); SNI per domain hanya untuk email.
 
 **Selesai kalau:**
 
 - zone DNS bisa di-resolve dari luar; ✅ dashbot.web.id dilayani ns1/ns2.rayxopanel.com dan dijawab Google serta Cloudflare; "Cek DNS" panel untuk dashbot.web.id: MX, SPF, DKIM dan DMARC semuanya ok;
-- email keluar lolos SPF, DKIM, dan DMARC (skor mail-tester minimal 9/10); ⏳ email ke Gmail sudah lolos SPF, DKIM dan DMARC; skor mail-tester menunggu uji dari hi@dashbot.web.id;
+- email keluar lolos SPF, DKIM, dan DMARC (skor mail-tester minimal 9/10); ✅ skor mail-tester 10/10 untuk email dari hi@dashbot.web.id (12 November 2026), dan email ke Gmail lolos SPF, DKIM dan DMARC;
 - email masuk diterima, dan spam tersaring. ✅ email dari Gmail masuk ke dashbot.web.id; GTUBE masuk Junk, filter spam per akun teruji; `mail.dashbot.web.id` menyajikan sertifikat Let's Encrypt-nya sendiri di 993, 995, 465, 587 dan 25.
 
 ## P3 — Reseller, statistik, API
