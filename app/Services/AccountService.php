@@ -203,7 +203,7 @@ class AccountService
      * @throws AuthorizationException
      * @throws ValidationException
      */
-    public function suspend(User $account, ?string $reason, User $actor): void
+    public function suspend(User $account, ?string $reason, ?User $actor): void
     {
         $this->ensureCanBeChanged($account, $actor, 'suspend');
         $this->ensureStatus($account, [AccountStatus::Active], __('Only active accounts can be suspended.'));
@@ -230,7 +230,7 @@ class AccountService
      *
      * @throws ValidationException
      */
-    public function unsuspend(User $account, User $actor): void
+    public function unsuspend(User $account, ?User $actor): void
     {
         $this->ensureStatus($account, [AccountStatus::Suspended], __('Only suspended accounts can be unsuspended.'));
 
@@ -238,6 +238,7 @@ class AccountService
             $account->forceFill([
                 'status' => AccountStatus::Active,
                 'suspend_reason' => null,
+                'bandwidth_suspended_at' => null,
             ])->save();
 
             if (! $account->isPanelOnly()) {
@@ -379,9 +380,9 @@ class AccountService
      *
      * @throws AuthorizationException
      */
-    private function ensureCanBeChanged(User $account, User $actor, string $action): void
+    private function ensureCanBeChanged(User $account, ?User $actor, string $action): void
     {
-        if ($account->is($actor)) {
+        if ($actor !== null && $account->is($actor)) {
             throw new AuthorizationException("You cannot {$action} your own account.");
         }
 

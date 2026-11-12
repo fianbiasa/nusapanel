@@ -8,6 +8,7 @@ use App\Enums\DomainStatus;
 use App\Enums\DomainType;
 use App\Enums\Role;
 use App\Models\AccountUsage;
+use App\Models\BandwidthUsage;
 use App\Models\CronJob;
 use App\Models\Database;
 use App\Models\Domain;
@@ -17,10 +18,12 @@ use App\Models\MailForwarder;
 use App\Models\Package;
 use App\Models\ResellerPackage;
 use App\Models\User;
+use App\Services\BandwidthService;
 use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -103,6 +106,10 @@ final class ResellerLimits implements Arrayable
             'cron_jobs' => CronJob::query()->whereIn('user_id', $accounts)->count(),
             'disk_mb' => (int) ceil(((int) AccountUsage::query()->whereIn('user_id', $accounts)->sum('disk_kb')) / 1024),
             'inodes' => (int) AccountUsage::query()->whereIn('user_id', $accounts)->sum('inodes'),
+            'bandwidth_mb' => BandwidthService::megabytes((int) BandwidthUsage::query()
+                ->whereIn('user_id', $accounts)
+                ->where('date', '>=', now()->startOfMonth()->toDateString())
+                ->sum(DB::raw('web_bytes + mail_bytes + ftp_bytes'))),
             default => null,
         };
     }

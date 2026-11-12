@@ -105,6 +105,8 @@ export const auditActionLabels: Record<string, string> = {
     'reseller_package.created': 'Paket reseller dibuat',
     'reseller_package.updated': 'Paket reseller diubah',
     'reseller_package.deleted': 'Paket reseller dihapus',
+    'server.bandwidth_suspend_changed':
+        'Suspend otomatis karena bandwidth diubah',
 };
 
 /** The quantities a package limits, in the order the panel shows them. */

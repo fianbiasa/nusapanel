@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
+import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
 import { Panel } from '@/components/panel';
 import {
@@ -21,6 +22,7 @@ import {
 import { StatusBadge } from '@/components/status-badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
     Dialog,
     DialogClose,
@@ -38,9 +40,11 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { formatDateTime, formatRelative } from '@/lib/format';
 import {
+    bandwidth as updateBandwidth,
     hostname as updateHostname,
     hostnameCertificate,
     mailLimits as updateMailLimits,
@@ -99,6 +103,7 @@ type Props = {
     nameservers: string[];
     public_ip: string | null;
     mail_limits: MailLimits;
+    bandwidth: { suspend_over_limit: boolean };
 };
 
 type MailLimits = {
@@ -116,6 +121,7 @@ export default function ServerSettings({
     nameservers,
     public_ip,
     mail_limits,
+    bandwidth,
 }: Props) {
     const { start, stop } = usePoll(
         5_000,
@@ -191,6 +197,8 @@ export default function ServerSettings({
             </div>
 
             <MailLimitPanel limits={mail_limits} />
+
+            <BandwidthPanel suspendOverLimit={bandwidth.suspend_over_limit} />
 
             <NameserverPanel current={nameservers} publicIp={public_ip} />
         </>
@@ -809,6 +817,66 @@ function UploadPanel({
  * How many recipients the mail of hosting accounts may reach per 24 hours,
  * per account and for all accounts together. Empty is no limit.
  */
+/**
+ * Bandwidth is counted from the logs of websites, mail and FTP, per
+ * calendar month. Accounts over their package's bandwidth can be
+ * suspended until the next month.
+ */
+function BandwidthPanel({ suspendOverLimit }: { suspendOverLimit: boolean }) {
+    const [enabled, setEnabled] = useState(suspendOverLimit);
+
+    return (
+        <Panel
+            title="Batas bandwidth"
+            description="Bandwidth dihitung dari log website, email, dan FTP setiap 15 menit, per bulan kalender. Batasnya diatur di paket."
+        >
+            <Form
+                {...updateBandwidth.form()}
+                options={{ preserveScroll: true }}
+                className="grid gap-4"
+            >
+                {({ processing, errors }) => (
+                    <>
+                        <input
+                            type="hidden"
+                            name="suspend_over_limit"
+                            value={enabled ? 1 : 0}
+                        />
+                        <div className="flex items-start gap-3">
+                            <Checkbox
+                                id="suspend_over_limit"
+                                checked={enabled}
+                                onCheckedChange={(checked) =>
+                                    setEnabled(checked === true)
+                                }
+                                className="mt-0.5"
+                            />
+                            <div className="grid gap-1">
+                                <Label htmlFor="suspend_over_limit">
+                                    Suspend otomatis akun yang melewati batas
+                                    bandwidth paketnya
+                                </Label>
+                                <p className="text-xs text-muted-foreground">
+                                    Akun dibuka kembali otomatis saat bulan
+                                    berganti. Tanpa ini, pemakaian di atas batas
+                                    hanya ditampilkan.
+                                </p>
+                            </div>
+                        </div>
+                        <InputError message={errors.suspend_over_limit} />
+                        <div>
+                            <Button type="submit" disabled={processing}>
+                                {processing && <Spinner />}
+                                Simpan
+                            </Button>
+                        </div>
+                    </>
+                )}
+            </Form>
+        </Panel>
+    );
+}
+
 function MailLimitPanel({ limits }: { limits: MailLimits }) {
     const [account, setAccount] = useState(limits.account?.toString() ?? '');
     const [server, setServer] = useState(limits.server?.toString() ?? '');

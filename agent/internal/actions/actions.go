@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"rayxo/agent/internal/bandwidth"
 	"rayxo/agent/internal/clock"
 	"rayxo/agent/internal/database"
 	"rayxo/agent/internal/dns"
@@ -78,6 +79,10 @@ func Register(registry *rpc.Registry, config Config) {
 	}
 
 	for name, method := range dnsMethods(dns.New(dns.DefaultConfig())) {
+		registry.Register(name, method)
+	}
+
+	for name, method := range usageMethods(bandwidth.New(bandwidth.DefaultConfig())) {
 		registry.Register(name, method)
 	}
 

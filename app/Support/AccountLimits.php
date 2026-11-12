@@ -9,6 +9,7 @@ use App\Models\Mailbox;
 use App\Models\MailForwarder;
 use App\Models\Package;
 use App\Models\User;
+use App\Services\BandwidthService;
 use App\Services\QuotaService;
 use Illuminate\Contracts\Support\Arrayable;
 
@@ -73,6 +74,7 @@ final class AccountLimits implements Arrayable
                 ->count(),
             'cron_jobs' => $this->account->cronJobs()->count(),
             'disk_mb' => $this->account->diskUsage?->diskMegabytes(),
+            'bandwidth_mb' => BandwidthService::megabytes(BandwidthService::monthBytes($this->account)),
             'inodes' => $this->account->diskUsage?->inodes,
             default => null,
         };

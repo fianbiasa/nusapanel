@@ -43,6 +43,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property int|null $reseller_package_id A reseller's allowance; null for other accounts and unlimited resellers.
  * @property AccountStatus $status
  * @property string|null $suspend_reason
+ * @property Carbon|null $bandwidth_suspended_at When the panel suspended it for going over its package's bandwidth; lifted when a new month starts.
  * @property Carbon|null $phpmyadmin_expires_at When the open phpMyAdmin session ends; null while none is open.
  * @property Carbon|null $sftp_password_set_at When the SFTP password was last set; null while the account has none.
  * @property string|null $cron_email Where cron mails the output of the account's jobs; null mails nothing.
@@ -78,6 +79,7 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
             'role' => Role::class,
             'status' => AccountStatus::class,
             'last_login_at' => 'datetime',
+            'bandwidth_suspended_at' => 'datetime',
             'phpmyadmin_expires_at' => 'datetime',
             'sftp_password_set_at' => 'datetime',
             'two_factor_confirmed_at' => 'datetime',

@@ -165,7 +165,7 @@ Pembagian level sama seperti DirectAdmin:
 | Mail queue                            | ✅ Lihat (dengan alasan tertunda), kirim ulang, hapus (admin, menu Antrean Email)       | P2   |
 | Batas kirim email                     | ✅ Per akun (bawaan 300) dan seluruh server per 24 jam, diatur di Pengaturan Server     | P2   |
 | Process monitor                       | Lihat & hentikan proses                                                                 | P3   |
-| Statistik pemakaian                   | Ranking akun per disk & bandwidth                                                       | P3   |
+| Statistik pemakaian                   | ✅ Ranking akun per disk & bandwidth                                                    | P3   |
 | Manajemen IP                          | Tambah/hapus IPv4/IPv6, berikan ke reseller                                             | P3   |
 | File editor sistem                    | Hanya file config yang diizinkan                                                        | P3   |
 | Template config kustom                | Override template vhost, PHP-FPM, DNS                                                   | P3   |
@@ -220,7 +220,7 @@ Pembagian level sama seperti DirectAdmin:
 | Rotasi log per domain     | ✅                                                                      | P1   |
 | Perpanjangan SSL          | ✅                                                                      | P1   |
 | Watchdog service          | ✅                                                                      | P1   |
-| Hitung bandwidth          | Dari log web, email, FTP; suspend otomatis kalau lewat batas (opsional) | P3   |
-| Snapshot pemakaian harian | Untuk grafik                                                            | P3   |
+| Hitung bandwidth          | ✅ Dari log web, email, FTP; suspend otomatis kalau lewat batas (opsional)| P3   |
+| Snapshot pemakaian harian | ✅ Untuk grafik                                                         | P3   |
 | Backup terjadwal          |                                                                         | P4   |
 | Deteksi config drift ★    | Bandingkan config di disk dengan database                               | P5   |

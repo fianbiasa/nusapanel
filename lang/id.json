@@ -384,5 +384,7 @@
     "email accounts": "akun email",
     "email forwarders": "forwarder email",
     "files (inodes)": "file (inode)",
-    "subdomains": "subdomain"
+    "subdomains": "subdomain",
+    "The bandwidth of the package for this month is used up.": "Bandwidth paket untuk bulan ini sudah habis.",
+    "Bandwidth setting saved.": "Pengaturan bandwidth disimpan."
 }

@@ -25,6 +25,7 @@ import {
     UserPlus,
     Users,
 } from 'lucide-react';
+import { DailyBars } from '@/components/daily-bars';
 import { PageHeader } from '@/components/page-header';
 import { Panel, PanelLink } from '@/components/panel';
 import { StatusBadge } from '@/components/status-badge';
@@ -32,6 +33,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
     auditActionLabels,
+    formatBytes,
     formatMegabytes,
     formatQuota,
     formatRelative,
@@ -101,6 +103,11 @@ type Props = {
     domains?: DomainSummary[];
     limits?: AccountLimits;
     resellerLimits?: ResellerLimits;
+    usageHistory?: {
+        date: string;
+        bandwidth_bytes: number;
+        disk_kb: number | null;
+    }[];
     systemInfo?: SystemInfoResult;
 };
 
@@ -110,6 +117,7 @@ export default function Dashboard({
     domains = [],
     limits,
     resellerLimits,
+    usageHistory,
     systemInfo,
 }: Props) {
     const { auth } = usePage().props;
@@ -286,6 +294,34 @@ export default function Dashboard({
                             </Panel>
                         )}
                     </section>
+
+                    {usageHistory && (
+                        <Panel
+                            title="Pemakaian 30 hari terakhir"
+                            description="Bandwidth dari log website, email, dan FTP kamu; disk dari pengukuran terakhir tiap hari."
+                        >
+                            <div className="grid gap-8 lg:grid-cols-2">
+                                <DailyBars
+                                    title="Bandwidth per hari"
+                                    points={usageHistory.map((point) => ({
+                                        date: point.date,
+                                        value: point.bandwidth_bytes,
+                                    }))}
+                                    format={formatBytes}
+                                />
+                                <DailyBars
+                                    title="Disk terpakai"
+                                    points={usageHistory.map((point) => ({
+                                        date: point.date,
+                                        value: point.disk_kb,
+                                    }))}
+                                    format={(kilobytes) =>
+                                        formatBytes(kilobytes * 1024)
+                                    }
+                                />
+                            </div>
+                        </Panel>
+                    )}
                 </>
             )}
 

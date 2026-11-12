@@ -10,6 +10,8 @@ use App\Http\Requests\Admin\UpdateNameserversRequest;
 use App\Http\Requests\Admin\UpdatePhpUploadLimitsRequest;
 use App\Http\Requests\Admin\UpdateServerHostnameRequest;
 use App\Http\Requests\Admin\UpdateServerTimezoneRequest;
+use App\Services\AuditLogger;
+use App\Services\BandwidthService;
 use App\Services\DnsService;
 use App\Services\DomainService;
 use App\Services\MailSendLimitService;
@@ -34,6 +36,8 @@ class ServerSettingController extends Controller
         private DomainService $domains,
         private DnsService $dns,
         private MailSendLimitService $sendLimits,
+        private BandwidthService $bandwidth,
+        private AuditLogger $audit,
     ) {}
 
     public function index(): Response
@@ -60,6 +64,9 @@ class ServerSettingController extends Controller
             ],
             'nameservers' => $this->dns->nameservers(),
             'public_ip' => config('hosting.public_ip') ?: null,
+            'bandwidth' => [
+                'suspend_over_limit' => $this->bandwidth->suspendsOverLimit(),
+            ],
             'mail_limits' => [
                 ...$this->settings->mailSendLimits(),
                 'default_account' => ServerSettingsService::DEFAULT_MAIL_SEND_LIMIT_ACCOUNT,
@@ -235,6 +242,23 @@ class ServerSettingController extends Controller
         }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => $changed ? __('Send limits saved.') : __('Nothing changed.')]);
+
+        return back();
+    }
+
+    /**
+     * Turn suspending hosting accounts that go over their package's
+     * monthly bandwidth on or off.
+     */
+    public function updateBandwidth(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'suspend_over_limit' => ['required', 'boolean'],
+        ]);
+
+        $this->bandwidth->setSuspendOverLimit((bool) $validated['suspend_over_limit'], $request->user(), $this->audit);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Bandwidth setting saved.')]);
 
         return back();
     }

@@ -8,6 +8,7 @@ use App\Enums\AccountStatus;
 use App\Enums\Role;
 use App\Models\AccountUsage;
 use App\Models\Package;
+use App\Models\UsageSnapshot;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Cache;
@@ -129,9 +130,19 @@ class QuotaService
             }
         }
 
-        DB::transaction(function () use ($rows): void {
+        $today = $measuredAt->toDateString();
+
+        DB::transaction(function () use ($rows, $today): void {
             foreach (array_chunk($rows, 500) as $chunk) {
                 AccountUsage::query()->upsert($chunk, ['user_id'], ['disk_kb', 'inodes', 'measured_at']);
+
+                // Today's snapshot for the usage graphs, the day's last measurement.
+                UsageSnapshot::query()->upsert(array_map(fn (array $row): array => [
+                    'user_id' => $row['user_id'],
+                    'date' => $today,
+                    'disk_kb' => $row['disk_kb'],
+                    'inodes' => $row['inodes'],
+                ], $chunk), ['user_id', 'date'], ['disk_kb', 'inodes']);
             }
         });
 

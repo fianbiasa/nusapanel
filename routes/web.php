@@ -8,6 +8,7 @@ use App\Http\Controllers\Admin\PackageController;
 use App\Http\Controllers\Admin\ResellerPackageController;
 use App\Http\Controllers\Admin\ServerSettingController;
 use App\Http\Controllers\Admin\ServiceController;
+use App\Http\Controllers\Admin\StatisticsController;
 use App\Http\Controllers\Admin\TaskController;
 use App\Http\Controllers\CatchAllController;
 use App\Http\Controllers\CronJobController;
@@ -142,6 +143,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('packages/{package}/edit', [PackageController::class, 'edit'])->name('packages.edit');
         Route::put('packages/{package}', [PackageController::class, 'update'])->name('packages.update');
         Route::delete('packages/{package}', [PackageController::class, 'destroy'])->name('packages.destroy');
+        Route::get('statistics', [StatisticsController::class, 'index'])->name('statistics.index');
     });
 
     // Back to one's own account after "login as".
@@ -173,6 +175,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('packages/{package}/edit', [PackageController::class, 'edit'])->name('packages.edit');
         Route::put('packages/{package}', [PackageController::class, 'update'])->name('packages.update');
         Route::delete('packages/{package}', [PackageController::class, 'destroy'])->name('packages.destroy');
+        Route::get('statistics', [StatisticsController::class, 'index'])->name('statistics.index');
         Route::get('tasks', [TaskController::class, 'index'])->name('tasks.index');
         Route::get('audit-logs', [AuditLogController::class, 'index'])->name('audit-logs.index');
         Route::get('services', [ServiceController::class, 'index'])->name('services.index');
@@ -215,6 +218,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('server-settings/php-uploads', [ServerSettingController::class, 'updatePhpUploads'])
             ->middleware('throttle:10,1,server-uploads')
             ->name('server-settings.php-uploads');
+        Route::put('server-settings/bandwidth', [ServerSettingController::class, 'updateBandwidth'])
+            ->middleware('throttle:10,1,server-bandwidth')
+            ->name('server-settings.bandwidth');
         Route::put('server-settings/mail-limits', [ServerSettingController::class, 'updateMailSendLimits'])
             ->middleware('throttle:10,1,server-mail-limits')
             ->name('server-settings.mail-limits');

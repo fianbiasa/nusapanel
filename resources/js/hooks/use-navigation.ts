@@ -1,6 +1,7 @@
 import { usePage } from '@inertiajs/react';
 import {
     Activity,
+    ChartColumn,
     Boxes,
     Clock,
     Database,
@@ -31,9 +32,11 @@ import { index as packagesIndex } from '@/routes/admin/packages';
 import { index as resellerPackagesIndex } from '@/routes/admin/reseller-packages';
 import { index as serverSettingsIndex } from '@/routes/admin/server-settings';
 import { index as servicesIndex } from '@/routes/admin/services';
+import { index as statisticsIndex } from '@/routes/admin/statistics';
 import { index as tasksIndex } from '@/routes/admin/tasks';
 import { index as resellerAccountsIndex } from '@/routes/reseller/accounts';
 import { index as resellerOwnPackagesIndex } from '@/routes/reseller/packages';
+import { index as resellerStatisticsIndex } from '@/routes/reseller/statistics';
 import { index as domainsIndex } from '@/routes/domains';
 import { index as emailIndex } from '@/routes/email';
 import { index as filesIndex } from '@/routes/files';
@@ -95,6 +98,11 @@ export function useNavigation(): {
             href: resellerPackagesIndex(),
             icon: Boxes,
         };
+        const statistics: NavItem = {
+            title: 'Statistik',
+            href: statisticsIndex(),
+            icon: ChartColumn,
+        };
         const tasks: NavItem = {
             title: 'Tasks',
             href: tasksIndex(),
@@ -130,6 +138,7 @@ export function useNavigation(): {
                     packages,
                     resellerPackages,
                     adminDns,
+                    statistics,
                 ],
             },
             {
@@ -208,6 +217,11 @@ export function useNavigation(): {
                     title: 'Packages',
                     href: resellerOwnPackagesIndex(),
                     icon: Package,
+                },
+                {
+                    title: 'Statistik',
+                    href: resellerStatisticsIndex(),
+                    icon: ChartColumn,
                 },
             ],
         });
