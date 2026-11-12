@@ -11,8 +11,14 @@
 // Each account also has an owner user named exactly <username>, with access
 // to all of its databases, which phpMyAdmin signs in as. Its password is set
 // when phpMyAdmin opens and replaced by an unknown one when the session
-// ends. It is never dropped while the account exists, because views,
+// ends. It also signs in through unix_socket: a program running as the
+// account's Linux user (imports run that way) is the owner without any
+// password. It is never dropped while the account exists, because views,
 // triggers and routines made in phpMyAdmin keep it as their definer.
+//
+// The other users connect from this server (localhost) and from the remote
+// hosts their account allows, each a MariaDB user of its own with the same
+// password and access. The owner user only connects locally.
 package database
 
 import (
@@ -22,6 +28,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"regexp"
 	"slices"
 	"strconv"
@@ -39,8 +46,10 @@ const (
 	MaxUserName = 32
 
 	clientProgram = "/usr/bin/mariadb"
-	// host is the only host account users connect from: this server.
+	// host is the host every account user connects from: this server.
 	host = "localhost"
+	// MaxRemoteHosts is the most remote hosts one account may allow.
+	MaxRemoteHosts = 20
 )
 
 var (
@@ -69,11 +78,24 @@ type Config struct {
 	// Run runs a program with input on stdin and returns its stdout, like
 	// runner.RunInput.
 	Run func(ctx context.Context, input []byte, program string, args ...string) ([]byte, error)
+	// Dump runs mariadb-dump as root with args, writing the dump to out.
+	Dump func(ctx context.Context, args []string, out io.Writer) error
+	// Import runs `gzip -dcf -- file | mariadb args...` as as. A failure
+	// the account should see is an *ImportError.
+	Import func(ctx context.Context, as Identity, file string, args []string) error
+	// RemoteConfig is the MariaDB configuration file that makes it answer
+	// on every address while it exists.
+	RemoteConfig string
 }
 
 // DefaultConfig returns the operations used on a server.
 func DefaultConfig() Config {
-	return Config{Run: runner.RunInput}
+	return Config{
+		Run:          runner.RunInput,
+		Dump:         dump,
+		Import:       importAs,
+		RemoteConfig: "/etc/mysql/mariadb.conf.d/99-rayxo-remote.cnf",
+	}
 }
 
 // Manager applies database changes. Callers must make sure only one call
@@ -137,17 +159,17 @@ func (m *Manager) DeleteDatabase(ctx context.Context, user, name string) error {
 		return err
 	}
 
-	grantees, err := m.query(ctx, "SELECT User FROM mysql.db WHERE Host = "+literal(host)+
-		" AND Db = "+literal(grantPattern(name))+";")
+	grantees, err := m.query(ctx, "SELECT User, Host FROM mysql.db WHERE Db = "+literal(grantPattern(name))+";")
 	if err != nil {
 		return err
 	}
 
 	var sql strings.Builder
 
-	for _, grantee := range grantees {
-		if namePattern.MatchString(grantee) {
-			sql.WriteString("REVOKE ALL PRIVILEGES ON " + grantTarget(name) + " FROM " + account(grantee) + ";\n")
+	for _, row := range grantees {
+		grantee, from, ok := strings.Cut(row, "\t")
+		if ok && namePattern.MatchString(grantee) && validHostColumn(from) {
+			sql.WriteString("REVOKE ALL PRIVILEGES ON " + grantTarget(name) + " FROM " + accountAt(grantee, from) + ";\n")
 		}
 	}
 
@@ -160,13 +182,19 @@ func (m *Manager) DeleteDatabase(ctx context.Context, user, name string) error {
 
 // ApplyUser creates user name of user, or updates it: it gets the password
 // of hash and all privileges on exactly databases, which must be databases
-// of user (they need not exist yet). Running it again changes nothing.
-func (m *Manager) ApplyUser(ctx context.Context, user, name, hash string, databases []string) error {
+// of user (they need not exist yet), from this server and from each of
+// remoteHosts (see ValidateHost), and from no other host. Running it again
+// changes nothing.
+func (m *Manager) ApplyUser(ctx context.Context, user, name, hash string, databases, remoteHosts []string) error {
 	if err := ValidateName(user, name, MaxUserName); err != nil {
 		return err
 	}
 
-	return m.applyUser(ctx, user, name, hash, databases)
+	if err := ValidateHosts(remoteHosts); err != nil {
+		return err
+	}
+
+	return m.applyUser(ctx, user, name, hash, databases, remoteHosts, false)
 }
 
 // ApplyOwner creates the owner user of account user (named user), or
@@ -177,7 +205,7 @@ func (m *Manager) ApplyOwner(ctx context.Context, user, hash string, databases [
 		return err
 	}
 
-	return m.applyUser(ctx, user, user, hash, databases)
+	return m.applyUser(ctx, user, user, hash, databases, nil, true)
 }
 
 // CloseOwner gives the owner user of account user a random password nobody
@@ -197,14 +225,15 @@ func (m *Manager) CloseOwner(ctx context.Context, user string) error {
 	// password anyone knows.
 	hash := "*" + strings.ToUpper(hex.EncodeToString(secret))
 
-	_, err := m.exec(ctx, "ALTER USER IF EXISTS "+account(user)+" IDENTIFIED BY PASSWORD "+literal(hash)+";")
+	_, err := m.exec(ctx, "ALTER USER IF EXISTS "+account(user)+" "+ownerIdentification(hash)+";")
 
 	return err
 }
 
 // applyUser does ApplyUser and ApplyOwner for user name of account user,
-// which the caller validated.
-func (m *Manager) applyUser(ctx context.Context, user, name, hash string, databases []string) error {
+// which the caller validated, with remoteHosts validated too. The owner also
+// signs in through unix_socket.
+func (m *Manager) applyUser(ctx context.Context, user, name, hash string, databases, remoteHosts []string, owner bool) error {
 	if err := ValidatePasswordHash(hash); err != nil {
 		return err
 	}
@@ -215,8 +244,19 @@ func (m *Manager) applyUser(ctx context.Context, user, name, hash string, databa
 		}
 	}
 
-	current, err := m.query(ctx, "SELECT Db FROM mysql.db WHERE Host = "+literal(host)+
-		" AND User = "+literal(name)+";")
+	identification := "IDENTIFIED BY PASSWORD " + literal(hash)
+	if owner {
+		identification = ownerIdentification(hash)
+	}
+
+	hosts := append([]string{host}, remoteHosts...)
+
+	existing, err := m.query(ctx, "SELECT Host FROM mysql.user WHERE User = "+literal(name)+";")
+	if err != nil {
+		return err
+	}
+
+	current, err := m.query(ctx, "SELECT Host, Db FROM mysql.db WHERE User = "+literal(name)+";")
 	if err != nil {
 		return err
 	}
@@ -228,17 +268,29 @@ func (m *Manager) applyUser(ctx context.Context, user, name, hash string, databa
 
 	var sql strings.Builder
 
-	sql.WriteString("CREATE USER IF NOT EXISTS " + account(name) + " IDENTIFIED BY PASSWORD " + literal(hash) + ";\n")
-	sql.WriteString("ALTER USER " + account(name) + " IDENTIFIED BY PASSWORD " + literal(hash) + ";\n")
-
-	for _, pattern := range current {
-		if grantPatternPattern.MatchString(pattern) && !slices.Contains(desired, pattern) {
-			sql.WriteString("REVOKE ALL PRIVILEGES ON `" + pattern + "`.* FROM " + account(name) + ";\n")
+	// Hosts the account no longer allows go first.
+	for _, old := range existing {
+		if !slices.Contains(hosts, old) && validHostColumn(old) {
+			sql.WriteString("DROP USER IF EXISTS " + accountAt(name, old) + ";\n")
 		}
 	}
 
-	for _, database := range databases {
-		sql.WriteString("GRANT ALL PRIVILEGES ON " + grantTarget(database) + " TO " + account(name) + ";\n")
+	for _, from := range hosts {
+		target := accountAt(name, from)
+
+		sql.WriteString("CREATE USER IF NOT EXISTS " + target + " " + identification + ";\n")
+		sql.WriteString("ALTER USER " + target + " " + identification + ";\n")
+
+		for _, row := range current {
+			grantHost, pattern, ok := strings.Cut(row, "\t")
+			if ok && grantHost == from && grantPatternPattern.MatchString(pattern) && !slices.Contains(desired, pattern) {
+				sql.WriteString("REVOKE ALL PRIVILEGES ON `" + pattern + "`.* FROM " + target + ";\n")
+			}
+		}
+
+		for _, database := range databases {
+			sql.WriteString("GRANT ALL PRIVILEGES ON " + grantTarget(database) + " TO " + target + ";\n")
+		}
 	}
 
 	_, err = m.exec(ctx, sql.String())
@@ -246,15 +298,55 @@ func (m *Manager) applyUser(ctx context.Context, user, name, hash string, databa
 	return err
 }
 
-// DeleteUser drops user name of user. A user that does not exist succeeds.
+// ownerIdentification is how the owner user signs in: with the password of
+// hash, or as the account's Linux user through the server socket.
+func ownerIdentification(hash string) string {
+	return "IDENTIFIED VIA mysql_native_password USING " + literal(hash) + " OR unix_socket"
+}
+
+// DeleteUser drops user name of user, from every host. A user that does
+// not exist succeeds.
 func (m *Manager) DeleteUser(ctx context.Context, user, name string) error {
 	if err := ValidateName(user, name, MaxUserName); err != nil {
 		return err
 	}
 
-	_, err := m.exec(ctx, "DROP USER IF EXISTS "+account(name)+";")
+	targets, err := m.userAccounts(ctx, "User = "+literal(name))
+	if err != nil {
+		return err
+	}
+
+	var sql strings.Builder
+
+	sql.WriteString("DROP USER IF EXISTS " + account(name) + ";\n")
+
+	for _, target := range targets {
+		sql.WriteString("DROP USER IF EXISTS " + target + ";\n")
+	}
+
+	_, err = m.exec(ctx, sql.String())
 
 	return err
+}
+
+// userAccounts returns the users matching where, each as user@host for
+// SQL, except those of hosts no account user can have.
+func (m *Manager) userAccounts(ctx context.Context, where string) ([]string, error) {
+	rows, err := m.query(ctx, "SELECT User, Host FROM mysql.user WHERE "+where+";")
+	if err != nil {
+		return nil, err
+	}
+
+	var targets []string
+
+	for _, row := range rows {
+		name, from, ok := strings.Cut(row, "\t")
+		if ok && namePattern.MatchString(name) && validHostColumn(from) {
+			targets = append(targets, accountAt(name, from))
+		}
+	}
+
+	return targets, nil
 }
 
 // RemoveAccount drops every database and user of user, its owner user
@@ -270,8 +362,8 @@ func (m *Manager) RemoveAccount(ctx context.Context, user string) error {
 
 	sql.WriteString("DROP USER IF EXISTS " + account(user) + ";\n")
 
-	for _, name := range users {
-		sql.WriteString("DROP USER IF EXISTS " + account(name) + ";\n")
+	for _, target := range users {
+		sql.WriteString("DROP USER IF EXISTS " + target + ";\n")
 	}
 
 	for _, name := range databases {
@@ -305,8 +397,8 @@ func (m *Manager) LockAccount(ctx context.Context, user string, lock bool) error
 	// The owner user only exists once phpMyAdmin has been opened.
 	sql.WriteString("ALTER USER IF EXISTS " + account(user) + " " + state + ";\n")
 
-	for _, name := range users {
-		sql.WriteString("ALTER USER " + account(name) + " " + state + ";\n")
+	for _, target := range users {
+		sql.WriteString("ALTER USER " + target + " " + state + ";\n")
 	}
 
 	_, err = m.exec(ctx, sql.String())
@@ -350,7 +442,8 @@ func (m *Manager) Report(ctx context.Context) ([]Size, error) {
 	return sizes, nil
 }
 
-// accountObjects returns the names of the databases and users of user.
+// accountObjects returns the names of the databases of user, and its users
+// (except the owner) as user@host for SQL, from every host.
 func (m *Manager) accountObjects(ctx context.Context, user string) ([]string, []string, error) {
 	if err := validate.Username(user); err != nil {
 		return nil, nil, err
@@ -363,18 +456,16 @@ func (m *Manager) accountObjects(ctx context.Context, user string) ([]string, []
 		return nil, nil, err
 	}
 
-	users, err := m.query(ctx, "SELECT User FROM mysql.user WHERE Host = "+literal(host)+" AND User LIKE "+prefix+";")
+	users, err := m.userAccounts(ctx, "User LIKE "+prefix)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	keep := func(names []string) []string {
-		return slices.DeleteFunc(names, func(name string) bool {
-			return ValidateName(user, name, MaxDatabaseName) != nil || slices.Contains(systemSchemas, name)
-		})
-	}
+	databases = slices.DeleteFunc(databases, func(name string) bool {
+		return ValidateName(user, name, MaxDatabaseName) != nil || slices.Contains(systemSchemas, name)
+	})
 
-	return keep(databases), keep(users), nil
+	return databases, users, nil
 }
 
 // exec runs sql, which stops at the first statement that fails.
@@ -417,9 +508,15 @@ func literal(value string) string {
 	return "'" + strings.ReplaceAll(value, `\`, `\\`) + "'"
 }
 
-// account names user name on host as MariaDB expects it.
+// account names user name on this server as MariaDB expects it.
 func account(name string) string {
-	return literal(name) + "@" + literal(host)
+	return accountAt(name, host)
+}
+
+// accountAt names user name connecting from from (localhost or a host that
+// passed ValidateHost) as MariaDB expects it.
+func accountAt(name, from string) string {
+	return literal(name) + "@" + literal(from)
 }
 
 // grantPattern is the database part of a grant for database: in grants _ is

@@ -9,6 +9,17 @@ use Illuminate\Auth\Access\Response;
 class DatabasePolicy
 {
     /**
+     * Accounts may only export, import into, or check their own databases.
+     * Other accounts' databases are reported as missing.
+     */
+    public function update(User $user, Database $database): Response
+    {
+        return $database->user_id === $user->id
+            ? Response::allow()
+            : Response::denyAsNotFound();
+    }
+
+    /**
      * Accounts may only delete their own databases. Other accounts'
      * databases are reported as missing so their existence is not revealed.
      */

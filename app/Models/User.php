@@ -167,6 +167,17 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     }
 
     /**
+     * The hosts besides the server this account's database users may
+     * connect from.
+     *
+     * @return HasMany<DatabaseRemoteHost, $this>
+     */
+    public function databaseRemoteHosts(): HasMany
+    {
+        return $this->hasMany(DatabaseRemoteHost::class);
+    }
+
+    /**
      * The FTP logins of this hosting account.
      *
      * @return HasMany<FtpAccount, $this>

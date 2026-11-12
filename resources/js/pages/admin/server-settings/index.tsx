@@ -45,6 +45,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { formatDateTime, formatRelative } from '@/lib/format';
 import {
     bandwidth as updateBandwidth,
+    databaseRemoteAccess as updateDatabaseRemoteAccess,
     hostname as updateHostname,
     hostnameCertificate,
     mailLimits as updateMailLimits,
@@ -104,6 +105,7 @@ type Props = {
     public_ip: string | null;
     mail_limits: MailLimits;
     bandwidth: { suspend_over_limit: boolean };
+    database_remote_access: boolean;
 };
 
 type MailLimits = {
@@ -122,6 +124,7 @@ export default function ServerSettings({
     public_ip,
     mail_limits,
     bandwidth,
+    database_remote_access,
 }: Props) {
     const { start, stop } = usePoll(
         5_000,
@@ -199,6 +202,8 @@ export default function ServerSettings({
             <MailLimitPanel limits={mail_limits} />
 
             <BandwidthPanel suspendOverLimit={bandwidth.suspend_over_limit} />
+
+            <DatabaseRemotePanel enabled={database_remote_access} />
 
             <NameserverPanel current={nameservers} publicIp={public_ip} />
         </>
@@ -817,6 +822,51 @@ function UploadPanel({
  * How many recipients the mail of hosting accounts may reach per 24 hours,
  * per account and for all accounts together. Empty is no limit.
  */
+/**
+ * Whether MariaDB answers from outside the server, for the hosts accounts
+ * allow on their Databases page. Changing it restarts MariaDB.
+ */
+function DatabaseRemotePanel({ enabled }: { enabled: boolean }) {
+    return (
+        <Panel
+            title="Akses database dari luar"
+            description="Buka MariaDB di port 3306 untuk host yang diizinkan masing-masing akun di halaman Databases. User database tetap hanya bisa masuk dari host yang diizinkan akunnya."
+        >
+            <Form
+                {...updateDatabaseRemoteAccess.form()}
+                options={{ preserveScroll: true }}
+                transform={() => ({ enabled: !enabled })}
+                className="flex flex-wrap items-center gap-4"
+            >
+                {({ processing, errors }) => (
+                    <>
+                        <StatusBadge
+                            status={enabled ? 'active' : 'neutral'}
+                            label={
+                                enabled ? 'Terbuka' : 'Hanya dari server ini'
+                            }
+                        />
+                        <Button
+                            type="submit"
+                            variant={enabled ? 'outline' : 'default'}
+                            disabled={processing}
+                        >
+                            {processing && <Spinner />}
+                            {enabled ? 'Tutup akses luar' : 'Buka akses luar'}
+                        </Button>
+                        <p className="w-full text-xs text-muted-foreground">
+                            MariaDB di-restart, jadi website kehilangan
+                            database-nya beberapa detik. Port 3306 juga perlu
+                            dibuka di firewall penyedia VPS.
+                        </p>
+                        <InputError message={errors.enabled} />
+                    </>
+                )}
+            </Form>
+        </Panel>
+    );
+}
+
 /**
  * Bandwidth is counted from the logs of websites, mail and FTP, per
  * calendar month. Accounts over their package's bandwidth can be

@@ -421,5 +421,18 @@
     "CGI is not included in your package.": "Paket kamu tidak termasuk CGI.",
     "CGI is being turned on for :domain.": "CGI untuk :domain sedang dinyalakan.",
     "CGI is being turned off for :domain.": "CGI untuk :domain sedang dimatikan.",
-    "The limits of :domain were saved.": "Batas :domain disimpan."
+    "The limits of :domain were saved.": "Batas :domain disimpan.",
+    ":host may no longer connect.": ":host tidak bisa terhubung lagi.",
+    "An account can allow at most :limit hosts.": "Satu akun paling banyak mengizinkan :limit host.",
+    "An import into this database is still running.": "Import ke database ini masih berjalan.",
+    "Choose a .sql or .sql.gz file.": "Pilih file .sql atau .sql.gz.",
+    "Database users may connect from :host once it is applied.": "User database bisa terhubung dari :host setelah selesai diterapkan.",
+    "Enter an IP address, a network like 192.168.1.0/24, a prefix like 192.168.1.% or % for any host.": "Isi alamat IP, jaringan seperti 192.168.1.0/24, awalan seperti 192.168.1.% atau % untuk semua host.",
+    "MariaDB now answers from outside, for the hosts accounts allow.": "MariaDB kini menerima koneksi dari luar, untuk host yang diizinkan masing-masing akun.",
+    "MariaDB only answers on this server again.": "MariaDB kembali hanya menerima koneksi dari server ini.",
+    "The database could not be exported. Try again in a moment.": "Database tidak bisa diexport. Coba lagi sebentar lagi.",
+    "The database server could not be changed. Try again in a moment.": "Server database tidak bisa diubah. Coba lagi sebentar lagi.",
+    "The import into :name has started.": "Import ke :name dimulai.",
+    "The tables could not be checked. Try again in a moment.": "Tabel tidak bisa diperiksa. Coba lagi sebentar lagi.",
+    "This host is allowed already.": "Host ini sudah diizinkan."
 }

@@ -12,6 +12,7 @@ use App\Http\Requests\Admin\UpdateServerHostnameRequest;
 use App\Http\Requests\Admin\UpdateServerTimezoneRequest;
 use App\Services\AuditLogger;
 use App\Services\BandwidthService;
+use App\Services\DatabaseToolsService;
 use App\Services\DnsService;
 use App\Services\DomainService;
 use App\Services\MailSendLimitService;
@@ -37,6 +38,7 @@ class ServerSettingController extends Controller
         private DnsService $dns,
         private MailSendLimitService $sendLimits,
         private BandwidthService $bandwidth,
+        private DatabaseToolsService $databaseTools,
         private AuditLogger $audit,
     ) {}
 
@@ -67,6 +69,7 @@ class ServerSettingController extends Controller
             'bandwidth' => [
                 'suspend_over_limit' => $this->bandwidth->suspendsOverLimit(),
             ],
+            'database_remote_access' => $this->databaseTools->remoteAccessEnabled(),
             'mail_limits' => [
                 ...$this->settings->mailSendLimits(),
                 'default_account' => ServerSettingsService::DEFAULT_MAIL_SEND_LIMIT_ACCOUNT,
@@ -259,6 +262,23 @@ class ServerSettingController extends Controller
         $this->bandwidth->setSuspendOverLimit((bool) $validated['suspend_over_limit'], $request->user(), $this->audit);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Bandwidth setting saved.')]);
+
+        return back();
+    }
+
+    /**
+     * Let MariaDB answer from outside, for the hosts accounts allow, or only
+     * on the server. MariaDB restarts.
+     */
+    public function updateDatabaseRemoteAccess(Request $request): RedirectResponse
+    {
+        $validated = $request->validate(['enabled' => ['required', 'boolean']]);
+
+        $this->databaseTools->setRemoteAccess((bool) $validated['enabled'], $request->user());
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => $validated['enabled']
+            ? __('MariaDB now answers from outside, for the hosts accounts allow.')
+            : __('MariaDB only answers on this server again.')]);
 
         return back();
     }

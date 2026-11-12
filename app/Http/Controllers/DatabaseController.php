@@ -4,10 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreDatabaseRequest;
 use App\Models\Database;
+use App\Models\DatabaseRemoteHost;
 use App\Models\DatabaseUser;
 use App\Services\DatabaseService;
+use App\Services\DatabaseToolsService;
+use App\Services\FileManagerService;
 use App\Services\PhpMyAdminService;
 use App\Support\AccountLimits;
+use App\Support\DatabaseHost;
 use App\Support\DatabaseNames;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,7 +21,10 @@ use Inertia\Response;
 
 class DatabaseController extends Controller
 {
-    public function __construct(private DatabaseService $databases) {}
+    public function __construct(
+        private DatabaseService $databases,
+        private DatabaseToolsService $tools,
+    ) {}
 
     /**
      * List the signed-in account's databases and database users, with what
@@ -38,6 +45,9 @@ class DatabaseController extends Controller
                 'size_bytes' => $database->size_bytes,
                 'measured_at' => $database->measured_at?->toIso8601String(),
                 'users' => $database->users->pluck('name')->all(),
+                'import_status' => $database->import_status,
+                'import_error' => $database->import_error,
+                'imported_at' => $database->imported_at?->toIso8601String(),
                 'created_at' => $database->created_at?->toIso8601String(),
             ]);
 
@@ -63,6 +73,16 @@ class DatabaseController extends Controller
             ],
             'limits' => AccountLimits::for($account)->toArray(),
             'connection' => ['host' => 'localhost', 'port' => 3306],
+            'remote' => [
+                'enabled' => $this->tools->remoteAccessEnabled(),
+                'host' => parse_url((string) config('app.url'), PHP_URL_HOST) ?: null,
+                'hosts' => $account->databaseRemoteHosts()->orderBy('host')->get(['id', 'host'])->map(fn (DatabaseRemoteHost $host): array => [
+                    'id' => $host->id,
+                    'host' => $host->host,
+                ])->values(),
+                'max' => DatabaseHost::MAX_PER_ACCOUNT,
+            ],
+            'upload_chunk_bytes' => FileManagerService::chunkBytes(),
             'phpmyadmin' => [
                 'available' => PhpMyAdminService::isAvailable(),
                 'session_minutes' => PhpMyAdminService::sessionMinutes(),

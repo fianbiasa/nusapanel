@@ -15,6 +15,7 @@ use App\Http\Controllers\CertificateRequestController;
 use App\Http\Controllers\CronJobController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DatabaseController;
+use App\Http\Controllers\DatabaseToolsController;
 use App\Http\Controllers\DatabaseUserController;
 use App\Http\Controllers\DnsController;
 use App\Http\Controllers\DomainController;
@@ -75,6 +76,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('databases', [DatabaseController::class, 'index'])->name('databases.index');
         Route::post('databases', [DatabaseController::class, 'store'])->name('databases.store');
         Route::delete('databases/{database}', [DatabaseController::class, 'destroy'])->name('databases.destroy');
+        Route::get('databases/{database}/export', [DatabaseToolsController::class, 'export'])->middleware('throttle:10,1,database-export')->name('databases.export');
+        Route::post('databases/{database}/import', [DatabaseToolsController::class, 'import'])->name('databases.import');
+        Route::post('databases/{database}/maintenance', [DatabaseToolsController::class, 'maintain'])->middleware('throttle:20,1,database-maintenance')->name('databases.maintenance');
+        Route::post('database-remote-hosts', [DatabaseToolsController::class, 'storeRemoteHost'])->name('database-remote-hosts.store');
+        Route::delete('database-remote-hosts/{databaseRemoteHost}', [DatabaseToolsController::class, 'destroyRemoteHost'])->name('database-remote-hosts.destroy');
         Route::post('databases/phpmyadmin', PhpMyAdminController::class)->middleware('throttle:10,1')->name('databases.phpmyadmin');
         Route::post('database-users', [DatabaseUserController::class, 'store'])->name('database-users.store');
         Route::put('database-users/{databaseUser}', [DatabaseUserController::class, 'update'])->name('database-users.update');
@@ -235,6 +241,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('server-settings/hostname-certificate', [ServerSettingController::class, 'issueHostnameCertificate'])
             ->middleware('throttle:5,1,server-certificate')
             ->name('server-settings.hostname-certificate');
+        Route::put('server-settings/database-remote-access', [ServerSettingController::class, 'updateDatabaseRemoteAccess'])
+            ->middleware('throttle:5,1,server-database-remote')
+            ->name('server-settings.database-remote-access');
         Route::put('server-settings/php-uploads', [ServerSettingController::class, 'updatePhpUploads'])
             ->middleware('throttle:10,1,server-uploads')
             ->name('server-settings.php-uploads');

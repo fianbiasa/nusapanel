@@ -260,7 +260,20 @@ class DatabaseService
             'user' => $user->name,
             'password_hash' => $user->password_hash,
             'databases' => $databases,
+            'remote_hosts' => $account->databaseRemoteHosts()->orderBy('host')->pluck('host')->all(),
         ], $account, $actor);
+    }
+
+    /**
+     * Queue the whole state of every user of the account again, e.g. after
+     * the hosts they may connect from changed.
+     */
+    public function reapplyUsers(User $account, ?User $actor): void
+    {
+        $account->databaseUsers()
+            ->where('status', '!=', DatabaseStatus::Deleting)
+            ->orderBy('id')
+            ->each(fn (DatabaseUser $user) => $this->dispatchApplyUser($user, $account, $actor));
     }
 
     /**

@@ -53,14 +53,14 @@ Pembagian level sama seperti DirectAdmin:
 
 ### Database
 
-| Fitur                 | Keterangan                                            | Fase |
-| --------------------- | ----------------------------------------------------- | ---- |
-| Database MariaDB      | ✅ Buat/hapus (nama berawalan `username_`)            | P1   |
-| User database         | ✅ Buat/hapus, ganti password, hak akses per database | P1   |
-| phpMyAdmin SSO        | ✅ Login sekali klik, tanpa ketik password            | P1   |
-| Remote access         | Daftar host/IP yang boleh konek dari luar             | P3   |
-| Import/export         | Upload `.sql`/`.sql.gz`, download dump                | P3   |
-| Check/repair/optimize |                                                       | P3   |
+| Fitur                 | Keterangan                                                                               | Fase |
+| --------------------- | ---------------------------------------------------------------------------------------- | ---- |
+| Database MariaDB      | ✅ Buat/hapus (nama berawalan `username_`)                                               | P1   |
+| User database         | ✅ Buat/hapus, ganti password, hak akses per database                                    | P1   |
+| phpMyAdmin SSO        | ✅ Login sekali klik, tanpa ketik password                                               | P1   |
+| Remote access         | ✅ Daftar host/IP/jaringan yang boleh konek dari luar; dibuka admin di Pengaturan Server | P3   |
+| Import/export         | ✅ Upload `.sql`/`.sql.gz` (dijalankan sebagai akun), download dump `.sql.gz`            | P3   |
+| Check/repair/optimize | ✅ Periksa, perbaiki, optimalkan, analisis semua tabel                                   | P3   |
 
 ### File & FTP
 

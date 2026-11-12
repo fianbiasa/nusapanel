@@ -1,14 +1,21 @@
 package actions
 
 import (
+	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
 	"rayxo/agent/internal/database"
+	"rayxo/agent/internal/files"
 	"rayxo/agent/internal/rpc"
 )
 
@@ -17,6 +24,11 @@ type fakeDatabaseServer struct {
 	calls []string
 	fail  error
 	sizes []database.Size
+	// remote is whether MariaDB answers on every address.
+	remote bool
+	// transfers and helper are those of the methods that move files.
+	transfers fileTransfers
+	helper    fakeHelper
 }
 
 func (f *fakeDatabaseServer) CreateDatabase(_ context.Context, user, name string) error {
@@ -31,8 +43,41 @@ func (f *fakeDatabaseServer) DeleteDatabase(_ context.Context, user, name string
 	return f.fail
 }
 
-func (f *fakeDatabaseServer) ApplyUser(_ context.Context, user, name, hash string, databases []string) error {
-	f.calls = append(f.calls, "user "+user+" "+name+" "+hash+" ["+strings.Join(databases, ",")+"]")
+func (f *fakeDatabaseServer) ApplyUser(_ context.Context, user, name, hash string, databases, remoteHosts []string) error {
+	f.calls = append(f.calls, "user "+user+" "+name+" "+hash+" ["+strings.Join(databases, ",")+"] from ["+strings.Join(remoteHosts, ",")+"]")
+
+	return f.fail
+}
+
+func (f *fakeDatabaseServer) Export(_ context.Context, user, name string, out io.Writer) error {
+	f.calls = append(f.calls, "export "+user+" "+name)
+
+	if f.fail != nil {
+		return f.fail
+	}
+
+	_, err := io.WriteString(out, "-- dump of "+name+"\n")
+
+	return err
+}
+
+func (f *fakeDatabaseServer) Import(_ context.Context, as database.Identity, user, name, file string) error {
+	f.calls = append(f.calls, "import "+user+" "+name+" "+file+" as "+strconv.Itoa(as.UID))
+
+	return f.fail
+}
+
+func (f *fakeDatabaseServer) Maintain(_ context.Context, user, name, operation string) ([]string, error) {
+	f.calls = append(f.calls, operation+" "+user+" "+name)
+
+	return []string{name + ".orders  OK"}, f.fail
+}
+
+func (f *fakeDatabaseServer) RemoteAccess() bool { return f.remote }
+
+func (f *fakeDatabaseServer) SetRemoteAccess(_ context.Context, enabled bool) error {
+	f.calls = append(f.calls, "remote "+strconv.FormatBool(enabled))
+	f.remote = enabled
 
 	return f.fail
 }
@@ -71,7 +116,7 @@ func callDatabase(t *testing.T, system *fakeSystem, server *fakeDatabaseServer, 
 		t.Fatal(err)
 	}
 
-	registered, ok := databaseMethods(system, server)[method]
+	registered, ok := databaseMethods(system, server, server.transfers, &server.helper)[method]
 	if !ok {
 		t.Fatalf("unknown method %s", method)
 	}
@@ -101,13 +146,16 @@ func TestDatabaseMethodsAreRegistered(t *testing.T) {
 	registry := rpc.NewRegistry()
 	Register(registry, Config{})
 
-	for _, name := range []string{"db.create_database", "db.delete_database", "db.apply_user", "db.delete_user", "db.open_sso", "db.close_sso", "db.report"} {
+	for _, name := range []string{
+		"db.create_database", "db.delete_database", "db.apply_user", "db.delete_user", "db.open_sso", "db.close_sso", "db.report",
+		"db.export", "db.import", "db.maintain", "db.set_remote_access",
+	} {
 		if !slices.Contains(registry.Names(), name) {
 			t.Errorf("method %s is not registered", name)
 		}
 	}
 
-	if databaseMethods(newFakeSystem(), &fakeDatabaseServer{})["db.report"].LockKey != nil {
+	if databaseMethods(newFakeSystem(), &fakeDatabaseServer{}, nil, &fakeHelper{})["db.report"].LockKey != nil {
 		t.Fatal("db.report only reads, but locks")
 	}
 }
@@ -137,7 +185,7 @@ func TestDatabaseMethodsReachMariaDB(t *testing.T) {
 
 	want := []string{
 		"create budi budi_shop",
-		"user budi budi_wp " + testHash + " [budi_shop]",
+		"user budi budi_wp " + testHash + " [budi_shop] from []",
 		"drop user budi budi_wp",
 		"owner budi " + testHash + " [budi_shop,budi_blog]",
 		"close owner budi",
@@ -249,5 +297,123 @@ func TestDatabaseReport(t *testing.T) {
 	result, err := callDatabase(t, newFakeSystem(), server, "db.report", map[string]any{})
 	if err != nil || string(result) != `{"databases":[{"name":"budi_shop","size_bytes":1048576}]}` {
 		t.Fatalf("report: %s, %v", result, err)
+	}
+}
+
+func TestApplyUserPassesTheRemoteHostsOn(t *testing.T) {
+	system := newFakeSystem()
+	system.addAccount("budi", 1001)
+	server := &fakeDatabaseServer{}
+
+	if _, err := callDatabase(t, system, server, "db.apply_user", map[string]any{
+		"username": "budi", "user": "budi_wp", "password_hash": testHash, "databases": []string{"budi_shop"},
+		"remote_hosts": []string{"203.0.113.7", "192.168.1.0/255.255.255.0"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if !slices.Equal(server.calls, []string{"user budi budi_wp " + testHash + " [budi_shop] from [203.0.113.7,192.168.1.0/255.255.255.0]"}) {
+		t.Fatalf("calls = %q", server.calls)
+	}
+
+	for _, hosts := range [][]string{{"localhost"}, {"x' OR 1=1"}, {"192.168.1.0/24"}, {"db.example.com"}} {
+		_, err := callDatabase(t, system, server, "db.apply_user", map[string]any{
+			"username": "budi", "user": "budi_wp", "password_hash": testHash, "remote_hosts": hosts,
+		})
+		assertCode(t, err, rpc.CodeInvalidParams)
+	}
+}
+
+func TestExportWritesAGzippedDumpToTheTransfer(t *testing.T) {
+	system := newFakeSystem()
+	system.addAccount("budi", 1001)
+	dir := t.TempDir()
+	server := &fakeDatabaseServer{transfers: files.Transfers{Dir: dir, PanelUID: os.Getuid()}}
+	transfer := strings.Repeat("a", 48)
+
+	if _, err := callDatabase(t, system, server, "db.export", map[string]any{"username": "budi", "database": "budi_shop", "transfer": transfer}); err != nil {
+		t.Fatal(err)
+	}
+
+	file, err := os.Open(filepath.Join(dir, transfer+".download"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+
+	reader, err := gzip.NewReader(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	content, err := io.ReadAll(reader)
+	if err != nil || string(content) != "-- dump of budi_shop\n" {
+		t.Fatalf("dump %q (%v)", content, err)
+	}
+
+	// A failed dump leaves no half download behind.
+	server.fail = database.ErrServer
+	_, err = callDatabase(t, system, server, "db.export", map[string]any{"username": "budi", "database": "budi_shop", "transfer": strings.Repeat("b", 48)})
+	assertCode(t, err, rpc.CodeActionFailed)
+
+	if _, statErr := os.Stat(filepath.Join(dir, strings.Repeat("b", 48)+".download")); !os.IsNotExist(statErr) {
+		t.Fatalf("the failed download is still there (%v)", statErr)
+	}
+}
+
+func TestImportRunsTheFileInTheHomeAndRemovesIt(t *testing.T) {
+	system := newFakeSystem()
+	system.addAccount("budi", 1001)
+	server := &fakeDatabaseServer{}
+	server.helper.result = `{"done":["tmp/shop.sql.gz"],"failed":[]}`
+
+	if _, err := callDatabase(t, system, server, "db.import", map[string]any{
+		"username": "budi", "database": "budi_shop", "path": "tmp/shop.sql.gz", "remove": true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if !slices.Equal(server.calls, []string{"import budi budi_shop /home/budi/tmp/shop.sql.gz as 1001"}) {
+		t.Fatalf("calls = %q", server.calls)
+	}
+
+	if len(server.helper.calls) != 1 || server.helper.calls[0].op != files.OpRemove ||
+		server.helper.calls[0].params != `{"paths":["tmp/shop.sql.gz"]}` || server.helper.calls[0].account.UID != 1001 {
+		t.Fatalf("helper calls = %+v", server.helper.calls)
+	}
+
+	// What MariaDB said reaches the account, and the file still goes.
+	server.fail = &database.ImportError{Message: "ERROR 1064 (42000) at line 3: syntax"}
+	_, err := callDatabase(t, system, server, "db.import", map[string]any{
+		"username": "budi", "database": "budi_shop", "path": "tmp/shop.sql.gz", "remove": true,
+	})
+
+	var rpcErr *rpc.Error
+	if !errors.As(err, &rpcErr) || rpcErr.Message != "ERROR 1064 (42000) at line 3: syntax" || len(server.helper.calls) != 2 {
+		t.Fatalf("got %v, helper calls %d", err, len(server.helper.calls))
+	}
+
+	for _, path := range []string{"", "/etc/shadow", "../sari/x.sql", "tmp/../../sari/x.sql"} {
+		_, err := callDatabase(t, system, server, "db.import", map[string]any{"username": "budi", "database": "budi_shop", "path": path})
+		assertCode(t, err, rpc.CodeInvalidParams)
+	}
+}
+
+func TestMaintainAndRemoteAccess(t *testing.T) {
+	system := newFakeSystem()
+	system.addAccount("budi", 1001)
+	server := &fakeDatabaseServer{}
+
+	result, err := callDatabase(t, system, server, "db.maintain", map[string]any{"username": "budi", "database": "budi_shop", "operation": "repair"})
+	if err != nil || string(result) != `{"lines":["budi_shop.orders  OK"]}` {
+		t.Fatalf("maintain: %s (%v)", result, err)
+	}
+
+	_, err = callDatabase(t, system, server, "db.maintain", map[string]any{"username": "budi", "database": "budi_shop", "operation": "drop"})
+	assertCode(t, err, rpc.CodeInvalidParams)
+
+	result, err = callDatabase(t, system, server, "db.set_remote_access", map[string]any{"enabled": true})
+	if err != nil || string(result) != `{"enabled":true}` || !slices.Contains(server.calls, "remote true") {
+		t.Fatalf("remote access: %s (%v) %q", result, err, server.calls)
 	}
 }

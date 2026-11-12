@@ -1,17 +1,26 @@
 import { Form, Head, useHttp, usePoll } from '@inertiajs/react';
 import {
     Database,
+    Download,
     ExternalLink,
+    FileUp,
     KeyRound,
     Pencil,
     Plus,
     Trash2,
     UserRound,
+    Wrench,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { AffixInput } from '@/components/affix-input';
+import type { RemoteAccess } from '@/components/database-tools';
+import {
+    DatabaseImportForm,
+    DatabaseMaintenanceForm,
+    RemoteAccessPanel,
+} from '@/components/database-tools';
 import { GeneratedPasswordInput } from '@/components/generated-password-input';
 import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
@@ -37,7 +46,12 @@ import {
     store as storeUser,
     update as updateUser,
 } from '@/routes/database-users';
-import { destroy, phpmyadmin, store } from '@/routes/databases';
+import {
+    destroy,
+    exportMethod as exportDatabase,
+    phpmyadmin,
+    store,
+} from '@/routes/databases';
 import type { AccountLimits } from '@/types';
 
 type Status = 'pending' | 'active' | 'failed' | 'deleting';
@@ -49,6 +63,9 @@ type DatabaseRow = {
     size_bytes: number | null;
     measured_at: string | null;
     users: string[];
+    import_status: 'running' | 'done' | 'failed' | null;
+    import_error: string | null;
+    imported_at: string | null;
     created_at: string | null;
 };
 
@@ -68,10 +85,14 @@ type Props = {
     limits: AccountLimits;
     connection: { host: string; port: number };
     phpmyadmin: { available: boolean; session_minutes: number };
+    remote: RemoteAccess;
+    upload_chunk_bytes: number;
 };
 
 type Action =
     | { type: 'delete-database'; database: DatabaseRow }
+    | { type: 'import'; database: DatabaseRow }
+    | { type: 'maintenance'; database: DatabaseRow }
     | { type: 'add-user' }
     | { type: 'edit-user'; user: DatabaseUserRow }
     | { type: 'delete-user'; user: DatabaseUserRow };
@@ -86,6 +107,8 @@ export default function DatabasesIndex({
     limits,
     connection,
     phpmyadmin: phpMyAdmin,
+    remote,
+    upload_chunk_bytes,
 }: Props) {
     const [action, setAction] = useState<Action | null>(null);
     const [dialogOpen, setDialogOpen] = useState(false);
@@ -99,9 +122,10 @@ export default function DatabasesIndex({
 
     // Refresh the lists while the agent is still creating, changing or
     // dropping databases or users.
-    const hasBusyRecords = [...databases, ...database_users].some((row) =>
-        busyStatuses.includes(row.status),
-    );
+    const hasBusyRecords =
+        [...databases, ...database_users].some((row) =>
+            busyStatuses.includes(row.status),
+        ) || databases.some((row) => row.import_status === 'running');
     const { start, stop } = usePoll(
         3000,
         { only: ['databases', 'database_users', 'limits'] },
@@ -205,6 +229,7 @@ export default function DatabasesIndex({
                                             <span className="font-mono font-semibold break-all">
                                                 {database.name}
                                             </span>
+                                            <ImportStatus database={database} />
                                         </td>
                                         <td className={tableStyles.td}>
                                             <StatusBadge
@@ -247,6 +272,58 @@ export default function DatabasesIndex({
                                         </td>
                                         <td className={tableStyles.td}>
                                             <div className="flex justify-end">
+                                                {database.status ===
+                                                    'active' && (
+                                                    <>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            asChild
+                                                        >
+                                                            <a
+                                                                href={exportDatabase.url(
+                                                                    database.id,
+                                                                )}
+                                                                aria-label={`Export ${database.name}`}
+                                                                title="Export (.sql.gz)"
+                                                            >
+                                                                <Download />
+                                                            </a>
+                                                        </Button>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            aria-label={`Import ke ${database.name}`}
+                                                            title="Import"
+                                                            disabled={
+                                                                database.import_status ===
+                                                                'running'
+                                                            }
+                                                            onClick={() =>
+                                                                openDialog({
+                                                                    type: 'import',
+                                                                    database,
+                                                                })
+                                                            }
+                                                        >
+                                                            <FileUp />
+                                                        </Button>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            aria-label={`Periksa tabel ${database.name}`}
+                                                            title="Periksa, perbaiki, optimalkan"
+                                                            onClick={() =>
+                                                                openDialog({
+                                                                    type: 'maintenance',
+                                                                    database,
+                                                                })
+                                                            }
+                                                        >
+                                                            <Wrench />
+                                                        </Button>
+                                                    </>
+                                                )}
                                                 {!busyStatuses.includes(
                                                     database.status,
                                                 ) && (
@@ -373,8 +450,24 @@ export default function DatabasesIndex({
                 )}
             </Panel>
 
+            <RemoteAccessPanel remote={remote} />
+
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
                 <DialogContent className="rounded-2xl">
+                    {action?.type === 'import' && (
+                        <DatabaseImportForm
+                            key={`import-${action.database.id}`}
+                            database={action.database}
+                            chunkBytes={upload_chunk_bytes}
+                            onSuccess={closeDialog}
+                        />
+                    )}
+                    {action?.type === 'maintenance' && (
+                        <DatabaseMaintenanceForm
+                            key={`maintenance-${action.database.id}`}
+                            database={action.database}
+                        />
+                    )}
                     {action?.type === 'delete-database' && (
                         <ConfirmForm
                             key={`database-${action.database.id}`}
@@ -420,6 +513,35 @@ export default function DatabasesIndex({
             </Dialog>
         </>
     );
+}
+
+/** How the last import into the database went, under its name. */
+function ImportStatus({ database }: { database: DatabaseRow }) {
+    if (database.import_status === 'running') {
+        return (
+            <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Spinner className="size-3" /> Import berjalan…
+            </div>
+        );
+    }
+
+    if (database.import_status === 'failed') {
+        return (
+            <div className="mt-1 max-w-md text-xs break-words text-destructive">
+                Import gagal: {database.import_error}
+            </div>
+        );
+    }
+
+    if (database.import_status === 'done' && database.imported_at) {
+        return (
+            <div className="mt-1 text-xs text-muted-foreground">
+                Diimpor {formatDateTime(database.imported_at)}
+            </div>
+        );
+    }
+
+    return null;
 }
 
 type PhpMyAdminTicket = { url: string; ticket: string };

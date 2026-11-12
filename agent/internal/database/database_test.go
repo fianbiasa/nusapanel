@@ -3,7 +3,9 @@ package database
 import (
 	"context"
 	"errors"
+	"io"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -16,10 +18,20 @@ type fakeClient struct {
 	sql     []string
 	answers map[string]string
 	fail    string
+	// programs records other programs run, as "<program> <args>", and
+	// outputs answers them by program.
+	programs []string
+	outputs  map[string]string
 }
 
 func (f *fakeClient) run(_ context.Context, input []byte, program string, args ...string) ([]byte, error) {
-	if program != "/usr/bin/mariadb" || strings.Join(args, " ") != "--batch --raw --skip-column-names" {
+	if program != "/usr/bin/mariadb" {
+		f.programs = append(f.programs, program+" "+strings.Join(args, " "))
+
+		return []byte(f.outputs[program]), nil
+	}
+
+	if strings.Join(args, " ") != "--batch --raw --skip-column-names" {
 		return nil, errors.New("unexpected program " + program + " " + strings.Join(args, " "))
 	}
 
@@ -40,7 +52,7 @@ func (f *fakeClient) run(_ context.Context, input []byte, program string, args .
 }
 
 func newTestManager() (*Manager, *fakeClient) {
-	client := &fakeClient{answers: map[string]string{}}
+	client := &fakeClient{answers: map[string]string{}, outputs: map[string]string{}}
 
 	return New(Config{Run: client.run}), client
 }
@@ -97,15 +109,17 @@ func TestCreateDatabase(t *testing.T) {
 
 func TestDeleteDatabaseRevokesEveryGrantOnIt(t *testing.T) {
 	manager, client := newTestManager()
-	client.answers["FROM mysql.db"] = "budi_wp\nbudi_old\n"
+	client.answers["FROM mysql.db"] = "budi_wp\tlocalhost\nbudi_wp\t203.0.113.7\nbudi_old\tlocalhost\n"
 
 	if err := manager.DeleteDatabase(context.Background(), "budi", "budi_shop"); err != nil {
 		t.Fatal(err)
 	}
 
+	// From every host the users connect from.
 	want := []string{
-		`SELECT User FROM mysql.db WHERE Host = 'localhost' AND Db = 'budi\\_shop';`,
+		`SELECT User, Host FROM mysql.db WHERE Db = 'budi\\_shop';`,
 		"REVOKE ALL PRIVILEGES ON `budi\\_shop`.* FROM 'budi_wp'@'localhost';\n" +
+			"REVOKE ALL PRIVILEGES ON `budi\\_shop`.* FROM 'budi_wp'@'203.0.113.7';\n" +
 			"REVOKE ALL PRIVILEGES ON `budi\\_shop`.* FROM 'budi_old'@'localhost';\n" +
 			"DROP DATABASE IF EXISTS `budi_shop`;",
 	}
@@ -117,21 +131,54 @@ func TestDeleteDatabaseRevokesEveryGrantOnIt(t *testing.T) {
 
 func TestApplyUserSetsThePasswordAndExactlyTheGrants(t *testing.T) {
 	manager, client := newTestManager()
-	// Access to budi_old goes; budi_shop stays; budi_blog is new.
-	client.answers["SELECT Db FROM mysql.db"] = "budi\\_shop\nbudi\\_old\n"
+	// Access to budi_old goes; budi_shop stays; budi_blog is new. The host
+	// the account no longer allows goes; 203.0.113.7 is new.
+	client.answers["SELECT Host FROM mysql.user"] = "localhost\n198.51.100.0/255.255.255.0\n"
+	client.answers["SELECT Host, Db FROM mysql.db"] = "localhost\tbudi\\_shop\nlocalhost\tbudi\\_old\n198.51.100.0/255.255.255.0\tbudi\\_shop\n"
 
-	if err := manager.ApplyUser(context.Background(), "budi", "budi_wp", hash, []string{"budi_shop", "budi_blog"}); err != nil {
+	if err := manager.ApplyUser(context.Background(), "budi", "budi_wp", hash, []string{"budi_shop", "budi_blog"}, []string{"203.0.113.7"}); err != nil {
 		t.Fatal(err)
 	}
 
-	want := "CREATE USER IF NOT EXISTS 'budi_wp'@'localhost' IDENTIFIED BY PASSWORD '" + hash + "';\n" +
+	want := "DROP USER IF EXISTS 'budi_wp'@'198.51.100.0/255.255.255.0';\n" +
+		"CREATE USER IF NOT EXISTS 'budi_wp'@'localhost' IDENTIFIED BY PASSWORD '" + hash + "';\n" +
 		"ALTER USER 'budi_wp'@'localhost' IDENTIFIED BY PASSWORD '" + hash + "';\n" +
 		"REVOKE ALL PRIVILEGES ON `budi\\_old`.* FROM 'budi_wp'@'localhost';\n" +
 		"GRANT ALL PRIVILEGES ON `budi\\_shop`.* TO 'budi_wp'@'localhost';\n" +
-		"GRANT ALL PRIVILEGES ON `budi\\_blog`.* TO 'budi_wp'@'localhost';"
+		"GRANT ALL PRIVILEGES ON `budi\\_blog`.* TO 'budi_wp'@'localhost';\n" +
+		"CREATE USER IF NOT EXISTS 'budi_wp'@'203.0.113.7' IDENTIFIED BY PASSWORD '" + hash + "';\n" +
+		"ALTER USER 'budi_wp'@'203.0.113.7' IDENTIFIED BY PASSWORD '" + hash + "';\n" +
+		"GRANT ALL PRIVILEGES ON `budi\\_shop`.* TO 'budi_wp'@'203.0.113.7';\n" +
+		"GRANT ALL PRIVILEGES ON `budi\\_blog`.* TO 'budi_wp'@'203.0.113.7';"
 
-	if len(client.sql) != 2 || client.sql[1] != want {
+	if len(client.sql) != 3 || client.sql[2] != want {
 		t.Fatalf("sql =\n%s", strings.Join(client.sql, "\n---\n"))
+	}
+}
+
+func TestValidateHost(t *testing.T) {
+	for _, host := range []string{"%", "203.0.113.7", "10.%", "192.168.1.%", "192.168.1.0/255.255.255.0", "10.0.0.0/255.0.0.0", "2001:db8::1"} {
+		if err := ValidateHost(host); err != nil {
+			t.Errorf("%s: %v", host, err)
+		}
+	}
+
+	for _, host := range []string{
+		"", "localhost", "127.0.0.1", "::1", "0.0.0.0", "db.example.com", "%.example.com", "192.168.%.1", "192.168.1.0/24",
+		"192.168.1.0/255.0.255.0", "300.1.1.1", "203.0.113.7'", "203.0.113.7 ", "2001:DB8::1", "fe80::1%eth0", "::ffff:1.2.3.4",
+	} {
+		if err := ValidateHost(host); err == nil {
+			t.Errorf("%q was accepted", host)
+		}
+	}
+
+	many := make([]string, MaxRemoteHosts+1)
+	for i := range many {
+		many[i] = "203.0.113." + strconv.Itoa(i+1)
+	}
+
+	if ValidateHosts(many) == nil || ValidateHosts([]string{"%", "%"}) == nil {
+		t.Error("too many or repeated hosts were accepted")
 	}
 }
 
@@ -140,11 +187,22 @@ func TestApplyUserRefusesWhatIsNotTheAccounts(t *testing.T) {
 	ctx := context.Background()
 
 	cases := []func() error{
-		func() error { return manager.ApplyUser(ctx, "budi", "sari_wp", hash, nil) },
-		func() error { return manager.ApplyUser(ctx, "budi", "budi_wp", hash, []string{"sari_shop"}) },
-		func() error { return manager.ApplyUser(ctx, "budi", "budi_wp", hash, []string{"mysql"}) },
-		func() error { return manager.ApplyUser(ctx, "budi", "budi_wp", "plain password", nil) },
-		func() error { return manager.ApplyUser(ctx, "budi", "budi_wp' OR 1=1 --", hash, nil) },
+		func() error { return manager.ApplyUser(ctx, "budi", "sari_wp", hash, nil, nil) },
+		func() error { return manager.ApplyUser(ctx, "budi", "budi_wp", hash, []string{"sari_shop"}, nil) },
+		func() error { return manager.ApplyUser(ctx, "budi", "budi_wp", hash, []string{"mysql"}, nil) },
+		func() error { return manager.ApplyUser(ctx, "budi", "budi_wp", "plain password", nil, nil) },
+		func() error { return manager.ApplyUser(ctx, "budi", "budi_wp' OR 1=1 --", hash, nil, nil) },
+		func() error { return manager.ApplyUser(ctx, "budi", "budi_wp", hash, nil, []string{"x' OR 1=1"}) },
+		func() error { return manager.ApplyUser(ctx, "budi", "budi_wp", hash, nil, []string{"localhost"}) },
+		func() error { _, err := manager.Maintain(ctx, "budi", "budi_wp", "drop"); return err },
+		func() error { _, err := manager.Maintain(ctx, "budi", "sari_wp", "check"); return err },
+		func() error { return manager.Export(ctx, "budi", "sari_wp", io.Discard) },
+		func() error {
+			return manager.Import(ctx, Identity{Home: "/home/budi"}, "budi", "sari_wp", "/home/budi/x.sql")
+		},
+		func() error {
+			return manager.Import(ctx, Identity{Home: "/home/budi"}, "budi", "budi_wp", "/home/sari/x.sql")
+		},
 		func() error { return manager.CreateDatabase(ctx, "budi", "rayxo") },
 		func() error { return manager.DeleteDatabase(ctx, "budi", "sari_shop") },
 		func() error { return manager.DeleteUser(ctx, "budi", "root") },
@@ -170,23 +228,25 @@ func TestApplyUserRefusesWhatIsNotTheAccounts(t *testing.T) {
 
 func TestApplyOwnerGivesTheAccountNameAccessToItsDatabases(t *testing.T) {
 	manager, client := newTestManager()
-	client.answers["SELECT Db FROM mysql.db"] = "budi\\_old\n"
+	client.answers["SELECT Host, Db FROM mysql.db"] = "localhost\tbudi\\_old\n"
 
 	if err := manager.ApplyOwner(context.Background(), "budi", hash, []string{"budi_shop", "budi_wp"}); err != nil {
 		t.Fatal(err)
 	}
 
-	if client.sql[0] != "SELECT Db FROM mysql.db WHERE Host = 'localhost' AND User = 'budi';" {
-		t.Fatalf("grants looked up with %q", client.sql[0])
+	if client.sql[1] != "SELECT Host, Db FROM mysql.db WHERE User = 'budi';" {
+		t.Fatalf("grants looked up with %q", client.sql[1])
 	}
 
-	want := "CREATE USER IF NOT EXISTS 'budi'@'localhost' IDENTIFIED BY PASSWORD '" + hash + "';\n" +
-		"ALTER USER 'budi'@'localhost' IDENTIFIED BY PASSWORD '" + hash + "';\n" +
+	// The account's own Linux user signs in as it without a password.
+	identified := "IDENTIFIED VIA mysql_native_password USING '" + hash + "' OR unix_socket"
+	want := "CREATE USER IF NOT EXISTS 'budi'@'localhost' " + identified + ";\n" +
+		"ALTER USER 'budi'@'localhost' " + identified + ";\n" +
 		"REVOKE ALL PRIVILEGES ON `budi\\_old`.* FROM 'budi'@'localhost';\n" +
 		"GRANT ALL PRIVILEGES ON `budi\\_shop`.* TO 'budi'@'localhost';\n" +
 		"GRANT ALL PRIVILEGES ON `budi\\_wp`.* TO 'budi'@'localhost';"
 
-	if len(client.sql) != 2 || client.sql[1] != want {
+	if len(client.sql) != 3 || client.sql[2] != want {
 		t.Fatalf("sql =\n%s", strings.Join(client.sql, "\n---\n"))
 	}
 }
@@ -200,7 +260,7 @@ func TestCloseOwnerGivesItAnUnknownPassword(t *testing.T) {
 		}
 	}
 
-	pattern := regexp.MustCompile(`^ALTER USER IF EXISTS 'budi'@'localhost' IDENTIFIED BY PASSWORD '\*[0-9A-F]{40}';$`)
+	pattern := regexp.MustCompile(`^ALTER USER IF EXISTS 'budi'@'localhost' IDENTIFIED VIA mysql_native_password USING '\*[0-9A-F]{40}' OR unix_socket;$`)
 	if len(client.sql) != 2 || !pattern.MatchString(client.sql[0]) || !pattern.MatchString(client.sql[1]) {
 		t.Fatalf("sql = %q", client.sql)
 	}
@@ -213,7 +273,7 @@ func TestCloseOwnerGivesItAnUnknownPassword(t *testing.T) {
 func TestRemoveAccountDropsItsDatabasesAndUsers(t *testing.T) {
 	manager, client := newTestManager()
 	client.answers["information_schema.SCHEMATA WHERE"] = "budi_shop\nbudi_blog\n"
-	client.answers["FROM mysql.user"] = "budi_wp\n"
+	client.answers["FROM mysql.user"] = "budi_wp\tlocalhost\nbudi_wp\t203.0.113.7\n"
 
 	if err := manager.RemoveAccount(context.Background(), "budi"); err != nil {
 		t.Fatal(err)
@@ -225,6 +285,7 @@ func TestRemoveAccountDropsItsDatabasesAndUsers(t *testing.T) {
 
 	want := "DROP USER IF EXISTS 'budi'@'localhost';\n" +
 		"DROP USER IF EXISTS 'budi_wp'@'localhost';\n" +
+		"DROP USER IF EXISTS 'budi_wp'@'203.0.113.7';\n" +
 		"DELETE FROM mysql.db WHERE Db = 'budi\\\\_shop';\n" +
 		"DROP DATABASE IF EXISTS `budi_shop`;\n" +
 		"DELETE FROM mysql.db WHERE Db = 'budi\\\\_blog';\n" +
@@ -250,7 +311,7 @@ func TestRemoveAccountWithoutDatabasesStillDropsTheOwnerUser(t *testing.T) {
 
 func TestLockAccountLocksAndUnlocksItsUsers(t *testing.T) {
 	manager, client := newTestManager()
-	client.answers["FROM mysql.user"] = "budi_wp\nbudi_shop\n"
+	client.answers["FROM mysql.user"] = "budi_wp\tlocalhost\nbudi_shop\tlocalhost\n"
 
 	if err := manager.LockAccount(context.Background(), "budi", true); err != nil {
 		t.Fatal(err)

@@ -95,6 +95,7 @@ class DatabaseManagementTest extends TestCase
                 'user' => 'budi_wp',
                 'password_hash' => '*'.strtoupper(sha1(sha1('correct horse battery', true))),
                 'databases' => ['budi_shop'],
+                'remote_hosts' => [],
             ]],
         ], Task::query()->orderBy('id')->get()->map(fn (Task $task): array => ['action' => $task->action, 'payload' => $task->payload])->all());
 
@@ -214,6 +215,7 @@ class DatabaseManagementTest extends TestCase
             'user' => 'budi_wp',
             'password_hash' => DatabaseUser::hashPassword('a brand new password'),
             'databases' => ['budi_blog'],
+            'remote_hosts' => [],
         ], Task::query()->sole()->payload);
     }
 

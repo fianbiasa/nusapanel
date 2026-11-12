@@ -48,10 +48,6 @@ func Register(registry *rpc.Registry, config Config) {
 		registry.Register(name, method)
 	}
 
-	for name, method := range databaseMethods(sysuser.System{}, databases) {
-		registry.Register(name, method)
-	}
-
 	for name, method := range webMethods(sysuser.System{}, web) {
 		registry.Register(name, method)
 	}
@@ -102,6 +98,10 @@ func Register(registry *rpc.Registry, config Config) {
 	}
 
 	for name, method := range fileMethods(sysuser.System{}, helper, transfers) {
+		registry.Register(name, method)
+	}
+
+	for name, method := range databaseMethods(sysuser.System{}, databases, transfers, helper) {
 		registry.Register(name, method)
 	}
 

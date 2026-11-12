@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 
 	"rayxo/agent/internal/database"
@@ -16,11 +17,16 @@ import (
 type databaseServer interface {
 	CreateDatabase(ctx context.Context, user, name string) error
 	DeleteDatabase(ctx context.Context, user, name string) error
-	ApplyUser(ctx context.Context, user, name, hash string, databases []string) error
+	ApplyUser(ctx context.Context, user, name, hash string, databases, remoteHosts []string) error
 	DeleteUser(ctx context.Context, user, name string) error
 	ApplyOwner(ctx context.Context, user, hash string, databases []string) error
 	CloseOwner(ctx context.Context, user string) error
 	Report(ctx context.Context) ([]database.Size, error)
+	Export(ctx context.Context, user, name string, out io.Writer) error
+	Import(ctx context.Context, as database.Identity, user, name, file string) error
+	Maintain(ctx context.Context, user, name, operation string) ([]string, error)
+	RemoteAccess() bool
+	SetRemoteAccess(ctx context.Context, enabled bool) error
 }
 
 // databaseParams are the params of db.create_database and
@@ -44,6 +50,9 @@ type applyUserParams struct {
 	User         string   `json:"user"`
 	PasswordHash string   `json:"password_hash"`
 	Databases    []string `json:"databases"`
+	// RemoteHosts are the hosts besides this server the user connects
+	// from: those its account allows (see database.ValidateHost).
+	RemoteHosts []string `json:"remote_hosts"`
 }
 
 func (p applyUserParams) account() string { return p.Username }
@@ -52,6 +61,7 @@ func (p applyUserParams) validate() error {
 	errs := []error{
 		database.ValidateName(p.Username, p.User, database.MaxUserName),
 		database.ValidatePasswordHash(p.PasswordHash),
+		database.ValidateHosts(p.RemoteHosts),
 	}
 
 	for _, name := range p.Databases {
@@ -110,14 +120,16 @@ type databaseReport struct {
 
 // databaseActions implements the db.* methods.
 type databaseActions struct {
-	accounts accountActions
-	server   databaseServer
+	accounts  accountActions
+	server    databaseServer
+	transfers fileTransfers
+	helper    fileHelper
 }
 
 // databaseMethods returns the db.* methods by name. Those that change an
 // account lock it, like the account.* methods.
-func databaseMethods(system accountSystem, server databaseServer) map[string]rpc.Method {
-	actions := databaseActions{accounts: accountActions{system: system}, server: server}
+func databaseMethods(system accountSystem, server databaseServer, transfers fileTransfers, helper fileHelper) map[string]rpc.Method {
+	actions := databaseActions{accounts: accountActions{system: system}, server: server, transfers: transfers, helper: helper}
 
 	return map[string]rpc.Method{
 		"db.create_database": {Handler: actions.createDatabase, LockKey: webLockKey[databaseParams]},
@@ -127,6 +139,11 @@ func databaseMethods(system accountSystem, server databaseServer) map[string]rpc
 		"db.open_sso":        {Handler: actions.openSSO, LockKey: webLockKey[openSSOParams]},
 		"db.close_sso":       {Handler: actions.closeSSO, LockKey: webLockKey[closeSSOParams]},
 		"db.report":          {Handler: actions.report},
+		"db.export":          {Handler: actions.export},
+		"db.import":          {Handler: actions.importFile, LockKey: webLockKey[importParams]},
+		"db.maintain":        {Handler: actions.maintain, LockKey: webLockKey[maintainParams]},
+		// Server-wide, like the system.* methods: no account lock.
+		"db.set_remote_access": {Handler: actions.setRemoteAccess},
 	}
 }
 
@@ -178,7 +195,7 @@ func (d databaseActions) applyUser(ctx context.Context, raw json.RawMessage) (an
 		return nil, err
 	}
 
-	if err := d.server.ApplyUser(ctx, params.Username, params.User, params.PasswordHash, params.Databases); err != nil {
+	if err := d.server.ApplyUser(ctx, params.Username, params.User, params.PasswordHash, params.Databases, params.RemoteHosts); err != nil {
 		return nil, databaseError(err, "set up database user "+params.User)
 	}
 

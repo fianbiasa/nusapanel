@@ -23,6 +23,9 @@ use Illuminate\Support\Carbon;
  * @property DatabaseStatus $status
  * @property int|null $size_bytes
  * @property Carbon|null $measured_at
+ * @property string|null $import_status How the last import went: running, done or failed.
+ * @property string|null $import_error What MariaDB said when the last import failed.
+ * @property Carbon|null $imported_at When the last import finished.
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
@@ -43,6 +46,7 @@ class Database extends Model
             'status' => DatabaseStatus::class,
             'size_bytes' => 'integer',
             'measured_at' => 'datetime',
+            'imported_at' => 'datetime',
         ];
     }
 
