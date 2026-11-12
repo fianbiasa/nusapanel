@@ -1,5 +1,8 @@
 import { Form, Head, Link, usePage, usePoll } from '@inertiajs/react';
 import {
+    ArrowRightLeft,
+    Boxes,
+    LogIn,
     MoreHorizontal,
     Package,
     Plus,
@@ -46,15 +49,10 @@ import { Spinner } from '@/components/ui/spinner';
 import { useInitials } from '@/hooks/use-initials';
 import { cn } from '@/lib/utils';
 import { formatDateTime, formatDiskUsage, roleLabels } from '@/lib/format';
-import {
-    bulk,
-    create,
-    destroy,
-    index,
-    suspend,
-    unsuspend,
-} from '@/routes/admin/accounts';
-import { update as updatePackage } from '@/routes/admin/accounts/package';
+import { accountRoutes } from '@/lib/scoped-routes';
+import type { AccountScope } from '@/lib/scoped-routes';
+import { update as updateOwner } from '@/routes/admin/accounts/owner';
+import { update as updateResellerPackage } from '@/routes/admin/accounts/reseller-package';
 import type { AccountStatus, PackageOption, Paginated, Role } from '@/types';
 
 type AccountRow = {
@@ -66,25 +64,68 @@ type AccountRow = {
     status: AccountStatus;
     suspend_reason: string | null;
     owner: string | null;
+    owner_id: number | null;
+    /** Whose packages the account goes on: "admin", or the reseller's id. */
+    packages_of: string;
     package_id: number | null;
     package: string | null;
+    reseller_package_id: number | null;
+    reseller_package: string | null;
+    /** For a reseller, how many accounts it owns. */
+    owned_accounts: number | null;
     domain: string | null;
     /** Megabytes; `used_mb` is null until the server measured the account. */
     disk: { used_mb: number | null; limit_mb: number | null };
     created_at: string | null;
 };
 
-type ActionType = 'suspend' | 'unsuspend' | 'delete' | 'package';
+type ActionType =
+    | 'suspend'
+    | 'unsuspend'
+    | 'delete'
+    | 'package'
+    | 'login-as'
+    | 'transfer'
+    | 'reseller-package';
+
+type Routes = ReturnType<typeof accountRoutes>;
+
+type OwnerOption = { id: number; username: string; role: Role };
+
+type BulkActionType = 'suspend' | 'unsuspend' | 'delete' | 'package';
 
 type AccountAction =
     | { type: ActionType; account: AccountRow }
-    | { type: ActionType; bulk: number[] };
+    | { type: BulkActionType; bulk: number[] };
 
 type Props = {
+    scope: AccountScope;
     accounts: Paginated<AccountRow>;
+    /** The packages the signed-in account's own accounts go on. */
     packages: PackageOption[];
-    filters: { search: string; status: AccountStatus | ''; package: string };
+    /** For administrators: each owner's packages, see `packages_of`. */
+    packageGroups: Record<string, PackageOption[]> | null;
+    resellerPackages: PackageOption[] | null;
+    owners: OwnerOption[] | null;
+    filters: {
+        search: string;
+        status: AccountStatus | '';
+        package: string;
+        role: Role | '';
+        owner: string;
+        sort: AccountSort;
+    };
 };
+
+type AccountSort = 'newest' | 'oldest' | 'username' | 'disk';
+
+/** The orders the list can be sorted in. */
+const sortOptions: { value: AccountSort; label: string }[] = [
+    { value: 'newest', label: 'Terbaru' },
+    { value: 'oldest', label: 'Terlama' },
+    { value: 'username', label: 'Username A–Z' },
+    { value: 'disk', label: 'Disk terbesar' },
+];
 
 /** The statuses the list can be narrowed to, as the status badges name them. */
 const statusFilters: { value: AccountStatus; label: string }[] = [
@@ -101,8 +142,23 @@ const busyStatuses: AccountStatus[] = ['pending', 'deleting'];
 
 const deletableStatuses: AccountStatus[] = ['active', 'suspended', 'failed'];
 
-export default function AccountsIndex({ accounts, packages, filters }: Props) {
+export default function AccountsIndex({
+    scope,
+    accounts,
+    packages,
+    packageGroups,
+    resellerPackages,
+    owners,
+    filters,
+}: Props) {
     const { auth } = usePage().props;
+    const routes = accountRoutes(scope);
+    const isAdmin = scope === 'admin';
+    const [roleFilter, setRoleFilter] = useState(filters.role || 'all');
+    const [ownerFilter, setOwnerFilter] = useState(filters.owner || 'all');
+    const [sort, setSort] = useState<AccountSort>(filters.sort);
+    const packagesFor = (account: AccountRow): PackageOption[] =>
+        isAdmin ? (packageGroups?.[account.packages_of] ?? []) : packages;
     const getInitials = useInitials();
     const [action, setAction] = useState<AccountAction | null>(null);
     const [dialogOpen, setDialogOpen] = useState(false);
@@ -114,7 +170,9 @@ export default function AccountsIndex({ accounts, packages, filters }: Props) {
     const isFiltered =
         filters.search !== '' ||
         filters.status !== '' ||
-        filters.package !== '';
+        filters.package !== '' ||
+        filters.role !== '' ||
+        filters.owner !== '';
 
     // Refresh the list while the agent is still creating or deleting accounts.
     const hasBusyAccounts = accounts.data.some((account) =>
@@ -162,7 +220,7 @@ export default function AccountsIndex({ accounts, packages, filters }: Props) {
                 : current.filter((selectedId) => selectedId !== id),
         );
 
-    const openBulkDialog = (type: ActionType) => {
+    const openBulkDialog = (type: BulkActionType) => {
         setAction({ type, bulk: selectedIds });
         setDialogOpen(true);
     };
@@ -178,10 +236,14 @@ export default function AccountsIndex({ accounts, packages, filters }: Props) {
 
             <PageHeader
                 title="Accounts"
-                description="Akun panel beserta user Linux-nya di server."
+                description={
+                    isAdmin
+                        ? 'Akun panel: akun hosting beserta user Linux-nya di server, reseller, dan administrator.'
+                        : 'Akun hosting milik Anda, dibatasi paket reseller Anda.'
+                }
                 actions={
                     <Button asChild size="lg">
-                        <Link href={create()}>
+                        <Link href={routes.create()}>
                             <Plus />
                             Buat akun
                         </Link>
@@ -195,10 +257,101 @@ export default function AccountsIndex({ accounts, packages, filters }: Props) {
                 description={`${accounts.total} akun`}
                 action={
                     <Form
-                        {...index.form()}
+                        {...routes.index.form()}
                         options={{ preserveState: true, replace: true }}
-                        className="hidden w-full max-w-2xl items-center gap-2 md:flex"
+                        className="hidden w-full max-w-3xl items-center gap-2 md:flex"
                     >
+                        {sort !== 'newest' && (
+                            <input type="hidden" name="sort" value={sort} />
+                        )}
+                        {roleFilter !== 'all' && (
+                            <input
+                                type="hidden"
+                                name="role"
+                                value={roleFilter}
+                            />
+                        )}
+                        <Select
+                            value={sort}
+                            onValueChange={(value) =>
+                                setSort(value as AccountSort)
+                            }
+                        >
+                            <SelectTrigger
+                                aria-label="Urutkan"
+                                className={filterTriggerClass}
+                            >
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="rounded-xl">
+                                {sortOptions.map((option) => (
+                                    <SelectItem
+                                        key={option.value}
+                                        value={option.value}
+                                    >
+                                        {option.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        {ownerFilter !== 'all' && (
+                            <input
+                                type="hidden"
+                                name="owner"
+                                value={ownerFilter}
+                            />
+                        )}
+                        {isAdmin && (
+                            <Select
+                                value={roleFilter}
+                                onValueChange={setRoleFilter}
+                            >
+                                <SelectTrigger
+                                    aria-label="Filter peran"
+                                    className={filterTriggerClass}
+                                >
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent className="rounded-xl">
+                                    <SelectItem value="all">
+                                        Semua peran
+                                    </SelectItem>
+                                    {(
+                                        ['user', 'reseller', 'admin'] as Role[]
+                                    ).map((role) => (
+                                        <SelectItem key={role} value={role}>
+                                            {roleLabels[role]}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        )}
+                        {isAdmin && owners && (
+                            <Select
+                                value={ownerFilter}
+                                onValueChange={setOwnerFilter}
+                            >
+                                <SelectTrigger
+                                    aria-label="Filter pemilik"
+                                    className={filterTriggerClass}
+                                >
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent className="rounded-xl">
+                                    <SelectItem value="all">
+                                        Semua pemilik
+                                    </SelectItem>
+                                    {owners.map((owner) => (
+                                        <SelectItem
+                                            key={owner.id}
+                                            value={String(owner.id)}
+                                        >
+                                            {owner.username}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        )}
                         {statusFilter !== 'all' && (
                             <input
                                 type="hidden"
@@ -322,9 +475,17 @@ export default function AccountsIndex({ accounts, packages, filters }: Props) {
                                     <th className={tableStyles.th}>Domain</th>
                                     <th className={tableStyles.th}>Paket</th>
                                     <th className={tableStyles.th}>Disk</th>
-                                    <th className={tableStyles.th}>Peran</th>
+                                    {isAdmin && (
+                                        <th className={tableStyles.th}>
+                                            Peran
+                                        </th>
+                                    )}
                                     <th className={tableStyles.th}>Status</th>
-                                    <th className={tableStyles.th}>Pemilik</th>
+                                    {isAdmin && (
+                                        <th className={tableStyles.th}>
+                                            Pemilik
+                                        </th>
+                                    )}
                                     <th className={tableStyles.th}>Dibuat</th>
                                     <th className={tableStyles.th}>
                                         <span className="sr-only">Aksi</span>
@@ -380,10 +541,22 @@ export default function AccountsIndex({ accounts, packages, filters }: Props) {
                                             )}
                                         </td>
                                         <td className={tableStyles.td}>
-                                            {account.package ?? (
-                                                <span className="text-muted-foreground">
-                                                    —
-                                                </span>
+                                            {account.role === 'reseller' ? (
+                                                <>
+                                                    {account.reseller_package ??
+                                                        'Tanpa batas'}
+                                                    <p className="text-xs text-muted-foreground">
+                                                        {account.owned_accounts ??
+                                                            0}{' '}
+                                                        akun
+                                                    </p>
+                                                </>
+                                            ) : (
+                                                (account.package ?? (
+                                                    <span className="text-muted-foreground">
+                                                        —
+                                                    </span>
+                                                ))
                                             )}
                                         </td>
                                         <td
@@ -399,9 +572,11 @@ export default function AccountsIndex({ accounts, packages, filters }: Props) {
                                                 account.disk.limit_mb,
                                             )}
                                         </td>
-                                        <td className={tableStyles.td}>
-                                            {roleLabels[account.role]}
-                                        </td>
+                                        {isAdmin && (
+                                            <td className={tableStyles.td}>
+                                                {roleLabels[account.role]}
+                                            </td>
+                                        )}
                                         <td className={tableStyles.td}>
                                             <StatusBadge
                                                 status={account.status}
@@ -413,11 +588,13 @@ export default function AccountsIndex({ accounts, packages, filters }: Props) {
                                                     </p>
                                                 )}
                                         </td>
-                                        <td
-                                            className={`${tableStyles.td} text-muted-foreground`}
-                                        >
-                                            {account.owner ?? '—'}
-                                        </td>
+                                        {isAdmin && (
+                                            <td
+                                                className={`${tableStyles.td} text-muted-foreground`}
+                                            >
+                                                {account.owner ?? '—'}
+                                            </td>
+                                        )}
                                         <td
                                             className={`${tableStyles.td} whitespace-nowrap text-muted-foreground`}
                                         >
@@ -429,10 +606,19 @@ export default function AccountsIndex({ accounts, packages, filters }: Props) {
                                         </td>
                                         <td className={tableStyles.td}>
                                             <RowActions
+                                                scope={scope}
                                                 account={account}
                                                 isProtected={isProtected(
                                                     account,
                                                 )}
+                                                canLoginAs={
+                                                    auth.impersonator ===
+                                                        null &&
+                                                    account.id !==
+                                                        auth.user.id &&
+                                                    account.role !== 'admin' &&
+                                                    account.status === 'active'
+                                                }
                                                 onAction={openDialog}
                                             />
                                         </td>
@@ -455,6 +641,7 @@ export default function AccountsIndex({ accounts, packages, filters }: Props) {
                     {action && 'bulk' in action && (
                         <BulkActionForm
                             key={`bulk-${action.type}`}
+                            routes={routes}
                             type={action.type}
                             ids={action.bulk}
                             packages={packages}
@@ -466,16 +653,53 @@ export default function AccountsIndex({ accounts, packages, filters }: Props) {
                         action.type === 'package' && (
                             <ChangePackageForm
                                 key={`package-${action.account.id}`}
+                                routes={routes}
                                 account={action.account}
-                                packages={packages}
+                                packages={packagesFor(action.account)}
                                 onSuccess={() => setDialogOpen(false)}
                             />
                         )}
                     {action &&
                         'account' in action &&
-                        action.type !== 'package' && (
+                        action.type === 'login-as' && (
+                            <LoginAsForm
+                                key={`login-as-${action.account.id}`}
+                                routes={routes}
+                                account={action.account}
+                            />
+                        )}
+                    {action &&
+                        'account' in action &&
+                        action.type === 'transfer' &&
+                        owners &&
+                        packageGroups && (
+                            <TransferForm
+                                key={`transfer-${action.account.id}`}
+                                account={action.account}
+                                owners={owners}
+                                packageGroups={packageGroups}
+                                onSuccess={() => setDialogOpen(false)}
+                            />
+                        )}
+                    {action &&
+                        'account' in action &&
+                        action.type === 'reseller-package' &&
+                        resellerPackages && (
+                            <ResellerPackageForm
+                                key={`reseller-package-${action.account.id}`}
+                                account={action.account}
+                                packages={resellerPackages}
+                                onSuccess={() => setDialogOpen(false)}
+                            />
+                        )}
+                    {action &&
+                        'account' in action &&
+                        (action.type === 'suspend' ||
+                            action.type === 'unsuspend' ||
+                            action.type === 'delete') && (
                             <AccountActionForm
                                 key={`${action.type}-${action.account.id}`}
+                                routes={routes}
                                 type={action.type}
                                 account={action.account}
                                 onSuccess={() => setDialogOpen(false)}
@@ -488,17 +712,19 @@ export default function AccountsIndex({ accounts, packages, filters }: Props) {
 }
 
 function ChangePackageForm({
+    routes,
     account,
     packages,
     onSuccess,
 }: {
+    routes: Routes;
     account: AccountRow;
     packages: PackageOption[];
     onSuccess: () => void;
 }) {
     return (
         <Form
-            {...updatePackage.form(account.id)}
+            {...routes.updatePackage.form(account.id)}
             options={{ preserveScroll: true }}
             onSuccess={onSuccess}
             className="grid gap-4"
@@ -548,35 +774,44 @@ function ChangePackageForm({
 }
 
 function AccountActionForm({
+    routes,
     type,
     account,
     onSuccess,
 }: {
+    routes: Routes;
     type: 'suspend' | 'unsuspend' | 'delete';
     account: AccountRow;
     onSuccess: () => void;
 }) {
     const username = account.username;
+    const isReseller = account.role === 'reseller';
 
     const copy = {
         suspend: {
-            form: suspend.form(account.id),
+            form: routes.suspend.form(account.id),
             title: `Suspend ${username}?`,
-            description: `${username} akan dikeluarkan dan tidak bisa masuk lagi. Semua website-nya menampilkan halaman "tidak tersedia" dan akunnya dikunci di server.`,
+            description: isReseller
+                ? `${username} akan dikeluarkan dan tidak bisa masuk lagi. Akun-akun hosting miliknya tetap berjalan; suspend akun-akun itu terpisah kalau perlu.`
+                : `${username} akan dikeluarkan dan tidak bisa masuk lagi. Semua website-nya menampilkan halaman "tidak tersedia" dan akunnya dikunci di server.`,
             confirm: 'Suspend akun',
             variant: 'destructive' as const,
         },
         unsuspend: {
-            form: unsuspend.form(account.id),
+            form: routes.unsuspend.form(account.id),
             title: `Buka suspend ${username}?`,
-            description: `${username} bisa masuk lagi, website-nya aktif kembali, dan kuncinya di server dibuka.`,
+            description: isReseller
+                ? `${username} bisa masuk lagi.`
+                : `${username} bisa masuk lagi, website-nya aktif kembali, dan kuncinya di server dibuka.`,
             confirm: 'Buka suspend',
             variant: 'default' as const,
         },
         delete: {
-            form: destroy.form(account.id),
+            form: routes.destroy.form(account.id),
             title: `Hapus ${username}?`,
-            description: `Akun ${username} beserta semua file dan website-nya dihapus dari server. Tindakan ini tidak bisa dibatalkan.`,
+            description: isReseller
+                ? `Reseller ${username} beserta paket-paketnya dihapus dari panel. Reseller harus sudah tidak punya akun hosting; pindahkan atau hapus akun-akunnya dulu.`
+                : `Akun ${username} beserta semua file dan website-nya dihapus dari server. Tindakan ini tidak bisa dibatalkan.`,
             confirm: 'Hapus akun',
             variant: 'destructive' as const,
         },
@@ -637,22 +872,36 @@ function AccountActionForm({
 
 /** The "⋯" menu of one account row, with the actions its status allows. */
 function RowActions({
+    scope,
     account,
     isProtected,
+    canLoginAs,
     onAction,
 }: {
+    scope: AccountScope;
     account: AccountRow;
     isProtected: boolean;
+    canLoginAs: boolean;
     onAction: (type: ActionType, account: AccountRow) => void;
 }) {
     const canChangePackage =
         account.role === 'user' && account.status !== 'deleting';
+    const canTransfer = scope === 'admin' && canChangePackage;
+    const canChangeResellerPackage =
+        scope === 'admin' && account.role === 'reseller';
     const canSuspend = account.status === 'active' && !isProtected;
     const canUnsuspend = account.status === 'suspended';
     const canDelete =
         deletableStatuses.includes(account.status) && !isProtected;
 
-    if (!canChangePackage && !canSuspend && !canUnsuspend && !canDelete) {
+    if (
+        !canLoginAs &&
+        !canChangePackage &&
+        !canChangeResellerPackage &&
+        !canSuspend &&
+        !canUnsuspend &&
+        !canDelete
+    ) {
         return null;
     }
 
@@ -672,11 +921,34 @@ function RowActions({
                     align="end"
                     className="min-w-44 rounded-xl"
                 >
+                    {canLoginAs && (
+                        <DropdownMenuItem
+                            onSelect={() => onAction('login-as', account)}
+                        >
+                            <LogIn /> Masuk sebagai
+                        </DropdownMenuItem>
+                    )}
                     {canChangePackage && (
                         <DropdownMenuItem
                             onSelect={() => onAction('package', account)}
                         >
                             <Package /> Ganti paket
+                        </DropdownMenuItem>
+                    )}
+                    {canChangeResellerPackage && (
+                        <DropdownMenuItem
+                            onSelect={() =>
+                                onAction('reseller-package', account)
+                            }
+                        >
+                            <Boxes /> Ganti paket reseller
+                        </DropdownMenuItem>
+                    )}
+                    {canTransfer && (
+                        <DropdownMenuItem
+                            onSelect={() => onAction('transfer', account)}
+                        >
+                            <ArrowRightLeft /> Pindah pemilik
                         </DropdownMenuItem>
                     )}
                     {canSuspend && (
@@ -714,7 +986,7 @@ function BulkBar({
     onClear,
 }: {
     count: number;
-    onAction: (type: ActionType) => void;
+    onAction: (type: BulkActionType) => void;
     onClear: () => void;
 }) {
     return (
@@ -759,12 +1031,14 @@ function BulkBar({
 
 /** The confirmation of a bulk action, with what the action needs. */
 function BulkActionForm({
+    routes,
     type,
     ids,
     packages,
     onSuccess,
 }: {
-    type: ActionType;
+    routes: Routes;
+    type: BulkActionType;
     ids: number[];
     packages: PackageOption[];
     onSuccess: () => void;
@@ -807,7 +1081,7 @@ function BulkActionForm({
 
     return (
         <Form
-            {...bulk.form()}
+            {...routes.bulk.form()}
             options={{ preserveScroll: true }}
             onSuccess={onSuccess}
             className="grid gap-4"
@@ -888,6 +1162,221 @@ function BulkActionForm({
                         >
                             {processing && <Spinner />}
                             {copy.confirm}
+                        </Button>
+                    </DialogFooter>
+                </>
+            )}
+        </Form>
+    );
+}
+
+/**
+ * Confirm signing in as the account. The page reloads as that account; a
+ * bar at the top leads back.
+ */
+function LoginAsForm({
+    routes,
+    account,
+}: {
+    routes: Routes;
+    account: AccountRow;
+}) {
+    return (
+        <Form {...routes.loginAs.form(account.id)} className="grid gap-4">
+            {({ processing, errors }) => (
+                <>
+                    <DialogHeader>
+                        <DialogTitle>
+                            Masuk sebagai {account.username}?
+                        </DialogTitle>
+                        <DialogDescription>
+                            Anda melihat dan mengelola panel persis seperti{' '}
+                            {account.username}. Semua yang Anda lakukan tercatat
+                            di audit log atas nama Anda. Kata sandi, email, dan
+                            2FA {account.username} tidak bisa diubah dari sana.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <InputError message={errors.account} />
+
+                    <DialogFooter className="gap-2">
+                        <DialogClose asChild>
+                            <Button type="button" variant="secondary">
+                                Batal
+                            </Button>
+                        </DialogClose>
+                        <Button type="submit" disabled={processing}>
+                            {processing ? <Spinner /> : <LogIn />}
+                            Masuk sebagai {account.username}
+                        </Button>
+                    </DialogFooter>
+                </>
+            )}
+        </Form>
+    );
+}
+
+/**
+ * Move a hosting account to another administrator or reseller, on one of
+ * the new owner's packages.
+ */
+function TransferForm({
+    account,
+    owners,
+    packageGroups,
+    onSuccess,
+}: {
+    account: AccountRow;
+    owners: OwnerOption[];
+    packageGroups: Record<string, PackageOption[]>;
+    onSuccess: () => void;
+}) {
+    const choices = owners.filter((owner) => owner.id !== account.owner_id);
+    const [ownerId, setOwnerId] = useState(
+        choices[0] ? String(choices[0].id) : '',
+    );
+    const owner = choices.find((choice) => String(choice.id) === ownerId);
+    const packages = owner
+        ? (packageGroups[
+              owner.role === 'reseller' ? String(owner.id) : 'admin'
+          ] ?? [])
+        : [];
+
+    return (
+        <Form
+            {...updateOwner.form(account.id)}
+            options={{ preserveScroll: true }}
+            onSuccess={onSuccess}
+            className="grid gap-4"
+        >
+            {({ processing, errors }) => (
+                <>
+                    <DialogHeader>
+                        <DialogTitle>
+                            Pindahkan {account.username} ke pemilik lain
+                        </DialogTitle>
+                        <DialogDescription>
+                            Akun ini dikelola pemilik barunya, dengan salah satu
+                            paket milik pemilik itu. Website dan datanya tidak
+                            berubah. Jatah reseller tujuan tetap berlaku.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="grid gap-2">
+                        <Label htmlFor="owner_id">Pemilik baru</Label>
+                        <input type="hidden" name="owner_id" value={ownerId} />
+                        <Select value={ownerId} onValueChange={setOwnerId}>
+                            <SelectTrigger
+                                id="owner_id"
+                                aria-invalid={
+                                    errors.owner_id ? true : undefined
+                                }
+                            >
+                                <SelectValue placeholder="Pilih pemilik" />
+                            </SelectTrigger>
+                            <SelectContent className="rounded-xl">
+                                {choices.map((choice) => (
+                                    <SelectItem
+                                        key={choice.id}
+                                        value={String(choice.id)}
+                                    >
+                                        {choice.username} ·{' '}
+                                        {roleLabels[choice.role]}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <InputError message={errors.owner_id} />
+                    </div>
+
+                    <div className="grid gap-2">
+                        <Label htmlFor="transfer-package">Paket</Label>
+                        <PackageSelect
+                            key={ownerId}
+                            id="transfer-package"
+                            packages={packages}
+                            defaultValue={packages[0]?.id ?? null}
+                            invalid={Boolean(errors.package_id)}
+                        />
+                        <InputError message={errors.package_id} />
+                    </div>
+
+                    <InputError message={errors.account} />
+
+                    <DialogFooter className="gap-2">
+                        <DialogClose asChild>
+                            <Button type="button" variant="secondary">
+                                Batal
+                            </Button>
+                        </DialogClose>
+                        <Button
+                            type="submit"
+                            disabled={processing || ownerId === ''}
+                        >
+                            {processing && <Spinner />}
+                            Pindahkan akun
+                        </Button>
+                    </DialogFooter>
+                </>
+            )}
+        </Form>
+    );
+}
+
+/** Put a reseller on another reseller package, or none (no limits). */
+function ResellerPackageForm({
+    account,
+    packages,
+    onSuccess,
+}: {
+    account: AccountRow;
+    packages: PackageOption[];
+    onSuccess: () => void;
+}) {
+    return (
+        <Form
+            {...updateResellerPackage.form(account.id)}
+            options={{ preserveScroll: true }}
+            onSuccess={onSuccess}
+            className="grid gap-4"
+        >
+            {({ processing, errors }) => (
+                <>
+                    <DialogHeader>
+                        <DialogTitle>
+                            Ganti paket reseller {account.username}
+                        </DialogTitle>
+                        <DialogDescription>
+                            Jatah baru langsung berlaku. Kalau reseller ini
+                            sudah membagikan lebih dari jatah barunya,
+                            akun-akunnya tetap jalan, tapi ia tidak bisa
+                            menambah lagi.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="grid gap-2">
+                        <Label htmlFor="reseller_package_id">
+                            Paket reseller
+                        </Label>
+                        <PackageSelect
+                            id="reseller_package_id"
+                            name="reseller_package_id"
+                            packages={packages}
+                            defaultValue={account.reseller_package_id}
+                            invalid={Boolean(errors.reseller_package_id)}
+                        />
+                        <InputError message={errors.reseller_package_id} />
+                    </div>
+
+                    <DialogFooter className="gap-2">
+                        <DialogClose asChild>
+                            <Button type="button" variant="secondary">
+                                Batal
+                            </Button>
+                        </DialogClose>
+                        <Button type="submit" disabled={processing}>
+                            {processing && <Spinner />}
+                            Simpan paket reseller
                         </Button>
                     </DialogFooter>
                 </>

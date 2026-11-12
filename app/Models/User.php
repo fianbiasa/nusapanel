@@ -22,10 +22,11 @@ use Laravel\Fortify\PasskeyAuthenticatable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
 
 /**
- * A panel account. Admins, resellers and users all live in this table,
- * and every account is also a Linux user on the server.
+ * A panel account. Admins, resellers and users all live in this table;
+ * only hosting accounts (users) are also Linux users on the server.
+ * A user's owner is the admin or reseller that manages it.
  *
- * `role`, `status`, `owner_id` and `package_id` are deliberately not mass
+ * `role`, `status`, `owner_id`, `package_id` and `reseller_package_id` are deliberately not mass
  * assignable so that profile forms can never escalate privileges.
  *
  * @property int $id
@@ -39,6 +40,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property Role $role
  * @property int|null $owner_id
  * @property int|null $package_id Null for accounts without limits.
+ * @property int|null $reseller_package_id A reseller's allowance; null for other accounts and unlimited resellers.
  * @property AccountStatus $status
  * @property string|null $suspend_reason
  * @property Carbon|null $phpmyadmin_expires_at When the open phpMyAdmin session ends; null while none is open.
@@ -70,6 +72,7 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
             'uid' => 'integer',
             'gid' => 'integer',
             'package_id' => 'integer',
+            'reseller_package_id' => 'integer',
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'role' => Role::class,
@@ -109,6 +112,16 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     public function package(): BelongsTo
     {
         return $this->belongsTo(Package::class);
+    }
+
+    /**
+     * What this reseller may give out to its accounts, if it is limited.
+     *
+     * @return BelongsTo<ResellerPackage, $this>
+     */
+    public function resellerPackage(): BelongsTo
+    {
+        return $this->belongsTo(ResellerPackage::class);
     }
 
     /**
@@ -214,5 +227,19 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     public function isAdmin(): bool
     {
         return $this->role === Role::Admin;
+    }
+
+    public function isReseller(): bool
+    {
+        return $this->role === Role::Reseller;
+    }
+
+    /**
+     * Whether the account lives only in the panel: administrators and
+     * resellers have no Linux user, home or websites on the server.
+     */
+    public function isPanelOnly(): bool
+    {
+        return $this->role !== Role::User;
     }
 }

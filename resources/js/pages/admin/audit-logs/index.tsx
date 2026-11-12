@@ -10,6 +10,8 @@ type AuditLogRow = {
     id: number;
     action: string;
     actor: string | null;
+    /** Who was signed in as the actor ("login as"), if anyone. */
+    impersonator: string | null;
     subject: string | null;
     ip_address: string | null;
     changes: Record<string, unknown> | null;
@@ -78,6 +80,12 @@ export default function AuditLogsIndex({
                                         </td>
                                         <td className={tableStyles.td}>
                                             {log.actor ?? '—'}
+                                            {log.impersonator && (
+                                                <p className="text-xs text-muted-foreground">
+                                                    oleh {log.impersonator}{' '}
+                                                    (masuk sebagai)
+                                                </p>
+                                            )}
                                         </td>
                                         <td className={tableStyles.td}>
                                             {log.subject ?? '—'}

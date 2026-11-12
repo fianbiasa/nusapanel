@@ -4,11 +4,13 @@ namespace App\Services;
 
 use App\Models\Package;
 use App\Models\User;
+use App\Support\ResellerLimits;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Creates, changes and deletes hosting packages. Accounts on a package
+ * Creates, changes and deletes hosting packages, of the administrators or
+ * of a reseller, whose packages must fit its reseller package. Accounts on a package
  * follow its new limits right away; when its disk or inode limit changes,
  * their disk quotas on the server are queued for the agent.
  */
@@ -26,6 +28,10 @@ class PackageService
      */
     public function create(array $data, User $actor): Package
     {
+        if ($actor->isReseller()) {
+            ResellerLimits::for($actor)->ensurePackageFits($data);
+        }
+
         return DB::transaction(function () use ($data, $actor): Package {
             $package = new Package($data);
 
@@ -46,6 +52,12 @@ class PackageService
      */
     public function update(Package $package, array $data, User $actor): void
     {
+        $owner = $package->owner;
+
+        if ($owner !== null && $owner->isReseller()) {
+            ResellerLimits::for($owner)->ensurePackageChangeFits($package, $data);
+        }
+
         $package->fill($data);
 
         if (! $package->isDirty()) {

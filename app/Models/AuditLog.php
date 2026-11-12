@@ -59,6 +59,16 @@ class AuditLog extends Model
     }
 
     /**
+     * Who was signed in as the actor ("login as") when it acted.
+     *
+     * @return BelongsTo<User, $this>
+     */
+    public function impersonator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'impersonator_id');
+    }
+
+    /**
      * The record the action was performed on, if any.
      *
      * @return MorphTo<Model, $this>

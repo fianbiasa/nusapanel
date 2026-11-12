@@ -11,6 +11,7 @@ use App\Models\Domain;
 use App\Models\Task;
 use App\Models\User;
 use App\Support\AccountLimits;
+use App\Support\ResellerLimits;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -21,8 +22,9 @@ class DashboardController extends Controller
     /**
      * Show the dashboard. Admins get counts for the whole server, recent
      * activity and live server information from the agent (deferred, so a
-     * slow agent never blocks the page); hosting accounts get their own
-     * domains and what their package allows.
+     * slow agent never blocks the page); resellers get their accounts and
+     * what they use and give out against their reseller package; hosting
+     * accounts get their own domains and what their package allows.
      */
     public function __invoke(Request $request, AgentClient $agent): Response
     {
@@ -33,6 +35,11 @@ class DashboardController extends Controller
             $props['stats'] = $this->serverStats();
             $props['recentActivity'] = $this->recentActivity();
             $props['systemInfo'] = Inertia::defer(fn (): array => $this->systemInfo($agent));
+        } elseif ($user->isReseller()) {
+            $user->loadMissing('resellerPackage');
+
+            $props['stats'] = ['accounts' => $this->countByStatus(User::query()->where('owner_id', $user->id)->where('role', Role::User))];
+            $props['resellerLimits'] = ResellerLimits::for($user)->toArray();
         } elseif ($user->hasRole(Role::User)) {
             $props['stats'] = ['domains' => $this->countByStatus($user->domains()->getQuery())];
             $props['domains'] = $user->domains()

@@ -7,11 +7,17 @@ use App\Http\Requests\Admin\StorePackageRequest;
 use App\Http\Requests\Admin\UpdatePackageRequest;
 use App\Models\Package;
 use App\Services\PackageService;
+use App\Support\ResellerLimits;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
 
+/**
+ * Hosting packages, for administrators (the administrators' packages,
+ * under /admin) and for resellers (their own packages, under /reseller).
+ */
 class PackageController extends Controller
 {
     public function __construct(private PackageService $packages) {}
@@ -19,15 +25,17 @@ class PackageController extends Controller
     /**
      * List the packages by name, with the number of accounts on each.
      */
-    public function index(): Response
+    public function index(Request $request): Response
     {
         $packages = Package::query()
+            ->handedOutBy($request->user())
             ->withCount('accounts')
             ->orderBy('name')
             ->get()
             ->map(fn (Package $package): array => $this->packageData($package));
 
         return Inertia::render('admin/packages/index', [
+            'scope' => $this->scope($request),
             'packages' => $packages,
         ]);
     }
@@ -35,9 +43,12 @@ class PackageController extends Controller
     /**
      * Show the form for creating a package.
      */
-    public function create(): Response
+    public function create(Request $request): Response
     {
-        return Inertia::render('admin/packages/create');
+        return Inertia::render('admin/packages/create', [
+            'scope' => $this->scope($request),
+            'resellerLimits' => $this->resellerLimits($request),
+        ]);
     }
 
     /**
@@ -52,18 +63,22 @@ class PackageController extends Controller
             'message' => __('Package :name created.', ['name' => $package->name]),
         ]);
 
-        return to_route('admin.packages.index');
+        return to_route($this->scope($request).'.packages.index');
     }
 
     /**
      * Show the form for changing a package.
      */
-    public function edit(Package $package): Response
+    public function edit(Request $request, Package $package): Response
     {
+        Gate::authorize('manage', $package);
+
         $package->loadCount('accounts');
 
         return Inertia::render('admin/packages/edit', [
+            'scope' => $this->scope($request),
             'package' => $this->packageData($package),
+            'resellerLimits' => $this->resellerLimits($request),
         ]);
     }
 
@@ -79,7 +94,7 @@ class PackageController extends Controller
             'message' => __('Package :name saved.', ['name' => $package->name]),
         ]);
 
-        return to_route('admin.packages.index');
+        return to_route($this->scope($request).'.packages.index');
     }
 
     /**
@@ -87,6 +102,8 @@ class PackageController extends Controller
      */
     public function destroy(Request $request, Package $package): RedirectResponse
     {
+        Gate::authorize('manage', $package);
+
         $this->packages->delete($package, $request->user());
 
         Inertia::flash('toast', [
@@ -95,6 +112,37 @@ class PackageController extends Controller
         ]);
 
         return back();
+    }
+
+    /**
+     * Which area the request came from: "reseller" for a reseller's own
+     * packages, "admin" for the administrators'.
+     */
+    private function scope(Request $request): string
+    {
+        return $request->user()->isReseller() ? 'reseller' : 'admin';
+    }
+
+    /**
+     * For a reseller, the limits of its reseller package, which its own
+     * packages may not go over; null for administrators.
+     *
+     * @return array<string, int|null>|null
+     */
+    private function resellerLimits(Request $request): ?array
+    {
+        $user = $request->user();
+
+        if (! $user->isReseller()) {
+            return null;
+        }
+
+        $limits = ResellerLimits::for($user);
+
+        return [
+            ...array_combine(Package::LIMITS, array_map(fn (string $key): ?int => $limits->limit($key), Package::LIMITS)),
+            'ssl' => $limits->allowsSsl() ? 1 : 0,
+        ];
     }
 
     /**

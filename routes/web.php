@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\DnsController as AdminDnsController;
 use App\Http\Controllers\Admin\MailQueueController;
 use App\Http\Controllers\Admin\PackageController;
+use App\Http\Controllers\Admin\ResellerPackageController;
 use App\Http\Controllers\Admin\ServerSettingController;
 use App\Http\Controllers\Admin\ServiceController;
 use App\Http\Controllers\Admin\TaskController;
@@ -18,6 +19,7 @@ use App\Http\Controllers\DomainController;
 use App\Http\Controllers\EmailController;
 use App\Http\Controllers\FileManagerController;
 use App\Http\Controllers\FtpAccountController;
+use App\Http\Controllers\ImpersonationController;
 use App\Http\Controllers\MailboxRulesController;
 use App\Http\Controllers\MailDnsCheckController;
 use App\Http\Controllers\MailForwarderController;
@@ -119,6 +121,32 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::delete('redirects/{urlRedirect}', [UrlRedirectController::class, 'destroy'])->name('redirects.destroy');
     });
 
+    // A reseller's area: the hosting accounts it owns and its own packages,
+    // on the same controllers as the administrators', limited to what the
+    // reseller owns (see UserPolicy and PackagePolicy).
+    Route::middleware('role:reseller')->prefix('reseller')->name('reseller.')->group(function () {
+        Route::get('accounts', [AccountController::class, 'index'])->name('accounts.index');
+        Route::get('accounts/create', [AccountController::class, 'create'])->name('accounts.create');
+        Route::post('accounts', [AccountController::class, 'store'])->name('accounts.store');
+        Route::post('accounts/bulk', [AccountController::class, 'bulk'])->name('accounts.bulk');
+        Route::post('accounts/{account}/suspend', [AccountController::class, 'suspend'])->name('accounts.suspend');
+        Route::post('accounts/{account}/unsuspend', [AccountController::class, 'unsuspend'])->name('accounts.unsuspend');
+        Route::put('accounts/{account}/package', [AccountController::class, 'updatePackage'])->name('accounts.package.update');
+        Route::delete('accounts/{account}', [AccountController::class, 'destroy'])->name('accounts.destroy');
+        Route::post('accounts/{account}/login-as', [ImpersonationController::class, 'store'])
+            ->middleware('throttle:30,1,login-as')
+            ->name('accounts.login-as');
+        Route::get('packages', [PackageController::class, 'index'])->name('packages.index');
+        Route::get('packages/create', [PackageController::class, 'create'])->name('packages.create');
+        Route::post('packages', [PackageController::class, 'store'])->name('packages.store');
+        Route::get('packages/{package}/edit', [PackageController::class, 'edit'])->name('packages.edit');
+        Route::put('packages/{package}', [PackageController::class, 'update'])->name('packages.update');
+        Route::delete('packages/{package}', [PackageController::class, 'destroy'])->name('packages.destroy');
+    });
+
+    // Back to one's own account after "login as".
+    Route::delete('impersonation', [ImpersonationController::class, 'destroy'])->name('impersonation.destroy');
+
     Route::middleware('role:admin')->prefix('admin')->name('admin.')->group(function () {
         Route::get('accounts', [AccountController::class, 'index'])->name('accounts.index');
         Route::get('accounts/create', [AccountController::class, 'create'])->name('accounts.create');
@@ -128,6 +156,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('accounts/{account}/unsuspend', [AccountController::class, 'unsuspend'])->name('accounts.unsuspend');
         Route::put('accounts/{account}/package', [AccountController::class, 'updatePackage'])->name('accounts.package.update');
         Route::delete('accounts/{account}', [AccountController::class, 'destroy'])->name('accounts.destroy');
+        Route::put('accounts/{account}/reseller-package', [AccountController::class, 'updateResellerPackage'])->name('accounts.reseller-package.update');
+        Route::put('accounts/{account}/owner', [AccountController::class, 'transfer'])->name('accounts.owner.update');
+        Route::post('accounts/{account}/login-as', [ImpersonationController::class, 'store'])
+            ->middleware('throttle:30,1,login-as')
+            ->name('accounts.login-as');
+        Route::get('reseller-packages', [ResellerPackageController::class, 'index'])->name('reseller-packages.index');
+        Route::get('reseller-packages/create', [ResellerPackageController::class, 'create'])->name('reseller-packages.create');
+        Route::post('reseller-packages', [ResellerPackageController::class, 'store'])->name('reseller-packages.store');
+        Route::get('reseller-packages/{resellerPackage}/edit', [ResellerPackageController::class, 'edit'])->name('reseller-packages.edit');
+        Route::put('reseller-packages/{resellerPackage}', [ResellerPackageController::class, 'update'])->name('reseller-packages.update');
+        Route::delete('reseller-packages/{resellerPackage}', [ResellerPackageController::class, 'destroy'])->name('reseller-packages.destroy');
         Route::get('packages', [PackageController::class, 'index'])->name('packages.index');
         Route::get('packages/create', [PackageController::class, 'create'])->name('packages.create');
         Route::post('packages', [PackageController::class, 'store'])->name('packages.store');

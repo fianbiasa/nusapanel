@@ -15,13 +15,14 @@ class AuditLogController extends Controller
     public function index(): Response
     {
         $logs = AuditLog::query()
-            ->with('actor:id,username')
+            ->with(['actor:id,username', 'impersonator:id,username'])
             ->latest('id')
             ->paginate(50)
             ->through(fn (AuditLog $log): array => [
                 'id' => $log->id,
                 'action' => $log->action,
                 'actor' => $log->actor?->username,
+                'impersonator' => $log->impersonator?->username,
                 'subject' => $log->subject_type === null
                     ? null
                     : class_basename($log->subject_type).' #'.$log->subject_id,

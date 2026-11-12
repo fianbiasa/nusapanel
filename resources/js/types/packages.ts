@@ -46,3 +46,44 @@ export type AccountLimits = {
     measured_at: string | null;
     quota_enabled: boolean | null;
 };
+
+/** A quantity a reseller package limits: the number of accounts, then those of a hosting package. */
+export type ResellerQuotaKey = 'accounts' | QuotaKey;
+
+/** A reseller package as the admin pages show it. */
+export type ResellerPackage = {
+    id: number;
+    name: string;
+    description: string | null;
+    limits: Record<ResellerQuotaKey, number | null>;
+    ssl: boolean;
+    oversell: boolean;
+    resellers_count: number;
+};
+
+/**
+ * For a reseller: the limits of its reseller package, which its own
+ * packages may not go over; `ssl` is 1 when it may give SSL.
+ */
+export type ResellerPackageLimits = Record<QuotaKey, number | null> & {
+    ssl: number;
+};
+
+/**
+ * What a reseller's package allows, how much its accounts use together
+ * (`used`, null while not measured) and how much their packages give out
+ * (`allocated`, null when a package does not limit it).
+ */
+export type ResellerLimits = {
+    package: string | null;
+    oversell: boolean;
+    ssl: boolean;
+    quotas: Record<
+        ResellerQuotaKey,
+        {
+            limit: number | null;
+            used: number | null;
+            allocated: number | null;
+        }
+    >;
+};

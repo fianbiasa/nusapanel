@@ -17,6 +17,6 @@ class StorePackageRequest extends FormRequest
      */
     public function rules(): array
     {
-        return $this->packageRules();
+        return $this->packageRules($this->user());
     }
 }

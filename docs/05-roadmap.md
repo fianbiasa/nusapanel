@@ -179,6 +179,10 @@ Semua fitur P2 sudah ada, terpasang di server produksi dan dirilis sebagai v0.6.
 
 ## P3 — Reseller, statistik, API
 
+**Status:**
+
+- Reseller inti ✅: admin membuat reseller dan admin lain (akun panel saja, tanpa user Linux), dan mengatur paket reseller: jumlah akun, kuota yang boleh dibagikan (disk, inode, bandwidth, domain, subdomain, pointer, email, forwarder, database, FTP, cron), SSL, dan overselling. Reseller punya area sendiri (`/reseller`): dashboard dengan pemakaian dan alokasi dibanding jatahnya, daftar akun hosting miliknya (cari, filter, urutkan, aksi massal), buat/suspend/hapus akun, dan paket miliknya sendiri yang tidak boleh melebihi jatahnya. Jumlah akun selalu dibatasi; tanpa overselling, paket akun-akunnya dijumlah tidak boleh melebihi jatah, jadi setiap akun wajib punya paket yang membatasi kuota yang dibatasi jatah. Nama paket unik per pemilik. Admin memindahkan akun ke pemilik lain (paket harus milik pemilik baru, jatah reseller tujuan berlaku) dan mengganti paket reseller. Reseller yang masih punya akun tidak bisa dihapus; suspend reseller hanya memblokir login-nya. Login as: admin ke reseller atau akun hosting, reseller ke akunnya sendiri, tercatat di audit log (`impersonator_id` di setiap entri selama sesi itu), tidak tercatat sebagai login akun itu, dan konfirmasi password tidak terbawa, jadi password, email, 2FA dan passkey akun itu tidak bisa diubah. Tes otorisasi menelusuri setiap rute reseller: akun dan paket milik orang lain dijawab 404, dan rute admin serta akun hosting tertutup untuk reseller. Teruji di VPS (MariaDB dan agent sungguhan): akun buatan reseller dibuat agent, akun kedua di atas jatah ditolak, hapus akun menghapus user Linux-nya.
+
 - Level reseller lengkap, paket reseller, overselling, branding, nameserver kustom, login as.
 - Manajemen IP, pindah pemilik, pesan massal, tiket.
 - Bandwidth, statistik harian & grafik, GoAccess, log viewer, batas resource (cgroups).

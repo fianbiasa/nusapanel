@@ -13,15 +13,18 @@ const noPackage = 'none';
 
 /**
  * Picks the package of an account, or none (no limits), for a `<Form>`:
- * the choice is sent as `package_id`, empty for no package.
+ * the choice is sent as `name` (`package_id` unless given), empty for no
+ * package.
  */
 export function PackageSelect({
     id,
+    name = 'package_id',
     packages,
     defaultValue = null,
     invalid = false,
 }: {
     id: string;
+    name?: string;
     packages: PackageOption[];
     defaultValue?: number | null;
     invalid?: boolean;
@@ -34,7 +37,7 @@ export function PackageSelect({
         <>
             <input
                 type="hidden"
-                name="package_id"
+                name={name}
                 value={value === noPackage ? '' : value}
             />
             <Select value={value} onValueChange={setValue}>

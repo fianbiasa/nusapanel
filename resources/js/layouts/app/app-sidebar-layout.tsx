@@ -3,6 +3,7 @@ import { AppDock } from '@/components/app-dock';
 import { AppShell } from '@/components/app-shell';
 import { AppSidebar } from '@/components/app-sidebar';
 import { AppSidebarHeader } from '@/components/app-sidebar-header';
+import { ImpersonationBar } from '@/components/impersonation-bar';
 import type { AppLayoutProps } from '@/types';
 
 /**
@@ -20,6 +21,7 @@ export default function AppSidebarLayout({
                 variant="sidebar"
                 className="rayxo-page-bg min-w-0 overflow-x-clip bg-background"
             >
+                <ImpersonationBar />
                 <AppSidebarHeader breadcrumbs={breadcrumbs} />
                 <div className="mx-auto flex w-full max-w-[1440px] flex-1 flex-col gap-6 px-4 pt-2 pb-10 md:px-8">
                     {children}

@@ -120,16 +120,16 @@ Pembagian level sama seperti DirectAdmin:
 
 | Fitur                   | Keterangan                                       | Fase |
 | ----------------------- | ------------------------------------------------ | ---- |
-| Buat/ubah/hapus user    | Dalam batas paket reseller                       | P3   |
-| Suspend/unsuspend user  | Dengan alasan                                    | P3   |
-| Paket user              | Buat paket sendiri                               | P3   |
-| Daftar user + pemakaian | Cari, filter, urutkan, aksi massal               | P3   |
-| Login as user           | Tercatat di audit log                            | P3   |
-| Statistik reseller      | Total pemakaian vs jatah                         | P3   |
+| Buat/ubah/hapus user    | ✅ Dalam batas paket reseller                    | P3   |
+| Suspend/unsuspend user  | ✅ Dengan alasan                                 | P3   |
+| Paket user              | ✅ Buat paket sendiri                            | P3   |
+| Daftar user + pemakaian | ✅ Cari, filter, urutkan, aksi massal            | P3   |
+| Login as user           | ✅ Tercatat di audit log                         | P3   |
+| Statistik reseller      | ✅ Total pemakaian vs jatah                      | P3   |
 | IP                      | Berikan IP dari pool reseller (shared/dedicated) | P3   |
 | Nameserver kustom       | `ns1/ns2.domain-reseller.com`                    | P3   |
 | Branding                | Logo, nama, warna, domain login panel sendiri    | P3   |
-| Overselling             | On/off (diatur admin)                            | P3   |
+| Overselling             | ✅ On/off (diatur admin)                         | P3   |
 | Pesan massal ke user    |                                                  | P3   |
 | Tiket dari user         |                                                  | P3   |
 | Backup & restore user   |                                                  | P4   |
@@ -143,12 +143,12 @@ Pembagian level sama seperti DirectAdmin:
 | Fitur                      | Keterangan                                                 | Fase |
 | -------------------------- | ---------------------------------------------------------- | ---- |
 | Buat user                  | ✅                                                         | P1   |
-| Buat reseller & admin lain |                                                            | P3   |
+| Buat reseller & admin lain | ✅                                                         | P3   |
 | Semua akun                 | ✅ Cari, filter, aksi massal (suspend, hapus, ganti paket) | P1   |
 | Paket user                 | ✅                                                         | P1   |
-| Paket reseller             |                                                            | P3   |
-| Pindah pemilik             | Pindahkan user antar reseller                              | P3   |
-| Login as                   | Masuk sebagai reseller/user, tercatat di audit log         | P3   |
+| Paket reseller             | ✅                                                         | P3   |
+| Pindah pemilik             | ✅ Pindahkan user antar reseller                           | P3   |
+| Login as                   | ✅ Masuk sebagai reseller/user, tercatat di audit log      | P3   |
 | Pesan massal               | Ke semua reseller/user                                     | P3   |
 | Ganti username             |                                                            | P6   |
 

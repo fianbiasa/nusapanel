@@ -7,6 +7,7 @@ use App\Agent\AgentException;
 use App\Models\AccountUsage;
 use App\Models\Domain;
 use App\Models\Package;
+use App\Models\ResellerPackage;
 use App\Models\User;
 use App\Services\AuditLogger;
 use App\Services\QuotaService;
@@ -146,6 +147,30 @@ class DashboardTest extends TestCase
         $this->actingAs(User::factory()->create())
             ->get(route('dashboard'))
             ->assertInertia(fn (Assert $page) => $page->where('limits.quota_enabled', false));
+    }
+
+    public function test_resellers_see_what_their_accounts_use_and_get_against_their_reseller_package()
+    {
+        $reseller = User::factory()->reseller()->create([
+            'reseller_package_id' => ResellerPackage::factory()->create(['name' => 'Reseller 10', 'accounts' => 10, 'disk_mb' => 5000, 'domains' => 30])->id,
+        ]);
+        $package = Package::factory()->for($reseller, 'owner')->create(['disk_mb' => 1000, 'domains' => 3]);
+        $accounts = User::factory()->count(2)->for($reseller, 'owner')->create(['package_id' => $package->id]);
+        Domain::factory()->for($accounts[0], 'account')->create();
+        AccountUsage::factory()->for($accounts[0], 'account')->create(['disk_kb' => 300 * 1024]);
+        AccountUsage::factory()->for($accounts[1], 'account')->create(['disk_kb' => 200 * 1024]);
+        User::factory()->for(User::factory()->reseller(), 'owner')->create();
+
+        $this->actingAs($reseller)
+            ->get(route('dashboard'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('stats.accounts.total', 2)
+                ->where('resellerLimits.package', 'Reseller 10')
+                ->where('resellerLimits.quotas.accounts', ['limit' => 10, 'used' => 2, 'allocated' => 2])
+                ->where('resellerLimits.quotas.disk_mb', ['limit' => 5000, 'used' => 500, 'allocated' => 2000])
+                ->where('resellerLimits.quotas.domains', ['limit' => 30, 'used' => 1, 'allocated' => 6])
+                ->missing('limits')
+                ->missing('systemInfo'));
     }
 
     public function test_admins_do_not_receive_package_limits()

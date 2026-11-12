@@ -4,6 +4,7 @@ namespace App\Listeners;
 
 use App\Models\User;
 use App\Services\AuditLogger;
+use App\Services\ImpersonationService;
 use Illuminate\Auth\Events\Login;
 
 class RecordSuccessfulLogin
@@ -12,7 +13,9 @@ class RecordSuccessfulLogin
 
     public function handle(Login $event): void
     {
-        if (! $event->user instanceof User) {
+        // Signing in as another account ("login as") or back is not a login
+        // of that account.
+        if (! $event->user instanceof User || request()->attributes->get(ImpersonationService::SWITCHING) === true) {
             return;
         }
 

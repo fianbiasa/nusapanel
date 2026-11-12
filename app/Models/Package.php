@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use App\Enums\Role;
 use App\Services\QuotaService;
 use App\Support\AccountLimits;
 use Database\Factories\PackageFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -18,6 +21,9 @@ use InvalidArgumentException;
  * quantity limit is null when the package does not limit it.
  * {@see AccountLimits} reads the limits of an account; the server enforces
  * `disk_mb` and `inodes` as the account's disk quota ({@see QuotaService}).
+ *
+ * A package belongs to the administrators (its owner is an admin, or was
+ * one) or to one reseller, whose accounts are the only ones put on it.
  *
  * `owner_id` is deliberately not mass assignable.
  *
@@ -100,7 +106,27 @@ class Package extends Model
     }
 
     /**
-     * The admin who created the package.
+     * The packages the accounts of owner may be put on: a reseller's own
+     * packages, or for an administrator those of the administrators.
+     *
+     * @param  Builder<self>  $query
+     */
+    #[Scope]
+    protected function handedOutBy(Builder $query, User $owner): void
+    {
+        if ($owner->isReseller()) {
+            $query->where('owner_id', $owner->id);
+
+            return;
+        }
+
+        $query->where(fn (Builder $query) => $query
+            ->whereNull('owner_id')
+            ->orWhereIn('owner_id', User::query()->select('id')->where('role', Role::Admin)));
+    }
+
+    /**
+     * The admin or reseller who created the package.
      *
      * @return BelongsTo<User, $this>
      */

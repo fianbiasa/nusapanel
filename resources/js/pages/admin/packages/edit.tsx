@@ -1,13 +1,21 @@
 import { Head } from '@inertiajs/react';
 import { PackageForm } from '@/components/package-form';
 import { PageHeader } from '@/components/page-header';
-import type { HostingPackage } from '@/types';
+import { packageRoutes } from '@/lib/scoped-routes';
+import type { AccountScope } from '@/lib/scoped-routes';
+import type { HostingPackage, ResellerPackageLimits } from '@/types';
 
 export default function PackagesEdit({
+    scope,
     package: pkg,
+    resellerLimits,
 }: {
+    scope: AccountScope;
     package: HostingPackage;
+    resellerLimits: ResellerPackageLimits | null;
 }) {
+    const routes = packageRoutes(scope);
+
     return (
         <>
             <Head title={`Ubah paket ${pkg.name}`} />
@@ -21,7 +29,12 @@ export default function PackagesEdit({
                 }
             />
 
-            <PackageForm pkg={pkg} />
+            <PackageForm
+                pkg={pkg}
+                form={routes.update.form(pkg.id)}
+                cancelHref={routes.index()}
+                resellerLimits={resellerLimits}
+            />
         </>
     );
 }

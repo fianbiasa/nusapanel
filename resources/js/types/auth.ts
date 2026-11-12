@@ -26,6 +26,8 @@ export type User = {
 
 export type Auth = {
     user: User;
+    /** Who signed in as this account ("login as"), while they are. */
+    impersonator: { username: string; name: string } | null;
 };
 
 export type Passkey = {

@@ -7,7 +7,9 @@ use App\Enums\BulkAccountAction;
 use App\Enums\Role;
 use App\Listeners\ApplyAccountTaskResult;
 use App\Models\Package;
+use App\Models\ResellerPackage;
 use App\Models\User;
+use App\Support\ResellerLimits;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
@@ -47,6 +49,11 @@ class AccountService
     public function create(array $data, User $actor): User
     {
         return DB::transaction(function () use ($data, $actor): User {
+            $package = isset($data['package_id']) ? Package::query()->findOrFail($data['package_id']) : null;
+
+            $this->ensurePackageBelongsTo($package, $actor);
+            $this->ensureOwnerCanGiveOut($actor, $package);
+
             $account = new User(Arr::only($data, ['username', 'name', 'email', 'password']));
 
             $account->forceFill([
@@ -76,7 +83,122 @@ class AccountService
     }
 
     /**
-     * Block the account from signing in right away and lock it on the server.
+     * Create a reseller or administrator. They live only in the panel (no
+     * Linux user, nothing on the server), so they are active right away. A
+     * reseller may get a reseller package that limits what it gives out.
+     *
+     * @param  array{username: string, name: string, email: string, password: string}  $data
+     */
+    public function createPanelAccount(array $data, Role $role, ?ResellerPackage $package, User $actor): User
+    {
+        return DB::transaction(function () use ($data, $role, $package, $actor): User {
+            $account = new User(Arr::only($data, ['username', 'name', 'email', 'password']));
+
+            $account->forceFill([
+                'role' => $role,
+                'status' => AccountStatus::Active,
+                'owner_id' => $actor->id,
+                'reseller_package_id' => $role === Role::Reseller ? $package?->id : null,
+                'email_verified_at' => now(),
+            ])->save();
+
+            $this->audit->record('account.created', $account, array_filter([
+                'username' => $account->username,
+                'role' => $role->value,
+                'reseller_package' => $role === Role::Reseller ? $package?->name : null,
+            ], fn (mixed $value): bool => $value !== null), $actor);
+
+            return $account;
+        });
+    }
+
+    /**
+     * Put a reseller on another reseller package, or take it off packages
+     * so nothing it gives out is limited. A reseller that already gives out
+     * more than the new package allows keeps its accounts, but cannot add
+     * more.
+     *
+     * @throws AuthorizationException
+     */
+    public function changeResellerPackage(User $reseller, ?ResellerPackage $package, User $actor): void
+    {
+        if (! $reseller->isReseller()) {
+            throw new AuthorizationException(__('Only resellers can be put on a reseller package.'));
+        }
+
+        if ($reseller->reseller_package_id === $package?->id) {
+            return;
+        }
+
+        $previous = $reseller->resellerPackage;
+
+        DB::transaction(function () use ($reseller, $package, $previous, $actor): void {
+            $reseller->forceFill(['reseller_package_id' => $package?->id])->save();
+            $reseller->setRelation('resellerPackage', $package);
+
+            $this->audit->record('account.reseller_package_changed', $reseller, [
+                'username' => $reseller->username,
+                'from' => $previous?->name,
+                'to' => $package?->name,
+            ], $actor);
+        });
+    }
+
+    /**
+     * Move a hosting account to another administrator or reseller, on one
+     * of the new owner's packages (or none, where the new owner allows it).
+     * A reseller's limits apply as for an account it creates.
+     *
+     * @throws AuthorizationException
+     * @throws ValidationException
+     */
+    public function transfer(User $account, User $owner, ?Package $package, User $actor): void
+    {
+        if (! $account->hasRole(Role::User)) {
+            throw new AuthorizationException(__('Only hosting accounts can be moved to another owner.'));
+        }
+
+        if (! $owner->hasRole(Role::Admin, Role::Reseller)) {
+            throw ValidationException::withMessages(['owner_id' => __('Accounts can only belong to an administrator or a reseller.')]);
+        }
+
+        if ($account->owner_id === $owner->id) {
+            throw ValidationException::withMessages(['owner_id' => __('The account already belongs to :owner.', ['owner' => $owner->username])]);
+        }
+
+        $this->ensureStatus(
+            $account,
+            [AccountStatus::Pending, AccountStatus::Active, AccountStatus::Suspended, AccountStatus::Failed],
+            __('This account is being deleted.'),
+        );
+        $this->ensurePackageBelongsTo($package, $owner);
+
+        $previousOwner = $account->owner;
+        $previousPackage = $account->package;
+
+        DB::transaction(function () use ($account, $owner, $package, $actor, $previousOwner, $previousPackage): void {
+            $this->ensureOwnerCanGiveOut($owner, $package, $account);
+
+            $account->forceFill(['owner_id' => $owner->id, 'package_id' => $package?->id])->save();
+            $account->setRelation('owner', $owner);
+            $account->setRelation('package', $package);
+
+            if ($previousPackage?->id !== $package?->id) {
+                $this->quotas->apply($account, $actor);
+            }
+
+            $this->audit->record('account.transferred', $account, [
+                'username' => $account->username,
+                'from' => $previousOwner?->username,
+                'to' => $owner->username,
+                'package' => $package?->name,
+            ], $actor);
+        });
+    }
+
+    /**
+     * Block the account from signing in right away and, for a hosting
+     * account, lock it on the server.
      *
      * @throws AuthorizationException
      * @throws ValidationException
@@ -92,7 +214,9 @@ class AccountService
                 'suspend_reason' => $reason,
             ])->save();
 
-            $this->tasks->dispatch('account.suspend', ['username' => $account->username], $account, $actor);
+            if (! $account->isPanelOnly()) {
+                $this->tasks->dispatch('account.suspend', ['username' => $account->username], $account, $actor);
+            }
 
             $this->audit->record('account.suspended', $account, [
                 'username' => $account->username,
@@ -116,7 +240,9 @@ class AccountService
                 'suspend_reason' => null,
             ])->save();
 
-            $this->tasks->dispatch('account.unsuspend', ['username' => $account->username], $account, $actor);
+            if (! $account->isPanelOnly()) {
+                $this->tasks->dispatch('account.unsuspend', ['username' => $account->username], $account, $actor);
+            }
 
             $this->audit->record('account.unsuspended', $account, ['username' => $account->username], $actor);
         });
@@ -137,6 +263,12 @@ class AccountService
             [AccountStatus::Active, AccountStatus::Suspended, AccountStatus::Failed],
             __('This account is still being created or is already being deleted.'),
         );
+
+        if ($account->isPanelOnly()) {
+            $this->deletePanelAccount($account, $actor);
+
+            return;
+        }
 
         DB::transaction(function () use ($account, $actor): void {
             $account->forceFill(['status' => AccountStatus::Deleting])->save();
@@ -174,9 +306,19 @@ class AccountService
             return;
         }
 
+        $owner = $account->owner;
+
+        if ($owner !== null) {
+            $this->ensurePackageBelongsTo($package, $owner);
+        }
+
         $previous = $account->package;
 
-        DB::transaction(function () use ($account, $package, $previous, $actor): void {
+        DB::transaction(function () use ($account, $package, $previous, $owner, $actor): void {
+            if ($owner !== null) {
+                $this->ensureOwnerCanGiveOut($owner, $package, $account);
+            }
+
             $account->forceFill(['package_id' => $package?->id])->save();
             $account->setRelation('package', $package);
 
@@ -205,7 +347,11 @@ class AccountService
         $done = [];
         $skipped = [];
 
-        $accounts = User::query()->whereKey($ids)->orderBy('username')->get();
+        $accounts = User::query()
+            ->whereKey($ids)
+            ->when($actor->isReseller(), fn ($query) => $query->where('owner_id', $actor->id)->where('role', Role::User))
+            ->orderBy('username')
+            ->get();
 
         foreach ($accounts as $account) {
             try {
@@ -242,6 +388,65 @@ class AccountService
         if ($account->isAdmin()) {
             throw new AuthorizationException("You cannot {$action} an administrator account.");
         }
+    }
+
+    /**
+     * Delete a reseller (administrators are never deleted from the panel).
+     * It must own no hosting accounts any more; its own packages go with it.
+     *
+     * @throws ValidationException
+     */
+    private function deletePanelAccount(User $account, User $actor): void
+    {
+        $owned = $account->ownedAccounts()->count();
+
+        if ($owned > 0) {
+            throw ValidationException::withMessages([
+                'account' => __('This reseller still owns :count account(s). Move them to another owner or delete them first.', ['count' => $owned]),
+            ]);
+        }
+
+        DB::transaction(function () use ($account, $actor): void {
+            $this->audit->record('account.deleted', $account, ['username' => $account->username, 'role' => $account->role->value], $actor);
+
+            Package::query()->where('owner_id', $account->id)->delete();
+
+            $account->delete();
+        });
+    }
+
+    /**
+     * Refuse a package that is not one the owner hands out: a reseller's
+     * accounts only go on its own packages, an administrator's on the
+     * administrators' packages.
+     *
+     * @throws ValidationException
+     */
+    private function ensurePackageBelongsTo(?Package $package, User $owner): void
+    {
+        if ($package !== null && ! Package::query()->handedOutBy($owner)->whereKey($package->id)->exists()) {
+            throw ValidationException::withMessages([
+                'package_id' => __('This package does not belong to :owner.', ['owner' => $owner->username]),
+            ]);
+        }
+    }
+
+    /**
+     * Refuse when owner is a reseller that may not give an account (a new
+     * one, or except) the package. The reseller's row stays locked until
+     * the account is saved, so two requests cannot both take the last place.
+     *
+     * @throws ValidationException
+     */
+    private function ensureOwnerCanGiveOut(User $owner, ?Package $package, ?User $except = null): void
+    {
+        if (! $owner->isReseller()) {
+            return;
+        }
+
+        $locked = User::query()->with('resellerPackage')->lockForUpdate()->findOrFail($owner->id);
+
+        ResellerLimits::for($locked)->ensureCanGiveOut($package, $except);
     }
 
     /**

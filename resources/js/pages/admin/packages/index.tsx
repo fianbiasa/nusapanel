@@ -22,7 +22,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Spinner } from '@/components/ui/spinner';
 import { formatMegabytes } from '@/lib/format';
-import { create, destroy, edit } from '@/routes/admin/packages';
+import { packageRoutes } from '@/lib/scoped-routes';
+import type { AccountScope } from '@/lib/scoped-routes';
 import type { HostingPackage } from '@/types';
 
 /** "3 domain · 1 GB disk · 50.000 inode · SSL"; the inode limit only when set. */
@@ -55,10 +56,13 @@ function otherLimits(pkg: HostingPackage): string {
 }
 
 export default function PackagesIndex({
+    scope,
     packages,
 }: {
+    scope: AccountScope;
     packages: HostingPackage[];
 }) {
+    const { create } = packageRoutes(scope);
     const [deleting, setDeleting] = useState<HostingPackage | null>(null);
     const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -158,6 +162,7 @@ export default function PackagesIndex({
                                         </td>
                                         <td className={tableStyles.td}>
                                             <RowActions
+                                                scope={scope}
                                                 pkg={pkg}
                                                 onDelete={confirmDelete}
                                             />
@@ -175,6 +180,7 @@ export default function PackagesIndex({
                     {deleting && (
                         <DeletePackageForm
                             key={deleting.id}
+                            scope={scope}
                             pkg={deleting}
                             onSuccess={() => setDialogOpen(false)}
                         />
@@ -187,12 +193,15 @@ export default function PackagesIndex({
 
 /** The "⋯" menu of one package row. */
 function RowActions({
+    scope,
     pkg,
     onDelete,
 }: {
+    scope: AccountScope;
     pkg: HostingPackage;
     onDelete: (pkg: HostingPackage) => void;
 }) {
+    const { edit } = packageRoutes(scope);
     const inUse = pkg.accounts_count > 0;
 
     return (
@@ -236,12 +245,16 @@ function RowActions({
 }
 
 function DeletePackageForm({
+    scope,
     pkg,
     onSuccess,
 }: {
+    scope: AccountScope;
     pkg: HostingPackage;
     onSuccess: () => void;
 }) {
+    const { destroy } = packageRoutes(scope);
+
     return (
         <Form
             {...destroy.form(pkg.id)}

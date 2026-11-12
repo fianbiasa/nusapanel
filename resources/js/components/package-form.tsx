@@ -9,17 +9,27 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { formatMegabytes, quotaKeys } from '@/lib/format';
-import { index, store, update } from '@/routes/admin/packages';
-import type { HostingPackage, QuotaKey } from '@/types';
+import type {
+    QuotaKey,
+    ResellerPackageLimits,
+    ResellerQuotaKey,
+} from '@/types';
+import type { RouteDefinition, RouteFormDefinition } from '@/wayfinder';
 
 /**
  * How each limit is asked for in the form. Disk space and inodes start at 1:
- * the server reads a disk quota of 0 as unlimited.
+ * the server reads a disk quota of 0 as unlimited; a reseller gets at
+ * least one account.
  */
 const quotaFields: Record<
-    QuotaKey,
+    ResellerQuotaKey,
     { label: string; unit?: string; min?: number; hint?: string }
 > = {
+    accounts: {
+        label: 'Jumlah akun',
+        min: 1,
+        hint: 'Berapa akun hosting yang boleh dibuat reseller.',
+    },
     disk_mb: { label: 'Disk', unit: 'MB', min: 1 },
     inodes: {
         label: 'Inode (jumlah file)',
@@ -40,16 +50,46 @@ const quotaFields: Record<
     cron_jobs: { label: 'Cron job' },
 };
 
+/** What the form starts from when it changes a package. */
+export type PackageFormValues = {
+    name: string;
+    description: string | null;
+    limits: Partial<Record<ResellerQuotaKey, number | null>>;
+    ssl: boolean;
+    oversell?: boolean;
+};
+
 /**
- * The form for creating a package, or changing `pkg` when given. Every
- * limit is always sent; an empty limit means unlimited.
+ * The form for creating or changing (`pkg`) a hosting package, or with
+ * `kind` "reseller" a reseller package, which also limits the number of
+ * accounts and may oversell. Every limit is always sent; an empty limit
+ * means unlimited. A reseller's own packages may not go over its reseller
+ * package (`resellerLimits`): those limits cannot be left unlimited.
  */
-export function PackageForm({ pkg = null }: { pkg?: HostingPackage | null }) {
-    const [ssl, setSsl] = useState(pkg?.ssl ?? true);
+export function PackageForm({
+    pkg = null,
+    form,
+    cancelHref,
+    kind = 'hosting',
+    resellerLimits = null,
+}: {
+    pkg?: PackageFormValues | null;
+    form: RouteFormDefinition<'post'> | RouteFormDefinition<'put'>;
+    cancelHref: RouteDefinition<'get'>;
+    kind?: 'hosting' | 'reseller';
+    resellerLimits?: ResellerPackageLimits | null;
+}) {
+    const [ssl, setSsl] = useState(
+        pkg?.ssl ?? (resellerLimits === null || resellerLimits.ssl === 1),
+    );
+    const [oversell, setOversell] = useState(pkg?.oversell ?? false);
+    const keys: ResellerQuotaKey[] =
+        kind === 'reseller' ? ['accounts', ...quotaKeys] : quotaKeys;
+    const sslAllowed = resellerLimits === null || resellerLimits.ssl === 1;
 
     return (
         <Form
-            {...(pkg ? update.form(pkg.id) : store.form())}
+            {...form}
             options={{ preserveScroll: true }}
             className="grid max-w-4xl gap-6"
         >
@@ -57,7 +97,11 @@ export function PackageForm({ pkg = null }: { pkg?: HostingPackage | null }) {
                 <>
                     <Panel
                         title="Nama paket"
-                        description="Nama ini yang dipilih saat membuat atau memindahkan akun."
+                        description={
+                            kind === 'reseller'
+                                ? 'Nama ini yang dipilih saat membuat reseller atau mengganti paketnya.'
+                                : 'Nama ini yang dipilih saat membuat atau memindahkan akun.'
+                        }
                     >
                         <div className="grid gap-5 md:grid-cols-2">
                             <div className="grid gap-2">
@@ -70,7 +114,11 @@ export function PackageForm({ pkg = null }: { pkg?: HostingPackage | null }) {
                                     autoComplete="off"
                                     maxLength={64}
                                     defaultValue={pkg?.name}
-                                    placeholder="mis. Basic"
+                                    placeholder={
+                                        kind === 'reseller'
+                                            ? 'mis. Reseller 10 akun'
+                                            : 'mis. Basic'
+                                    }
                                 />
                                 <InputError message={errors.name} />
                             </div>
@@ -94,47 +142,121 @@ export function PackageForm({ pkg = null }: { pkg?: HostingPackage | null }) {
 
                     <Panel
                         title="Kuota"
-                        description="Centang “Tanpa batas” untuk kuota yang tidak dibatasi. Batas domain, SSL, disk, dan inode langsung diterapkan (disk dan inode oleh kuota disk server, bila sudah aktif). Batas email, database, FTP, cron job, subdomain, dan bandwidth disimpan dan mulai berlaku begitu fiturnya tersedia."
+                        description={
+                            kind === 'reseller'
+                                ? 'Jatah yang boleh dibagikan reseller ke semua akunnya, dijumlah. Centang “Tanpa batas” untuk kuota yang tidak dibatasi.'
+                                : resellerLimits !== null
+                                  ? 'Setiap kuota paling banyak sebesar jatah paket reseller Anda. Kuota yang dibatasi jatah Anda tidak bisa dibuat tanpa batas.'
+                                  : 'Centang “Tanpa batas” untuk kuota yang tidak dibatasi. Batas domain, SSL, disk, dan inode langsung diterapkan (disk dan inode oleh kuota disk server, bila sudah aktif). Batas email, database, FTP, cron job, subdomain, dan bandwidth disimpan dan mulai berlaku begitu fiturnya tersedia.'
+                        }
                     >
                         <div className="grid gap-5 md:grid-cols-2">
-                            {quotaKeys.map((key) => (
-                                <QuotaField
-                                    key={key}
-                                    name={key}
-                                    label={quotaFields[key].label}
-                                    unit={quotaFields[key].unit}
-                                    min={quotaFields[key].min}
-                                    hint={quotaFields[key].hint}
-                                    defaultValue={pkg ? pkg.limits[key] : null}
-                                    error={errors[key]}
-                                />
-                            ))}
+                            {keys.map((key) => {
+                                const cap =
+                                    key !== 'accounts' && resellerLimits
+                                        ? resellerLimits[key as QuotaKey]
+                                        : null;
+
+                                return (
+                                    <QuotaField
+                                        key={key}
+                                        name={key}
+                                        label={quotaFields[key].label}
+                                        unit={quotaFields[key].unit}
+                                        min={quotaFields[key].min}
+                                        max={cap}
+                                        hint={
+                                            cap !== null
+                                                ? `Paling banyak ${quotaFields[key].unit === 'MB' ? formatMegabytes(cap) : cap.toLocaleString('id-ID')}, jatah paket reseller Anda.`
+                                                : quotaFields[key].hint
+                                        }
+                                        defaultValue={
+                                            pkg
+                                                ? (pkg.limits[key] ?? null)
+                                                : cap
+                                        }
+                                        error={errors[key]}
+                                    />
+                                );
+                            })}
                         </div>
                     </Panel>
 
                     <Panel title="Fitur">
-                        <input type="hidden" name="ssl" value={ssl ? 1 : 0} />
-                        <div className="flex items-start gap-3">
-                            <Checkbox
-                                id="ssl"
-                                checked={ssl}
-                                onCheckedChange={(checked) =>
-                                    setSsl(checked === true)
-                                }
-                                className="mt-0.5"
-                            />
-                            <div className="grid gap-1">
-                                <Label htmlFor="ssl">
-                                    SSL gratis (Let&apos;s Encrypt)
-                                </Label>
-                                <p className="text-xs text-muted-foreground">
-                                    Akun bisa memasang sertifikat SSL untuk
-                                    domain-nya. Sertifikat yang sudah terpasang
-                                    tidak dilepas kalau fitur ini dimatikan.
-                                </p>
+                        <div className="grid gap-5">
+                            <div>
+                                <input
+                                    type="hidden"
+                                    name="ssl"
+                                    value={ssl ? 1 : 0}
+                                />
+                                <div className="flex items-start gap-3">
+                                    <Checkbox
+                                        id="ssl"
+                                        checked={ssl}
+                                        disabled={!sslAllowed}
+                                        onCheckedChange={(checked) =>
+                                            setSsl(checked === true)
+                                        }
+                                        className="mt-0.5"
+                                    />
+                                    <div className="grid gap-1">
+                                        <Label htmlFor="ssl">
+                                            SSL gratis (Let&apos;s Encrypt)
+                                        </Label>
+                                        <p className="text-xs text-muted-foreground">
+                                            {!sslAllowed
+                                                ? 'Paket reseller Anda tidak termasuk SSL.'
+                                                : kind === 'reseller'
+                                                  ? 'Akun-akun reseller ini bisa memasang sertifikat SSL untuk domain-nya.'
+                                                  : 'Akun bisa memasang sertifikat SSL untuk domain-nya. Sertifikat yang sudah terpasang tidak dilepas kalau fitur ini dimatikan.'}
+                                        </p>
+                                    </div>
+                                </div>
+                                <InputError
+                                    message={errors.ssl}
+                                    className="mt-2"
+                                />
                             </div>
+
+                            {kind === 'reseller' && (
+                                <div>
+                                    <input
+                                        type="hidden"
+                                        name="oversell"
+                                        value={oversell ? 1 : 0}
+                                    />
+                                    <div className="flex items-start gap-3">
+                                        <Checkbox
+                                            id="oversell"
+                                            checked={oversell}
+                                            onCheckedChange={(checked) =>
+                                                setOversell(checked === true)
+                                            }
+                                            className="mt-0.5"
+                                        />
+                                        <div className="grid gap-1">
+                                            <Label htmlFor="oversell">
+                                                Overselling
+                                            </Label>
+                                            <p className="text-xs text-muted-foreground">
+                                                Paket akun-akun reseller boleh
+                                                dijumlah melebihi jatah di atas.
+                                                Jumlah akun tetap dibatasi.
+                                                Tanpa overselling, setiap akun
+                                                reseller wajib punya paket yang
+                                                membatasi kuota yang dibatasi di
+                                                sini.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <InputError
+                                        message={errors.oversell}
+                                        className="mt-2"
+                                    />
+                                </div>
+                            )}
                         </div>
-                        <InputError message={errors.ssl} className="mt-2" />
                     </Panel>
 
                     <div className="flex items-center gap-2">
@@ -143,7 +265,7 @@ export function PackageForm({ pkg = null }: { pkg?: HostingPackage | null }) {
                             {pkg ? 'Simpan paket' : 'Buat paket'}
                         </Button>
                         <Button variant="ghost" size="lg" asChild>
-                            <Link href={index()}>Batal</Link>
+                            <Link href={cancelHref}>Batal</Link>
                         </Button>
                     </div>
                 </>
@@ -154,26 +276,31 @@ export function PackageForm({ pkg = null }: { pkg?: HostingPackage | null }) {
 
 /**
  * A number input for one limit with a "Tanpa batas" checkbox. While
- * unlimited, an empty value is sent in its place.
+ * unlimited, an empty value is sent in its place. A limit with a `max`
+ * cannot be unlimited.
  */
 function QuotaField({
     name,
     label,
     unit,
     min = 0,
+    max = null,
     hint,
     defaultValue,
     error,
 }: {
-    name: QuotaKey;
+    name: ResellerQuotaKey;
     label: string;
     unit?: string;
     min?: number;
+    max?: number | null;
     hint?: string;
     defaultValue: number | null;
     error?: string;
 }) {
-    const [unlimited, setUnlimited] = useState(defaultValue === null);
+    const [unlimited, setUnlimited] = useState(
+        defaultValue === null && max === null,
+    );
     const [value, setValue] = useState(
         defaultValue === null ? '' : String(defaultValue),
     );
@@ -192,6 +319,7 @@ function QuotaField({
                         type="number"
                         inputMode="numeric"
                         min={min}
+                        max={max ?? undefined}
                         step={1}
                         required={!unlimited}
                         disabled={unlimited}
@@ -212,6 +340,7 @@ function QuotaField({
                     <Checkbox
                         id={`${name}_unlimited`}
                         checked={unlimited}
+                        disabled={max !== null}
                         onCheckedChange={(checked) =>
                             setUnlimited(checked === true)
                         }

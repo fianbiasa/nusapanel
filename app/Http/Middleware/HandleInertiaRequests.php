@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\ImpersonationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Vite;
 use Inertia\Middleware;
@@ -44,8 +45,22 @@ class HandleInertiaRequests extends Middleware
             'name' => config('app.name'),
             'auth' => [
                 'user' => $request->user(),
+                'impersonator' => fn (): ?array => $this->impersonator($request),
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
+    }
+
+    /**
+     * Who signed in as the current account ("login as"), so every page can
+     * say so and offer the way back.
+     *
+     * @return array{username: string, name: string}|null
+     */
+    private function impersonator(Request $request): ?array
+    {
+        $impersonator = app(ImpersonationService::class)->impersonator($request);
+
+        return $impersonator === null ? null : ['username' => $impersonator->username, 'name' => $impersonator->name];
     }
 }

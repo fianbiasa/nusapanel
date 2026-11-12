@@ -9,8 +9,12 @@ export const roleLabels: Record<Role, string> = {
 
 /** What an audit log entry records, by its action name. */
 export const auditActionLabels: Record<string, string> = {
-    'account.created': 'Akun hosting dibuat',
-    'account.deleted': 'Akun hosting dihapus',
+    'account.created': 'Akun dibuat',
+    'account.deleted': 'Akun dihapus',
+    'account.transferred': 'Akun dipindah ke pemilik lain',
+    'account.reseller_package_changed': 'Paket reseller diganti',
+    'account.login_as': 'Masuk sebagai akun ini',
+    'account.login_as_ended': 'Kembali dari masuk sebagai akun ini',
     'account.suspended': 'Akun disuspend',
     'account.unsuspended': 'Suspend akun dibuka',
     'account.password_reset': 'Kata sandi direset',
@@ -98,6 +102,9 @@ export const auditActionLabels: Record<string, string> = {
     'package.created': 'Paket dibuat',
     'package.updated': 'Paket diubah',
     'package.deleted': 'Paket dihapus',
+    'reseller_package.created': 'Paket reseller dibuat',
+    'reseller_package.updated': 'Paket reseller diubah',
+    'reseller_package.deleted': 'Paket reseller dihapus',
 };
 
 /** The quantities a package limits, in the order the panel shows them. */

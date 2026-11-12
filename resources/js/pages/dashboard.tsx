@@ -42,10 +42,19 @@ import {
 } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { create as accountsCreate } from '@/routes/admin/accounts';
+import {
+    create as resellerAccountsCreate,
+    index as resellerAccountsIndex,
+} from '@/routes/reseller/accounts';
 import { index as auditLogsIndex } from '@/routes/admin/audit-logs';
 import { index as tasksIndex } from '@/routes/admin/tasks';
 import { index as domainsIndex } from '@/routes/domains';
-import type { AccountLimits, QuotaKey } from '@/types';
+import type {
+    AccountLimits,
+    QuotaKey,
+    ResellerLimits,
+    ResellerQuotaKey,
+} from '@/types';
 
 type SystemInfo = {
     hostname: string;
@@ -91,6 +100,7 @@ type Props = {
     recentActivity?: Activity[];
     domains?: DomainSummary[];
     limits?: AccountLimits;
+    resellerLimits?: ResellerLimits;
     systemInfo?: SystemInfoResult;
 };
 
@@ -99,12 +109,14 @@ export default function Dashboard({
     recentActivity = [],
     domains = [],
     limits,
+    resellerLimits,
     systemInfo,
 }: Props) {
     const { auth } = usePage().props;
     const firstName = auth.user.name.split(' ')[0];
     const isAdmin = auth.user.role === 'admin';
     const isHosting = auth.user.role === 'user';
+    const isReseller = auth.user.role === 'reseller';
 
     return (
         <>
@@ -115,12 +127,20 @@ export default function Dashboard({
                 description={
                     isAdmin
                         ? 'Berikut ringkasan server dan layanan di RAYXO.'
-                        : 'Berikut ringkasan website kamu di RAYXO.'
+                        : isReseller
+                          ? 'Berikut ringkasan akun hosting dan jatah reseller kamu.'
+                          : 'Berikut ringkasan website kamu di RAYXO.'
                 }
                 actions={
                     isAdmin ? (
                         <Button asChild size="lg" className="rounded-xl">
                             <Link href={accountsCreate()}>
+                                <Plus /> Buat akun
+                            </Link>
+                        </Button>
+                    ) : isReseller ? (
+                        <Button asChild size="lg" className="rounded-xl">
+                            <Link href={resellerAccountsCreate()}>
                                 <Plus /> Buat akun
                             </Link>
                         </Button>
@@ -268,7 +288,81 @@ export default function Dashboard({
                     </section>
                 </>
             )}
+
+            {isReseller && resellerLimits && (
+                <Panel
+                    title="Jatah reseller"
+                    description={
+                        resellerLimits.package === null
+                            ? 'Tanpa paket reseller: kamu boleh membuat akun dan membagikan kuota tanpa batas.'
+                            : `Paket ${resellerLimits.package}${resellerLimits.oversell ? ' · overselling aktif: paket akun boleh dijumlah melebihi jatah' : ''}.`
+                    }
+                    action={
+                        <PanelLink href={resellerAccountsIndex()}>
+                            Kelola akun
+                        </PanelLink>
+                    }
+                >
+                    <ResellerUsage limits={resellerLimits} />
+                </Panel>
+            )}
         </>
+    );
+}
+
+const resellerQuotaLabels: Record<ResellerQuotaKey, string> = {
+    accounts: 'Akun hosting',
+    disk_mb: 'Disk',
+    inodes: 'Inode',
+    bandwidth_mb: 'Bandwidth',
+    domains: 'Domain',
+    subdomains: 'Subdomain',
+    pointers: 'Pointer domain',
+    email_accounts: 'Akun email',
+    email_forwarders: 'Forwarder email',
+    databases: 'Database',
+    ftp_accounts: 'Akun FTP',
+    cron_jobs: 'Cron job',
+};
+
+/**
+ * What the reseller's accounts use together against its reseller package,
+ * and what their packages give out ("dibagikan"), which without
+ * overselling may not go over the package.
+ */
+function ResellerUsage({ limits }: { limits: ResellerLimits }) {
+    const keys = Object.keys(resellerQuotaLabels) as ResellerQuotaKey[];
+
+    return (
+        <div className="grid gap-x-8 gap-y-5 md:grid-cols-2">
+            {keys.map((key) => {
+                const quota = limits.quotas[key];
+                const format =
+                    key === 'disk_mb' || key === 'bandwidth_mb'
+                        ? formatMegabytes
+                        : (value: number) => value.toLocaleString('id-ID');
+
+                return (
+                    <div key={key} className="space-y-1.5">
+                        <UsageBar
+                            label={resellerQuotaLabels[key]}
+                            used={quota.used}
+                            limit={quota.limit}
+                            format={format}
+                            tone={quotaTone}
+                        />
+                        {key !== 'accounts' && (
+                            <p className="text-xs text-muted-foreground">
+                                Dibagikan lewat paket:{' '}
+                                {quota.allocated === null
+                                    ? 'tanpa batas'
+                                    : format(quota.allocated)}
+                            </p>
+                        )}
+                    </div>
+                );
+            })}
+        </div>
     );
 }
 

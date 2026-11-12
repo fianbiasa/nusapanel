@@ -1,6 +1,7 @@
 import { usePage } from '@inertiajs/react';
 import {
     Activity,
+    Boxes,
     Clock,
     Database,
     FolderOpen,
@@ -27,9 +28,12 @@ import { index as auditLogsIndex } from '@/routes/admin/audit-logs';
 import { index as adminDnsIndex } from '@/routes/admin/dns';
 import { index as mailQueueIndex } from '@/routes/admin/mail-queue';
 import { index as packagesIndex } from '@/routes/admin/packages';
+import { index as resellerPackagesIndex } from '@/routes/admin/reseller-packages';
 import { index as serverSettingsIndex } from '@/routes/admin/server-settings';
 import { index as servicesIndex } from '@/routes/admin/services';
 import { index as tasksIndex } from '@/routes/admin/tasks';
+import { index as resellerAccountsIndex } from '@/routes/reseller/accounts';
+import { index as resellerOwnPackagesIndex } from '@/routes/reseller/packages';
 import { index as domainsIndex } from '@/routes/domains';
 import { index as emailIndex } from '@/routes/email';
 import { index as filesIndex } from '@/routes/files';
@@ -86,6 +90,11 @@ export function useNavigation(): {
             href: packagesIndex(),
             icon: Package,
         };
+        const resellerPackages: NavItem = {
+            title: 'Paket Reseller',
+            href: resellerPackagesIndex(),
+            icon: Boxes,
+        };
         const tasks: NavItem = {
             title: 'Tasks',
             href: tasksIndex(),
@@ -115,7 +124,13 @@ export function useNavigation(): {
         sections.push(
             {
                 label: 'Menu',
-                items: [dashboardItem, accounts, packages, adminDns],
+                items: [
+                    dashboardItem,
+                    accounts,
+                    packages,
+                    resellerPackages,
+                    adminDns,
+                ],
             },
             {
                 label: 'Server',
@@ -177,6 +192,23 @@ export function useNavigation(): {
                 ftp,
                 cronJobs,
                 redirects,
+            ],
+        });
+    } else if (role === 'reseller') {
+        sections.push({
+            label: 'Menu',
+            items: [
+                dashboardItem,
+                {
+                    title: 'Accounts',
+                    href: resellerAccountsIndex(),
+                    icon: Users,
+                },
+                {
+                    title: 'Packages',
+                    href: resellerOwnPackagesIndex(),
+                    icon: Package,
+                },
             ],
         });
     } else {

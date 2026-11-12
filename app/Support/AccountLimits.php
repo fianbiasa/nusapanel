@@ -108,10 +108,17 @@ final class AccountLimits implements Arrayable
     }
 
     /**
-     * Whether the account may request SSL certificates.
+     * Whether the account may request SSL certificates: its package must
+     * include SSL, and so must its reseller's package, if a reseller owns it.
      */
     public function allowsSsl(): bool
     {
+        $owner = $this->account->owner;
+
+        if ($owner !== null && $owner->isReseller() && ! ResellerLimits::for($owner)->allowsSsl()) {
+            return false;
+        }
+
         return $this->account->package === null || $this->account->package->ssl;
     }
 
