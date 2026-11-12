@@ -161,7 +161,7 @@ func (p *packer) add(src, name string) error {
 		return nil
 
 	case info.Mode().IsRegular():
-		file, err := p.home.root.Open(src)
+		file, err := p.home.openRegular(src)
 		if err != nil {
 			return fail(err, src)
 		}
@@ -377,7 +377,7 @@ func (h *Home) Extract(archive, destination string, overwrite bool) (ExtractResu
 		return result, err
 	}
 
-	file, err := h.root.Open(rootName(archive))
+	file, err := h.openForRead(rootName(archive))
 	if err != nil {
 		return result, fail(err, archive)
 	}

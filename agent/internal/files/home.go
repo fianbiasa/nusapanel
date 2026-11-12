@@ -12,6 +12,7 @@ import (
 	"path"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 	"unicode/utf8"
 )
@@ -86,7 +87,7 @@ type Listing struct {
 
 // List returns the content of folder p.
 func (h *Home) List(p string) (Listing, error) {
-	dir, err := h.root.Open(rootName(p))
+	dir, err := h.openForRead(rootName(p))
 	if err != nil {
 		return Listing{}, fail(err, p)
 	}
@@ -211,7 +212,7 @@ func (h *Home) Read(p string) (Content, error) {
 		return Content{}, err
 	}
 
-	file, err := h.root.Open(rootName(p))
+	file, err := h.openForRead(rootName(p))
 	if err != nil {
 		return Content{}, fail(err, p)
 	}
@@ -466,7 +467,7 @@ func (h *Home) copyTree(src, dst string) error {
 		return fail(h.root.Chmod(dst, info.Mode().Perm()), dst)
 
 	case info.Mode().IsRegular():
-		in, err := h.root.Open(src)
+		in, err := h.openRegular(src)
 		if err != nil {
 			return fail(err, src)
 		}
@@ -495,7 +496,7 @@ func (h *Home) copyTree(src, dst string) error {
 
 // names returns the names in folder p.
 func (h *Home) names(p string) ([]string, error) {
-	dir, err := h.root.Open(rootName(p))
+	dir, err := h.openForRead(rootName(p))
 	if err != nil {
 		return nil, fail(err, p)
 	}
@@ -578,7 +579,7 @@ func (h *Home) Upload(r io.Reader, p string, overwrite bool) (Entry, error) {
 
 // Download writes the content of file p to w.
 func (h *Home) Download(w io.Writer, p string) (Entry, error) {
-	file, err := h.root.Open(rootName(p))
+	file, err := h.openForRead(rootName(p))
 	if err != nil {
 		return Entry{}, fail(err, p)
 	}
@@ -701,6 +702,37 @@ func (h *Home) free(p string) error {
 	}
 
 	return fail(err, p)
+}
+
+// openForRead opens name for reading without blocking: open(2) on a FIFO
+// waits for a writer, so a FIFO a customer left in the home would hold the
+// call, and one of the agent's call slots, until it times out. Callers
+// still check what they opened before reading it.
+func (h *Home) openForRead(name string) (*os.File, error) {
+	return h.root.OpenFile(name, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+}
+
+// openRegular opens regular file name for reading. Anything else is
+// refused before a byte is read, also a file swapped for a FIFO or a device
+// after its type was checked.
+func (h *Home) openRegular(name string) (*os.File, error) {
+	file, err := h.openForRead(name)
+	if err != nil {
+		return nil, err
+	}
+
+	info, err := file.Stat()
+	if err == nil {
+		err = regularFile(info, name)
+	}
+
+	if err != nil {
+		file.Close()
+
+		return nil, err
+	}
+
+	return file, nil
 }
 
 func regularFile(info fs.FileInfo, p string) error {
