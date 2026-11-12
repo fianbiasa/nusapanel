@@ -10,7 +10,7 @@ class DeleteQueuedMailRequest extends FormRequest
     /**
      * The pattern of a Postfix queue ID, short or long.
      */
-    public const QUEUE_ID = '/^[0-9A-Za-z]{5,32}$/';
+    public const QUEUE_ID = '/^[0-9A-Za-z]{5,32}$/D';
 
     /**
      * Get the validation rules that apply to the request: the queue IDs of

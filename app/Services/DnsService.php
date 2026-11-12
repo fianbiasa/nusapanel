@@ -403,7 +403,7 @@ class DnsService
         }
 
         foreach ($terms as $index => $existing) {
-            if (preg_match('/^([+?~-]?all|redirect=.*)$/i', $existing) === 1) {
+            if (preg_match('/^([+?~-]?all|redirect=.*)$/iD', $existing) === 1) {
                 array_splice($terms, $index, 0, [$term]);
 
                 return $terms;

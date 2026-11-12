@@ -145,6 +145,6 @@ class CronSchedule implements ValidationRule
 
     private static function number(string $value): ?int
     {
-        return preg_match('/^\d{1,2}$/', $value) === 1 ? (int) $value : null;
+        return preg_match('/^\d{1,2}$/D', $value) === 1 ? (int) $value : null;
     }
 }

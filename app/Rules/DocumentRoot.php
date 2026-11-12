@@ -44,7 +44,7 @@ class DocumentRoot implements ValidationRule
         }
 
         foreach ($names as $name) {
-            if (preg_match('/^[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}$/', $name) !== 1) {
+            if (preg_match('/^[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}$/D', $name) !== 1) {
                 return false;
             }
         }

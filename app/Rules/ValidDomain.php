@@ -12,7 +12,7 @@ use Illuminate\Contracts\Validation\ValidationRule;
  */
 class ValidDomain implements ValidationRule
 {
-    public const LABEL_PATTERN = '/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/';
+    public const LABEL_PATTERN = '/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/D';
 
     public function validate(string $attribute, mixed $value, Closure $fail): void
     {

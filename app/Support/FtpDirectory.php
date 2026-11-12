@@ -48,7 +48,7 @@ final class FtpDirectory
                 }
 
                 foreach ($names as $name) {
-                    if ($name === '.' || $name === '..' || preg_match('/^[A-Za-z0-9._-]+$/', $name) !== 1) {
+                    if ($name === '.' || $name === '..' || preg_match('/^[A-Za-z0-9._-]+$/D', $name) !== 1) {
                         $fail(__('Use folder names of letters, digits, dots, dashes and underscores, separated by single slashes.'));
 
                         return;

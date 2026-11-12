@@ -241,7 +241,7 @@ class MailService
 
         $mailDomain->forceFill([
             'status' => MailDomainStatus::Active,
-            'dkim_public_key' => is_string($key) && preg_match('/^[A-Za-z0-9+\/=]{1,2000}$/', $key) === 1 ? $key : $mailDomain->dkim_public_key,
+            'dkim_public_key' => is_string($key) && preg_match('/^[A-Za-z0-9+\/=]{1,2000}$/D', $key) === 1 ? $key : $mailDomain->dkim_public_key,
         ])->save();
 
         if ($mailDomain->dkim_public_key !== null) {

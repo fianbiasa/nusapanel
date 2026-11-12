@@ -75,7 +75,7 @@ class PhpVersionService
 
         $valid = array_values(array_unique(array_filter(
             $versions,
-            fn (mixed $version): bool => is_string($version) && preg_match('/^\d\.\d$/', $version) === 1,
+            fn (mixed $version): bool => is_string($version) && preg_match('/^\d\.\d$/D', $version) === 1,
         )));
 
         usort($valid, fn (string $a, string $b): int => version_compare($a, $b));

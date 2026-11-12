@@ -42,7 +42,7 @@ class StoreMailFilterRequest extends FormRequest
         return [
             'field' => ['required', Rule::in(MailFilter::FIELDS)],
             'operator' => ['required', Rule::in(MailFilter::OPERATORS)],
-            'value' => ['required', 'string', 'max:200', 'regex:/^[^\x00-\x1f\x7f]+$/u'],
+            'value' => ['required', 'string', 'max:200', 'regex:/^[^\x00-\x1f\x7f]+$/uD'],
             'action' => ['required', Rule::in(MailFilter::ACTIONS)],
             'target' => match ($action) {
                 'move' => ['required', 'string', 'max:64', 'regex:/^[^\x00-\x1f\x7f\/"\\\\.][^\x00-\x1f\x7f\/"\\\\]*$/u'],

@@ -34,8 +34,8 @@ class UpdateAutoreplyRequest extends FormRequest
     {
         return [
             'enabled' => ['required', 'boolean'],
-            'subject' => ['required_if_accepted:enabled', 'nullable', 'string', 'max:150', 'regex:/^[^\x00-\x1f\x7f]*$/u'],
-            'body' => ['required_if_accepted:enabled', 'nullable', 'string', 'max:5000', 'regex:/^[^\x00]*$/u'],
+            'subject' => ['required_if_accepted:enabled', 'nullable', 'string', 'max:150', 'regex:/^[^\x00-\x1f\x7f]*$/uD'],
+            'body' => ['required_if_accepted:enabled', 'nullable', 'string', 'max:5000', 'regex:/^[^\x00]*$/uD'],
             'starts_on' => ['nullable', 'date_format:Y-m-d'],
             'ends_on' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:starts_on'],
             'interval_days' => ['required', 'integer', 'min:1', 'max:30'],

@@ -11,7 +11,7 @@ use Illuminate\Contracts\Validation\ValidationRule;
  */
 class ValidUsername implements ValidationRule
 {
-    public const PATTERN = '/^[a-z][a-z0-9]{2,15}$/';
+    public const PATTERN = '/^[a-z][a-z0-9]{2,15}$/D';
 
     /**
      * Names used by the operating system and the services the panel runs.

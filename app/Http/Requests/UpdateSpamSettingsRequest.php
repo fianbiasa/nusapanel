@@ -65,7 +65,7 @@ class UpdateSpamSettingsRequest extends FormRequest
             $value = (string) $value;
             $domain = str_starts_with($value, '@') ? substr($value, 1) : null;
             $valid = $domain !== null
-                ? preg_match('/^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/', $domain) === 1
+                ? preg_match('/^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/D', $domain) === 1
                 : filter_var($value, FILTER_VALIDATE_EMAIL) !== false && strlen($value) <= 254;
 
             if (! $valid) {

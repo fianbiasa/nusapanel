@@ -36,9 +36,9 @@ final class DnsRecordInput
      */
     public const MAX_RECORDS = 1000;
 
-    private const LABEL_PATTERN = '/^[a-z0-9_]([a-z0-9_-]{0,61}[a-z0-9_])?$/';
+    private const LABEL_PATTERN = '/^[a-z0-9_]([a-z0-9_-]{0,61}[a-z0-9_])?$/D';
 
-    private const CAA_VALUE_PATTERN = '/^[\x21\x23-\x5b\x5d-\x7e]{1,255}$/';
+    private const CAA_VALUE_PATTERN = '/^[\x21\x23-\x5b\x5d-\x7e]{1,255}$/D';
 
     private const CAA_TAGS = ['issue', 'issuewild', 'iodef'];
 
@@ -222,7 +222,7 @@ final class DnsRecordInput
         }
 
         foreach ([$fields[0], $fields[1]] as $number) {
-            if (preg_match('/^(0|[1-9][0-9]{0,4})$/', $number) !== 1 || (int) $number > 65535) {
+            if (preg_match('/^(0|[1-9][0-9]{0,4})$/D', $number) !== 1 || (int) $number > 65535) {
                 return $message;
             }
         }
@@ -235,7 +235,7 @@ final class DnsRecordInput
         $fields = explode(' ', $content, 3);
 
         if (count($fields) !== 3
-            || preg_match('/^(0|[1-9][0-9]{0,2})$/', $fields[0]) !== 1 || (int) $fields[0] > 255
+            || preg_match('/^(0|[1-9][0-9]{0,2})$/D', $fields[0]) !== 1 || (int) $fields[0] > 255
             || ! in_array($fields[1], self::CAA_TAGS, true)
             || preg_match(self::CAA_VALUE_PATTERN, $fields[2]) !== 1) {
             return __('Enter "flags tag value", such as 0 issue letsencrypt.org (without quotes).');

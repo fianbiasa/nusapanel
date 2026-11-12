@@ -41,7 +41,7 @@ final class DatabaseNames
 
         return [
             'string',
-            'regex:/^[a-z0-9_]+$/',
+            'regex:/^[a-z0-9_]+$/D',
             function (string $attribute, mixed $value, Closure $fail) use ($length): void {
                 if (is_string($value) && strlen($value) > $length) {
                     $fail(__('The name may have at most :count characters after the prefix.', ['count' => $length]));

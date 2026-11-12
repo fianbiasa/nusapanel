@@ -206,7 +206,7 @@ class FileManagerController extends Controller
     {
         $data = $request->validate([
             ...$this->pathsRules(),
-            'mode' => ['required', 'string', 'regex:/^0?[0-7]{3}$/'],
+            'mode' => ['required', 'string', 'regex:/^0?[0-7]{3}$/D'],
         ]);
 
         $outcome = $this->files->changePermissions($request->user(), $data['paths'], (int) octdec($data['mode']));
@@ -307,7 +307,7 @@ class FileManagerController extends Controller
     public function upload(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'upload_id' => ['required', 'string', 'regex:/^[A-Za-z0-9-]{16,64}$/'],
+            'upload_id' => ['required', 'string', 'regex:/^[A-Za-z0-9-]{16,64}$/D'],
             'path' => ['required', 'string', new FilePath],
             'index' => ['required', 'integer', 'min:0'],
             'total' => ['required', 'integer', 'min:1', 'max:'.FileManagerService::MAX_CHUNKS],
@@ -473,7 +473,7 @@ class FileManagerController extends Controller
     {
         return [
             'ids' => ['required', 'array', 'min:1', 'max:1000'],
-            'ids.*' => ['required', 'string', 'distinct', 'regex:/^[0-9]{8}-[0-9]{6}-[0-9a-f]{8}$/'],
+            'ids.*' => ['required', 'string', 'distinct', 'regex:/^[0-9]{8}-[0-9]{6}-[0-9a-f]{8}$/D'],
         ];
     }
 }

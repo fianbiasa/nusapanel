@@ -20,7 +20,7 @@ class StoreFtpAccountRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => ['required', 'string', 'max:32', 'regex:/^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$/'],
+            'name' => ['required', 'string', 'max:32', 'regex:/^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$/D'],
             'domain_id' => ['required', 'integer'],
             'directory' => ['present', ...FtpDirectory::rules()],
             'password' => ['required', 'string', 'min:12', 'max:128'],

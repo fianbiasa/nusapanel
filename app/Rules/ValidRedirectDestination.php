@@ -57,7 +57,7 @@ class ValidRedirectDestination implements ValidationRule
 
         [, $scheme, $authority, $rest] = $parts;
 
-        preg_match('/^(.*?)(:\d+)?$/s', $authority, $hostAndPort);
+        preg_match('/^(.*?)(:\d+)?$/sD', $authority, $hostAndPort);
         $host = mb_strtolower($hostAndPort[1] ?? $authority);
         $port = $hostAndPort[2] ?? '';
 
@@ -74,7 +74,7 @@ class ValidRedirectDestination implements ValidationRule
 
     private static function isValid(string $value): bool
     {
-        if (strlen($value) > 2048 || preg_match('/^[A-Za-z0-9._~:\/?#@!&()*+,=%\[\]-]+$/', $value) !== 1) {
+        if (strlen($value) > 2048 || preg_match('/^[A-Za-z0-9._~:\/?#@!&()*+,=%\[\]-]+$/D', $value) !== 1) {
             return false;
         }
 
