@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"rayxo/agent/internal/rpc"
 	"rayxo/agent/internal/sysuser"
@@ -26,6 +27,7 @@ type webServer interface {
 	IssueWildcardCertificate(ctx context.Context, user, domain string, nameservers []string) (webserver.Certificate, error)
 	InstallCertificate(ctx context.Context, user, domain, certificatePEM, keyPEM string) (webserver.CustomCertificate, error)
 	DeleteCertificate(ctx context.Context, user, domain string) error
+	CertificateExpiry(domain string) (expiresAt time.Time, ok bool)
 }
 
 // applyDomainParams are the params of web.apply_domain. Everything after
@@ -186,6 +188,7 @@ func webMethods(system accountSystem, web webServer) map[string]rpc.Method {
 		"ssl.issue":         {Handler: actions.issueCertificate, LockKey: webLockKey[issueCertificateParams]},
 		"ssl.install":       {Handler: actions.installCertificate, LockKey: webLockKey[installCertificateParams]},
 		"ssl.delete":        {Handler: actions.deleteCertificate, LockKey: webLockKey[domainParams]},
+		"ssl.expiry":        {Handler: actions.reportExpiry},
 	}
 }
 

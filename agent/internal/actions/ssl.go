@@ -8,6 +8,7 @@ import (
 	"slices"
 	"time"
 
+	"rayxo/agent/internal/rpc"
 	"rayxo/agent/internal/validate"
 	"rayxo/agent/internal/webserver"
 )
@@ -97,6 +98,67 @@ func (w webActions) issueCertificate(ctx context.Context, raw json.RawMessage) (
 		Names:     certificate.Names,
 		ExpiresAt: certificate.ExpiresAt.UTC().Format(time.RFC3339),
 	}, nil
+}
+
+// maxExpiryDomains bounds the domains one ssl.expiry call reads.
+const maxExpiryDomains = 500
+
+// expiryParams are the params of ssl.expiry.
+type expiryParams struct {
+	Domains []string `json:"domains"`
+}
+
+func (p expiryParams) validate() error {
+	if len(p.Domains) == 0 || len(p.Domains) > maxExpiryDomains {
+		return fmt.Errorf("domains needs 1 to %d domains", maxExpiryDomains)
+	}
+
+	seen := make(map[string]bool, len(p.Domains))
+
+	for _, domain := range p.Domains {
+		if err := validate.Domain(domain); err != nil {
+			return err
+		}
+
+		if seen[domain] {
+			return fmt.Errorf("domain %q is given twice", domain)
+		}
+
+		seen[domain] = true
+	}
+
+	return nil
+}
+
+// expiryInfo is the result of ssl.expiry: when the certificate of each
+// domain that has one expires, RFC 3339 in UTC.
+type expiryInfo struct {
+	ExpiresAt map[string]string `json:"expires_at"`
+}
+
+// reportExpiry implements ssl.expiry: when the Let's Encrypt certificates
+// of domains expire, as they are on disk now, so the panel learns of the
+// renewals certbot makes on its own. A domain without a certificate is
+// left out. It only reads, so it locks nothing.
+func (w webActions) reportExpiry(_ context.Context, raw json.RawMessage) (any, error) {
+	var params expiryParams
+	if err := rpc.DecodeParams(raw, &params); err != nil {
+		return nil, err
+	}
+
+	if err := params.validate(); err != nil {
+		return nil, rpc.Errorf(rpc.CodeInvalidParams, "invalid params: %v", err)
+	}
+
+	info := expiryInfo{ExpiresAt: make(map[string]string, len(params.Domains))}
+
+	for _, domain := range params.Domains {
+		if expiresAt, ok := w.web.CertificateExpiry(domain); ok {
+			info.ExpiresAt[domain] = expiresAt.UTC().Format(time.RFC3339)
+		}
+	}
+
+	return info, nil
 }
 
 // installCertificateParams are the params of ssl.install. Certificate and

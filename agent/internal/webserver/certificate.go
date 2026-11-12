@@ -134,6 +134,23 @@ func (m *Manager) HasCertificate(domain string) bool {
 	return true
 }
 
+// CertificateExpiry returns when the certificate certbot keeps for domain
+// expires, as it is on disk now: after certbot renewed it, the renewed
+// one's. ok is false when domain has no certificate there, or it cannot be
+// read.
+func (m *Manager) CertificateExpiry(domain string) (expiresAt time.Time, ok bool) {
+	if !m.HasCertificate(domain) {
+		return time.Time{}, false
+	}
+
+	expiresAt, err := certificateExpiry(m.certificateFile(domain))
+	if err != nil {
+		return time.Time{}, false
+	}
+
+	return expiresAt, true
+}
+
 // IssueCertificate gets a Let's Encrypt certificate for domain of user, or
 // renews it when the names changed or it expires soon; a valid certificate
 // for the same names is kept. domain must reach this server over HTTP (else

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -20,7 +21,7 @@ import (
 	"rayxo/agent/internal/webserver"
 )
 
-var webMethodNames = []string{"web.apply_domain", "web.remove_domain", "php.remove_pool", "php.versions", "ssl.issue", "ssl.install", "ssl.delete"}
+var webMethodNames = []string{"web.apply_domain", "web.remove_domain", "php.remove_pool", "php.versions", "ssl.issue", "ssl.install", "ssl.delete", "ssl.expiry"}
 
 // webEnv runs the web methods against a fake account system and a real
 // webserver.Manager whose files live in a temporary directory and whose
@@ -206,7 +207,7 @@ func TestWebMethodsLockTheAccount(t *testing.T) {
 	env := newWebEnv(t)
 
 	for name, method := range webMethods(env.system, env.web) {
-		if name == "php.versions" {
+		if name == "php.versions" || name == "ssl.expiry" {
 			// Only reads, so it locks nothing (checked in its own test).
 			continue
 		}
@@ -271,6 +272,14 @@ func TestWebMethodsRejectInvalidParams(t *testing.T) {
 			{"username": "budi", "domain": "example.com;"},
 			{"username": "root", "domain": "example.com"},
 			{"username": "budi", "domain": "example.com", "email": "a@b.c"},
+		},
+		"ssl.expiry": {
+			{},
+			{"domains": []string{}},
+			{"domains": []string{"../etc"}},
+			{"domains": []string{"example.com", "example.com"}},
+			{"domains": manyDomains(501)},
+			{"domains": []string{"example.com"}, "username": "budi"},
 		},
 		"ssl.delete": {
 			{"domain": "example.com"},
@@ -662,4 +671,14 @@ func TestApplyDomainGivesTheWebsiteItsPHPSettings(t *testing.T) {
 		!strings.Contains(string(pool), "php_value[date.timezone] = Asia/Jakarta\n") {
 		t.Fatalf("the settings are missing from the pool (%v):\n%s", err, pool)
 	}
+}
+
+// manyDomains returns count different domains.
+func manyDomains(count int) []string {
+	domains := make([]string, count)
+	for i := range domains {
+		domains[i] = fmt.Sprintf("d%d.example.com", i)
+	}
+
+	return domains
 }

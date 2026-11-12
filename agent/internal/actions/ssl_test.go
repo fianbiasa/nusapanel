@@ -531,3 +531,39 @@ func TestOnlyAWildcardOfTheSameAccountOneLabelUpServesASubdomain(t *testing.T) {
 		t.Fatal("a subdomain used another account's certificate")
 	}
 }
+
+func TestCertificateExpiryReportsTheCertificatesOnDiskNow(t *testing.T) {
+	env := newWebEnv(t)
+	env.mustCall("web.apply_domain", applyParams("example.com", "8.4"))
+	env.reach("example.com")
+	env.mustCall("ssl.issue", domainOf("budi", "example.com"))
+
+	params := map[string]any{"domains": []string{"example.com", "example.org"}}
+
+	// A domain without a certificate is left out.
+	if result := env.mustCall("ssl.expiry", params); result != `{"expires_at":{"example.com":"2027-01-02T03:04:05Z"}}` {
+		t.Fatalf("unexpected result %s", result)
+	}
+
+	// certbot renews on its own: the renewed certificate's end is reported.
+	renewed, _ := selfSignedCertificate(t, "example.com")
+	if err := os.WriteFile(filepath.Join(env.cfg.LetsEncryptDir, "live", "example.com", "fullchain.pem"), []byte(renewed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	block, _ := pem.Decode([]byte(renewed))
+
+	certificate, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := `{"expires_at":{"example.com":"` + certificate.NotAfter.UTC().Format(time.RFC3339) + `"}}`
+	if result := env.mustCall("ssl.expiry", params); result != want {
+		t.Fatalf("after a renewal: %s, want %s", result, want)
+	}
+
+	if webMethods(env.system, env.web)["ssl.expiry"].LockKey != nil {
+		t.Fatal("ssl.expiry must not lock an account")
+	}
+}

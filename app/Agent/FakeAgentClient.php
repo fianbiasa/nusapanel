@@ -35,6 +35,7 @@ final class FakeAgentClient implements AgentClient
             'panel.port_confirm' => ['confirmed' => true, 'simulated' => true],
             'panel.port_cancel' => ['closed' => true, 'simulated' => true],
             'ssl.issue' => $this->issuedCertificate((string) ($params['domain'] ?? '')),
+            'ssl.expiry' => ['expires_at' => [], 'simulated' => true],
             'account.set_quota' => ['applied' => true, 'simulated' => true],
             'quota.report' => $this->quotaReport(),
             'db.report' => $this->databaseReport(),
