@@ -57,7 +57,7 @@ rayxo/
 - domain & website ✅: tambah/hapus domain (halaman Domains user, domain utama saat admin membuat akun), Nginx → Apache → PHP-FPM 8.4 per user, `www.` otomatis, halaman 503 saat suspend, isolasi antar akun & proteksi symlink teruji;
 - SSL Let's Encrypt ✅: pasang/lepas SSL dan Paksa HTTPS dari halaman Domains, cek dulu domain sampai ke server (A record atau proxy Cloudflare), diperpanjang otomatis `certbot.timer`; teruji dengan domain asli lewat Cloudflare;
 - `rayxo:rebuild-web` ✅: semua website ditulis ulang otomatis setiap upgrade (`setup.sh`), jadi perubahan template ikut terpasang;
-- paket hosting ✅: admin membuat paket (kuota disk, bandwidth, domain, subdomain, email, database, FTP, cron; fitur SSL), memilihnya saat membuat akun dan menggantinya kapan saja; batas domain dan fitur SSL sudah diterapkan, batas lain berlaku begitu fiturnya ada; pemakaian tampil di dashboard customer;
+- paket hosting ✅: admin membuat paket (kuota disk, bandwidth, domain, subdomain, email, database, FTP, cron; fitur SSL), memilihnya saat membuat akun dan menggantinya kapan saja; batas domain, subdomain, pointer, database, FTP, cron, fitur SSL, dan sejak P2 akun email dan forwarder diterapkan; batas bandwidth menyusul bersama statistiknya (P3); pemakaian tampil di dashboard customer;
 - kuota disk & inode ✅: `setup.sh` mengaktifkan kuota user ext4 tanpa reboot (fstab dicadangkan, divalidasi, dikembalikan kalau gagal), agent memasang batas per akun dari paketnya, pemakaian diukur tiap 15 menit dan tampil di dashboard & daftar akun; teruji: menulis melebihi kuota ditolak "Disk quota exceeded".
 
 - subdomain, pointer & redirect ✅: subdomain punya folder sendiri (`domains/blog.<domain>/public_html`, bukan di dalam `public_html` domain induk supaya `.htaccess`-nya tidak ikut berlaku) dan dihitung ke batas subdomain; pointer (batas baru di paket) menampilkan website domain induk (alias) atau mengalihkan pengunjungnya ke sana (301); halaman Redirects mengalihkan path (301/302, bisa termasuk semua halaman di bawahnya); SSL & Paksa HTTPS berlaku per nama; hapus domain ikut menghapus subdomain & pointer-nya (anak dulu, lalu domainnya); teruji di nginx sungguhan.
@@ -86,15 +86,15 @@ rayxo/
 
 - riwayat login ✅: Settings > Security menampilkan 20 login terakhir akun itu, berhasil maupun gagal, dengan waktu, IP, browser dan sistem operasinya (dari audit log yang sudah mencatat setiap login).
 
-- `rayxo rebuild` ✅: menulis ulang semua konfigurasi dari database panel (Nginx, Apache dan pool PHP setiap website, kuota disk dan crontab setiap akun, folder setiap login FTP), lewat `rayxo rebuild` di server, `php artisan rayxo:rebuild`, atau tombol "Tulis ulang konfigurasi" di halaman Services; aman diulang karena setiap tugas menulis keadaan lengkapnya.
+- `rayxo rebuild` ✅: menulis ulang semua konfigurasi dari database panel (Nginx, Apache dan pool PHP setiap website, kuota disk dan crontab setiap akun, folder setiap login FTP; sejak P2 juga zone DNS, domain email, filter email dan batas kirim), lewat `rayxo rebuild` di server, `php artisan rayxo:rebuild`, atau tombol "Tulis ulang konfigurasi" di halaman Services; aman diulang karena setiap tugas menulis keadaan lengkapnya.
 
-- SSL hostname/panel ✅: `setup.sh` mengambil sertifikat Let's Encrypt untuk hostname setiap kali dijalankan (kalau belum ada atau sisa masa berlakunya kurang dari 30 hari), dipakai panel (port 2222) dan FTP, lalu diperpanjang `certbot.timer`; kalau gagal, panel memakai sertifikat self-signed sampai `setup.sh` dijalankan lagi. Menerbitkan ulang dari panel (misalnya setelah hostname diganti) menyusul bersama pengaturan server.
+- SSL hostname/panel ✅: `setup.sh` mengambil sertifikat Let's Encrypt untuk hostname setiap kali dijalankan (kalau belum ada atau sisa masa berlakunya kurang dari 30 hari), dipakai panel (port 2222) dan FTP, lalu diperpanjang `certbot.timer`; kalau gagal, panel memakai sertifikat self-signed sampai `setup.sh` dijalankan lagi. Menerbitkan ulang dari panel ada di Pengaturan Server (lihat pengaturan server tahap 1).
 
 - info sistem ✅ (sejak P0): dashboard admin menampilkan hostname, sistem operasi, CPU, load, memori, disk, uptime dan versi agent dari `system.info`.
 
 - 2FA ✅ (sejak P0): Settings > Security mengaktifkan 2FA lewat aplikasi authenticator (dengan konfirmasi kode dan recovery code) serta passkey; keduanya meminta konfirmasi password dulu.
 
-- CLI `rayxo` ✅: `rayxo ping`, `rayxo call <method> [params-json]` (memanggil aksi agent apa pun dari terminal server), `rayxo rebuild` dan `rayxo version`.
+- CLI `rayxo` ✅: `rayxo ping`, `rayxo call <method> [params-json]` (memanggil aksi agent apa pun dari terminal server), `rayxo rebuild` dan `rayxo version`; sejak P2 juga `rayxo reset-password <username>` dan `rayxo acme-dns-hook` (hook certbot untuk SSL wildcard).
 
 - tes isolasi akun ✅: `agent/internal/isolation` membuktikan di server asli bahwa akun A tidak bisa membaca file akun B. Jalur yang diserang: user Linux (SFTP, cron, file manager), PHP website, symlink lewat Nginx dan Apache, `.htaccess`, socket PHP-FPM, dan file manager agent. Setiap jalur punya kontrol, dan tes memakai dua akun sementara yang dihapus lagi. Teruji di VPS.
 
@@ -118,7 +118,7 @@ rayxo/
 
 - aksi massal akun ✅: admin mencentang akun di daftar akun lalu suspend (dengan alasan), buka suspend, hapus (konfirmasi ketik HAPUS) atau ganti paket sekaligus, paling banyak 100 akun. Setiap akun melewati pemeriksaan yang sama seperti aksi satu akun; akun yang tidak cocok (admin, akun sendiri, status yang salah) dilewati dan disebut beserta alasannya. Teruji di VPS dengan dua akun sementara: suspend massal lalu hapus massal tanpa sisa.
 
-Semua fitur P1 sudah ada. Yang dipindah ke fase lain: CGI dan batas disk & bandwidth per domain (P3), UI dua bahasa beserta bahasa default (PB). SSL mail menyusul bersama email (P2).
+Semua fitur P1 sudah ada. Yang dipindah ke fase lain: CGI dan batas disk & bandwidth per domain (P3), UI dua bahasa beserta bahasa default (PB). SSL mail sudah ada sejak P2.
 
 **Cakupan:**
 
