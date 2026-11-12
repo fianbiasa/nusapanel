@@ -20,6 +20,7 @@ class PackageService
         private AuditLogger $audit,
         private QuotaService $quotas,
         private DomainService $domains,
+        private SshService $ssh,
     ) {}
 
     /**
@@ -84,6 +85,10 @@ class PackageService
 
             if (in_array('cgi', $changed, true)) {
                 $this->domains->reapplyCgiWebsites(User::query()->where('package_id', $package->id), $actor);
+            }
+
+            if (in_array('ssh', $changed, true)) {
+                $this->ssh->reapply(User::query()->where('package_id', $package->id), $actor);
             }
         });
     }

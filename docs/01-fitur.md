@@ -98,8 +98,8 @@ Pembagian level sama seperti DirectAdmin:
 | Riwayat login               | ✅ IP, waktu, berhasil/gagal                                             | P1   |
 | Tema                        | ✅ Mode terang/gelap                                                     | P1   |
 | Bahasa                      | Indonesia & English, pilihan per user                                    | PB   |
-| SSH access                  | Shell terkurung (jail), on/off sesuai paket                              | P3   |
-| SSH keys                    | Tambah/hapus public key                                                  | P3   |
+| SSH access                  | ✅ Shell di jail sendiri (hanya program server & home akun), diizinkan per paket, on/off per akun | P3   |
+| SSH keys                    | ✅ Tambah/hapus public key, untuk SSH dan SFTP                            | P3   |
 | Site statistics             | Laporan GoAccess per domain                                              | P3   |
 | Log viewer                  | Access & error log per domain (tail, download)                           | P3   |
 | Pemakaian resource          | Disk, inode, bandwidth (grafik); CPU & RAM ★                             | P3   |

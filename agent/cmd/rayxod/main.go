@@ -102,6 +102,12 @@ func run(logger *slog.Logger, cfg config) error {
 		return fmt.Errorf("find the rayxod binary: %w", err)
 	}
 
+	// Mounts do not survive a reboot: the SSH jails are mounted again
+	// before any call can need them.
+	if err := actions.RestoreJails(context.Background()); err != nil {
+		logger.Error("could not restore every SSH jail", "error", err)
+	}
+
 	manager := services.New(services.DefaultConfig())
 	changer := reconfigure.New(reconfigure.DefaultConfig())
 	ports := panelport.New(panelport.DefaultConfig())

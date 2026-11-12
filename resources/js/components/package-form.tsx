@@ -57,6 +57,7 @@ export type PackageFormValues = {
     limits: Partial<Record<ResellerQuotaKey, number | null>>;
     ssl: boolean;
     cgi?: boolean;
+    ssh?: boolean;
     oversell?: boolean;
 };
 
@@ -84,11 +85,13 @@ export function PackageForm({
         pkg?.ssl ?? (resellerLimits === null || resellerLimits.ssl === 1),
     );
     const [cgi, setCgi] = useState(pkg?.cgi ?? false);
+    const [ssh, setSsh] = useState(pkg?.ssh ?? false);
     const [oversell, setOversell] = useState(pkg?.oversell ?? false);
     const keys: ResellerQuotaKey[] =
         kind === 'reseller' ? ['accounts', ...quotaKeys] : quotaKeys;
     const sslAllowed = resellerLimits === null || resellerLimits.ssl === 1;
     const cgiAllowed = resellerLimits === null || resellerLimits.cgi === 1;
+    const sshAllowed = resellerLimits === null || resellerLimits.ssh === 1;
 
     return (
         <Form
@@ -249,6 +252,37 @@ export function PackageForm({
                                 </div>
                                 <InputError
                                     message={errors.cgi}
+                                    className="mt-2"
+                                />
+                            </div>
+
+                            <div>
+                                <input
+                                    type="hidden"
+                                    name="ssh"
+                                    value={ssh ? 1 : 0}
+                                />
+                                <div className="flex items-start gap-3">
+                                    <Checkbox
+                                        id="ssh"
+                                        checked={ssh}
+                                        disabled={!sshAllowed && !ssh}
+                                        onCheckedChange={(checked) =>
+                                            setSsh(checked === true)
+                                        }
+                                        className="mt-0.5"
+                                    />
+                                    <div className="grid gap-1">
+                                        <Label htmlFor="ssh">Akses SSH</Label>
+                                        <p className="text-xs text-muted-foreground">
+                                            {!sshAllowed
+                                                ? 'Paket reseller Anda tidak termasuk SSH.'
+                                                : 'Akun bisa menyalakan SSH: shell di jail-nya sendiri, yang hanya melihat program server dan home akun itu. Mematikannya menutup sesi SSH yang sedang berjalan.'}
+                                        </p>
+                                    </div>
+                                </div>
+                                <InputError
+                                    message={errors.ssh}
                                     className="mt-2"
                                 />
                             </div>

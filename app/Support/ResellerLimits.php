@@ -78,6 +78,11 @@ final class ResellerLimits implements Arrayable
         return $this->reseller->resellerPackage === null || $this->reseller->resellerPackage->cgi;
     }
 
+    public function allowsSsh(): bool
+    {
+        return $this->reseller->resellerPackage === null || $this->reseller->resellerPackage->ssh;
+    }
+
     /**
      * How much of the quantity the reseller's accounts use together, or
      * null while it is not measured. Disk space is in megabytes.
@@ -234,6 +239,10 @@ final class ResellerLimits implements Arrayable
             $errors['cgi'] = __('Your reseller package does not include CGI.');
         }
 
+        if (($data['ssh'] ?? false) && ! $this->allowsSsh()) {
+            $errors['ssh'] = __('Your reseller package does not include SSH.');
+        }
+
         if ($errors !== []) {
             throw ValidationException::withMessages($errors);
         }
@@ -311,7 +320,7 @@ final class ResellerLimits implements Arrayable
     /**
      * The limits, usage and allocation for the pages.
      *
-     * @return array{package: string|null, oversell: bool, ssl: bool, cgi: bool, quotas: array<string, array{limit: int|null, used: int|null, allocated: int|null}>}
+     * @return array{package: string|null, oversell: bool, ssl: bool, cgi: bool, ssh: bool, quotas: array<string, array{limit: int|null, used: int|null, allocated: int|null}>}
      */
     public function toArray(): array
     {
@@ -330,6 +339,7 @@ final class ResellerLimits implements Arrayable
             'oversell' => $this->oversells(),
             'ssl' => $this->allowsSsl(),
             'cgi' => $this->allowsCgi(),
+            'ssh' => $this->allowsSsh(),
             'quotas' => $quotas,
         ];
     }

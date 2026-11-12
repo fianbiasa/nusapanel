@@ -140,10 +140,25 @@ final class AccountLimits implements Arrayable
     }
 
     /**
+     * Whether the account may turn on SSH: its package must include SSH,
+     * and so must its reseller's package, if a reseller owns it.
+     */
+    public function allowsSsh(): bool
+    {
+        $owner = $this->account->owner;
+
+        if ($owner !== null && $owner->isReseller() && ! ResellerLimits::for($owner)->allowsSsh()) {
+            return false;
+        }
+
+        return $this->account->package === null || $this->account->package->ssh;
+    }
+
+    /**
      * The limits and usage for the pages: when disk usage was last measured,
      * and whether the server enforces disk quotas (null until it reported).
      *
-     * @return array{package: string|null, ssl: bool, cgi: bool, quotas: array<string, array{limit: int|null, used: int|null}>, measured_at: string|null, quota_enabled: bool|null}
+     * @return array{package: string|null, ssl: bool, cgi: bool, ssh: bool, quotas: array<string, array{limit: int|null, used: int|null}>, measured_at: string|null, quota_enabled: bool|null}
      */
     public function toArray(): array
     {
@@ -157,6 +172,7 @@ final class AccountLimits implements Arrayable
             'package' => $this->account->package?->name,
             'ssl' => $this->allowsSsl(),
             'cgi' => $this->allowsCgi(),
+            'ssh' => $this->allowsSsh(),
             'quotas' => $quotas,
             'measured_at' => $this->account->diskUsage?->measured_at->toIso8601String(),
             'quota_enabled' => QuotaService::isEnabled(),

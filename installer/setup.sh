@@ -67,6 +67,9 @@ readonly FTP_CERTIFICATE="/etc/ssl/private/pure-ftpd.pem"
 # Every hosting account is in this group; sshd gives its members SFTP only
 # (installer/files/sshd-sftp.conf). The agent adds new accounts.
 readonly SFTP_GROUP="rayxo-sftp"
+# Accounts whose package allows SSH are in this group too; sshd gives them
+# a shell in their jail ($DATA_DIR/jail/<user>, built by the agent).
+readonly SSH_GROUP="rayxo-ssh"
 readonly SFTP_SSHD_CONF="/etc/ssh/sshd_config.d/rayxo-sftp.conf"
 readonly DKIM_SELECTOR="rayxo"
 # PowerDNS serves the zones of hosting accounts from its own database; the
@@ -1864,15 +1867,19 @@ OPTIONS
 }
 
 # SFTP for hosting accounts, as their own Linux user with the password they
-# set in the panel. sshd gives the members of rayxo-sftp SFTP only; nothing
-# changes for root or other users of the server. If sshd refuses the
-# configuration, it is removed again, so SSH always keeps working.
+# set in the panel. sshd gives the members of rayxo-sftp SFTP only, and those
+# of rayxo-ssh a shell in their jail; nothing changes for root or other users
+# of the server. If sshd refuses the configuration, it is removed again, so
+# SSH always keeps working.
 configure_sftp() {
     step "Mengatur SFTP untuk akun hosting"
 
-    if ! getent group "$SFTP_GROUP" >/dev/null; then
-        quietly groupadd --system "$SFTP_GROUP"
-    fi
+    local group
+    for group in "$SFTP_GROUP" "$SSH_GROUP"; do
+        if ! getent group "$group" >/dev/null; then
+            quietly groupadd --system "$group"
+        fi
+    done
 
     # Accounts created before SFTP join the group too (the panel's accounts
     # carry "rayxo" as their GECOS comment).
@@ -1895,7 +1902,7 @@ configure_sftp() {
     fi
 
     quietly systemctl try-reload-or-restart ssh.service
-    info "SFTP aktif di port 22 untuk akun hosting (hanya SFTP, tanpa shell); password SFTP diatur customer di halaman FTP"
+    info "SFTP aktif di port 22 untuk akun hosting; SSH (shell dalam jail) untuk paket yang mengizinkannya; password diatur customer di halaman FTP"
 }
 
 # Customer websites: Nginx in front (ports 80/443, static files), Apache on

@@ -11,6 +11,7 @@ import (
 	"rayxo/agent/internal/database"
 	"rayxo/agent/internal/dns"
 	"rayxo/agent/internal/files"
+	"rayxo/agent/internal/jail"
 	"rayxo/agent/internal/mail"
 	"rayxo/agent/internal/mailqueue"
 	"rayxo/agent/internal/panelport"
@@ -43,8 +44,9 @@ func Register(registry *rpc.Registry, config Config) {
 	web := webserver.New(webserver.DefaultConfig())
 	quotas := quota.New(quota.DefaultConfig())
 	databases := database.New(database.DefaultConfig())
+	jails := jail.New(jail.DefaultConfig())
 
-	for name, method := range accountMethods(sysuser.System{}, web, quotas, databases) {
+	for name, method := range accountMethods(sysuser.System{}, web, quotas, databases, jails) {
 		registry.Register(name, method)
 	}
 
@@ -102,6 +104,10 @@ func Register(registry *rpc.Registry, config Config) {
 	}
 
 	for name, method := range databaseMethods(sysuser.System{}, databases, transfers, helper) {
+		registry.Register(name, method)
+	}
+
+	for name, method := range sshMethods(sysuser.System{}, jails, helper) {
 		registry.Register(name, method)
 	}
 

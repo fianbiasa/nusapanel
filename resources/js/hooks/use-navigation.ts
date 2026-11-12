@@ -18,6 +18,7 @@ import {
     ScrollText,
     Settings,
     SlidersHorizontal,
+    SquareTerminal,
     Users,
 } from 'lucide-react';
 import { dashboard } from '@/routes';
@@ -43,6 +44,7 @@ import { index as filesIndex } from '@/routes/files';
 import { index as ftpIndex } from '@/routes/ftp';
 import { edit as profileEdit } from '@/routes/profile';
 import { index as redirectsIndex } from '@/routes/redirects';
+import { index as sshIndex } from '@/routes/ssh';
 import type { NavItem } from '@/types';
 
 export type NavSection = {
@@ -178,6 +180,11 @@ export function useNavigation(): {
             href: ftpIndex(),
             icon: FolderUp,
         };
+        const ssh: NavItem = {
+            title: 'SSH',
+            href: sshIndex(),
+            icon: SquareTerminal,
+        };
         const cronJobs: NavItem = {
             title: 'Cron Jobs',
             href: cronJobsIndex(),
@@ -199,6 +206,7 @@ export function useNavigation(): {
                 files,
                 databases,
                 ftp,
+                ssh,
                 cronJobs,
                 redirects,
             ],

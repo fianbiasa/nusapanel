@@ -756,8 +756,9 @@ function SftpPanel({ sftp, host }: { sftp: SftpState; host: string }) {
                     )}
 
                     <p className="text-xs text-muted-foreground">
-                        Hanya SFTP: tidak ada akses shell. File yang diunggah
-                        milik akun kamu dan terhitung di kuota disk.
+                        File yang diunggah milik akun kamu dan terhitung di
+                        kuota disk. Password ini juga dipakai untuk SSH, kalau
+                        paket kamu termasuk SSH.
                     </p>
                 </div>
             </div>

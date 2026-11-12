@@ -45,6 +45,7 @@ trait PackageValidationRules
             'inodes' => $quotaRules,
             'ssl' => ['required', 'boolean'],
             'cgi' => ['sometimes', 'boolean'],
+            'ssh' => ['sometimes', 'boolean'],
         ];
     }
 }

@@ -34,6 +34,7 @@ class AccountService
         private QuotaService $quotas,
         private DnsService $dns,
         private MailService $mail,
+        private SshService $ssh,
     ) {}
 
     /**
@@ -137,6 +138,7 @@ class AccountService
             $reseller->setRelation('resellerPackage', $package);
 
             $this->domains->reapplyCgiWebsites(User::query()->where('owner_id', $reseller->id), $actor);
+            $this->ssh->reapply(User::query()->where('owner_id', $reseller->id), $actor);
 
             $this->audit->record('account.reseller_package_changed', $reseller, [
                 'username' => $reseller->username,
@@ -190,6 +192,7 @@ class AccountService
             }
 
             $this->domains->reapplyCgiWebsites(User::query()->whereKey($account->id), $actor);
+            $this->ssh->reapply(User::query()->whereKey($account->id), $actor);
 
             $this->audit->record('account.transferred', $account, [
                 'username' => $account->username,
@@ -247,6 +250,11 @@ class AccountService
 
             if (! $account->isPanelOnly()) {
                 $this->tasks->dispatch('account.unsuspend', ['username' => $account->username], $account, $actor);
+
+                // Suspending removed the account's SSH jail.
+                if ($account->ssh_enabled) {
+                    $this->ssh->sync($account, $actor);
+                }
             }
 
             $this->audit->record('account.unsuspended', $account, ['username' => $account->username], $actor);
@@ -329,6 +337,7 @@ class AccountService
 
             $this->quotas->apply($account, $actor);
             $this->domains->reapplyCgiWebsites(User::query()->whereKey($account->id), $actor);
+            $this->ssh->reapply(User::query()->whereKey($account->id), $actor);
 
             $this->audit->record('account.package_changed', $account, [
                 'username' => $account->username,

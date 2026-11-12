@@ -53,6 +53,7 @@ type accountSystem interface {
 	// user does not exist.
 	LookupUser(ctx context.Context, name string) (sysuser.User, error)
 	EnsureGroupMember(ctx context.Context, group, member string) (gid int, err error)
+	RemoveGroupMember(ctx context.Context, group, member string) error
 	// AddUser returns an error wrapping sysuser.ErrNameTaken when the user
 	// or group name is in use.
 	AddUser(ctx context.Context, user sysuser.NewUser) error
@@ -120,13 +121,14 @@ type accountActions struct {
 	web       accountWeb
 	quotas    accountQuota
 	databases accountDatabases
+	jails     accountJails
 }
 
 // accountMethods returns the account.* and quota.* methods by name. Calls
 // for the same username run one at a time; quota.report only reads and
 // locks nothing.
-func accountMethods(system accountSystem, web accountWeb, quotas accountQuota, databases accountDatabases) map[string]rpc.Method {
-	accounts := accountActions{system: system, web: web, quotas: quotas, databases: databases}
+func accountMethods(system accountSystem, web accountWeb, quotas accountQuota, databases accountDatabases, jails accountJails) map[string]rpc.Method {
+	accounts := accountActions{system: system, web: web, quotas: quotas, databases: databases, jails: jails}
 
 	return map[string]rpc.Method{
 		"account.create":       {Handler: accounts.create, LockKey: accountLockKey},
@@ -232,8 +234,10 @@ func (a accountActions) addUser(ctx context.Context, name string) (sysuser.User,
 	return user, err
 }
 
-// suspend locks the account's password, takes away its login shell, shows
-// a "temporarily unavailable" page on all its websites and stops its PHP.
+// suspend locks the account's password, takes away its login shell, ends
+// its SSH sessions and removes its jail (the panel enables SSH again when it
+// unsuspends the account), shows a "temporarily unavailable" page on all
+// its websites and stops its PHP.
 func (a accountActions) suspend(ctx context.Context, raw json.RawMessage) (any, error) {
 	user, err := a.existingAccount(ctx, raw)
 	if err != nil {
@@ -246,6 +250,10 @@ func (a accountActions) suspend(ctx context.Context, raw json.RawMessage) (any, 
 
 	if err := a.system.SetShell(ctx, user.Name, noLoginShell); err != nil {
 		return nil, systemError(err)
+	}
+
+	if err := a.disableJail(user.Name); err != nil {
+		return nil, err
 	}
 
 	if err := a.web.SuspendAccount(ctx, user.Name); err != nil {
@@ -309,6 +317,12 @@ func (a accountActions) remove(ctx context.Context, raw json.RawMessage) (any, e
 	// inherit.
 	if err := a.databases.RemoveAccount(ctx, params.Username); err != nil {
 		return nil, databaseError(err, "delete the databases of "+params.Username)
+	}
+
+	// The SSH jail goes before the user: removing it ends the account's
+	// sessions and unmounts its home from the jail.
+	if err := a.disableJail(params.Username); err != nil {
+		return nil, err
 	}
 
 	if !found {

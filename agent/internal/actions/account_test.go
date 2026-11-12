@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"rayxo/agent/internal/database"
+	"rayxo/agent/internal/jail"
 	"rayxo/agent/internal/quota"
 	"rayxo/agent/internal/rpc"
 	"rayxo/agent/internal/runner"
@@ -74,7 +75,7 @@ func TestAccountMethodsLockTheAccount(t *testing.T) {
 	params := map[string]string{"account.set_quota": `{"username":"budi","disk_mb":1024,"inodes":0}`}
 
 	system := newFakeSystem()
-	for name, method := range accountMethods(system, system, system.quotaManager(), system.databases()) {
+	for name, method := range accountMethods(system, system, system.quotaManager(), system.databases(), system) {
 		if name == "quota.report" {
 			if method.LockKey != nil {
 				t.Fatal("quota.report only reads, but locks")
@@ -384,12 +385,15 @@ func callAccount(t *testing.T, system accountSystem, method string, params any) 
 
 	var databases accountDatabases = unreachableDatabases{t}
 
+	var jails accountJails = jail.New(jail.Config{Root: t.TempDir()})
+
 	if fake, ok := system.(*fakeSystem); ok {
 		quotas = fake.quotaManager()
 		databases = fake.databases()
+		jails = fake
 	}
 
-	registered, ok := accountMethods(system, web, quotas, databases)[method]
+	registered, ok := accountMethods(system, web, quotas, databases, jails)[method]
 	if !ok {
 		t.Fatalf("unknown method %s", method)
 	}
@@ -447,6 +451,8 @@ type fakeSystem struct {
 	crontabs map[string]string
 	// passwords are the password hashes set by user.
 	passwords map[string]string
+	// jails are the SSH jails by account.
+	jails map[string]jail.Account
 
 	nextID int
 	// failWith, when set, is returned by every change.
@@ -475,6 +481,7 @@ func newFakeSystem() *fakeSystem {
 		homes:      map[string]sysuser.Home{},
 		crontabs:   map[string]string{},
 		passwords:  map[string]string{},
+		jails:      map[string]jail.Account{},
 		nextID:     1001,
 		quotaState: "on",
 	}
@@ -557,6 +564,45 @@ func (f *fakeSystem) EnsureGroupMember(_ context.Context, group, member string) 
 	}
 
 	return found.GID, nil
+}
+
+func (f *fakeSystem) RemoveGroupMember(_ context.Context, group, member string) error {
+	if err := f.record("ungroup %s %s", group, member); err != nil {
+		return err
+	}
+
+	if found, ok := f.groups[group]; ok {
+		found.Members = slices.DeleteFunc(found.Members, func(name string) bool { return name == member })
+	}
+
+	return nil
+}
+
+// Enable, Disable and Exists make fakeSystem the accounts' jails too.
+func (f *fakeSystem) Enable(account jail.Account) error {
+	if err := f.record("jail %s", account.Name); err != nil {
+		return err
+	}
+
+	f.jails[account.Name] = account
+
+	return nil
+}
+
+func (f *fakeSystem) Disable(name string) error {
+	if err := f.record("unjail %s", name); err != nil {
+		return err
+	}
+
+	delete(f.jails, name)
+
+	return nil
+}
+
+func (f *fakeSystem) Exists(name string) bool {
+	_, ok := f.jails[name]
+
+	return ok
 }
 
 func (f *fakeSystem) AddUser(_ context.Context, user sysuser.NewUser) error {

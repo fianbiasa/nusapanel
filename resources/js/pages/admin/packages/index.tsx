@@ -38,6 +38,7 @@ function keyLimits(pkg: HostingPackage): string {
         inodes !== null && `${inodes.toLocaleString('id-ID')} inode`,
         pkg.ssl ? 'SSL' : 'Tanpa SSL',
         pkg.cgi && 'CGI',
+        pkg.ssh && 'SSH',
     ]
         .filter(Boolean)
         .join(' · ');

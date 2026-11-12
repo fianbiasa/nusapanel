@@ -33,6 +33,7 @@ use App\Http\Controllers\MailSslController;
 use App\Http\Controllers\PhpMyAdminController;
 use App\Http\Controllers\PointerController;
 use App\Http\Controllers\SftpPasswordController;
+use App\Http\Controllers\SshController;
 use App\Http\Controllers\SubdomainController;
 use App\Http\Controllers\UrlRedirectController;
 use App\Http\Controllers\WebmailController;
@@ -133,6 +134,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::delete('cron-jobs/{cronJob}', [CronJobController::class, 'destroy'])->name('cron-jobs.destroy');
         Route::put('sftp-password', [SftpPasswordController::class, 'update'])->middleware('throttle:10,1')->name('sftp-password.update');
         Route::delete('sftp-password', [SftpPasswordController::class, 'destroy'])->name('sftp-password.destroy');
+        Route::get('ssh', [SshController::class, 'index'])->name('ssh.index');
+        Route::put('ssh/access', [SshController::class, 'updateAccess'])->middleware('throttle:10,1,ssh-access')->name('ssh.access.update');
+        Route::post('ssh/keys', [SshController::class, 'storeKey'])->middleware('throttle:20,1,ssh-keys')->name('ssh.keys.store');
+        Route::delete('ssh/keys/{sshKey}', [SshController::class, 'destroyKey'])->name('ssh.keys.destroy');
         Route::get('ftp', [FtpAccountController::class, 'index'])->name('ftp.index');
         Route::post('ftp', [FtpAccountController::class, 'store'])->name('ftp.store');
         Route::put('ftp/{ftpAccount}', [FtpAccountController::class, 'update'])->name('ftp.update');

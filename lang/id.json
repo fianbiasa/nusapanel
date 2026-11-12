@@ -434,5 +434,20 @@
     "The database server could not be changed. Try again in a moment.": "Server database tidak bisa diubah. Coba lagi sebentar lagi.",
     "The import into :name has started.": "Import ke :name dimulai.",
     "The tables could not be checked. Try again in a moment.": "Tabel tidak bisa diperiksa. Coba lagi sebentar lagi.",
-    "This host is allowed already.": "Host ini sudah diizinkan."
+    "This host is allowed already.": "Host ini sudah diizinkan.",
+    "Your reseller package does not include SSH.": "Paket reseller Anda tidak termasuk SSH.",
+    "SSH is not included in your package.": "SSH tidak termasuk dalam paket kamu.",
+    "SSH can only be changed while the account is active.": "SSH hanya bisa diubah selama akun aktif.",
+    "This key is added already.": "Key ini sudah ditambahkan.",
+    "An account may have at most :max keys.": "Satu akun paling banyak boleh punya :max key.",
+    "SSH is being turned on.": "SSH sedang dinyalakan.",
+    "SSH is being turned off.": "SSH sedang dimatikan.",
+    "The key :name is being added.": "Key :name sedang ditambahkan.",
+    "The key :name is being removed.": "Key :name sedang dihapus.",
+    "This is a private key. Paste the public key instead: the .pub file.": "Ini private key. Tempel key publiknya saja: isi file .pub.",
+    "Paste one public key, on one line.": "Tempel satu key publik, dalam satu baris.",
+    "This is not a public key this server accepts (ssh-ed25519, ecdsa-sha2-*, ssh-rsa or a security key), or it has options in front of it.": "Ini bukan key publik yang diterima server ini (ssh-ed25519, ecdsa-sha2-*, ssh-rsa, atau security key), atau ada opsi di depannya.",
+    "The key is damaged: copy the whole line of the .pub file.": "Key-nya rusak: salin seluruh baris file .pub.",
+    "RSA keys need at least :bits bits. Make an ed25519 key instead: ssh-keygen -t ed25519": "Key RSA minimal :bits bit. Buat key ed25519 saja: ssh-keygen -t ed25519",
+    "The comment of the key may have at most :max printable characters.": "Komentar key paling banyak :max karakter yang bisa dicetak."
 }

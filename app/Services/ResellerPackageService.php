@@ -17,6 +17,7 @@ class ResellerPackageService
     public function __construct(
         private AuditLogger $audit,
         private DomainService $domains,
+        private SshService $ssh,
     ) {}
 
     /**
@@ -60,11 +61,14 @@ class ResellerPackageService
                 'to' => $package->only($changed),
             ], $actor);
 
+            $accounts = User::query()->whereIn('owner_id', User::query()->select('id')->where('reseller_package_id', $package->id));
+
             if (in_array('cgi', $changed, true)) {
-                $this->domains->reapplyCgiWebsites(
-                    User::query()->whereIn('owner_id', User::query()->select('id')->where('reseller_package_id', $package->id)),
-                    $actor,
-                );
+                $this->domains->reapplyCgiWebsites($accounts, $actor);
+            }
+
+            if (in_array('ssh', $changed, true)) {
+                $this->ssh->reapply($accounts, $actor);
             }
         });
     }

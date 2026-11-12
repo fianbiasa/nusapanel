@@ -31,6 +31,7 @@ trait ResellerPackageValidationRules
             'inodes' => $atLeastOne,
             'ssl' => ['required', 'boolean'],
             'cgi' => ['sometimes', 'boolean'],
+            'ssh' => ['sometimes', 'boolean'],
             'oversell' => ['required', 'boolean'],
         ];
     }

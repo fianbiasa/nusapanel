@@ -110,6 +110,29 @@ func (s System) EnsureGroupMember(ctx context.Context, group, member string) (in
 	return found.GID, nil
 }
 
+// RemoveGroupMember takes member out of group. A missing group or a user
+// that is not a member changes nothing.
+func (s System) RemoveGroupMember(ctx context.Context, group, member string) error {
+	found, err := s.lookupGroup(ctx, group)
+	if errors.Is(err, ErrNotFound) {
+		return nil
+	}
+
+	if err != nil {
+		return err
+	}
+
+	if !slices.Contains(found.Members, member) {
+		return nil
+	}
+
+	if _, err := runner.Run(ctx, gpasswdProgram, "--delete", member, "--", group); err != nil {
+		return fmt.Errorf("remove %s from group %s: %w", member, group, err)
+	}
+
+	return nil
+}
+
 // AddUser creates a regular user with its own group and home directory. It
 // returns an error wrapping ErrNameTaken when the user or group name exists.
 func (System) AddUser(ctx context.Context, user NewUser) error {

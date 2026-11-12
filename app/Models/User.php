@@ -46,6 +46,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property Carbon|null $bandwidth_suspended_at When the panel suspended it for going over its package's bandwidth; lifted when a new month starts.
  * @property Carbon|null $phpmyadmin_expires_at When the open phpMyAdmin session ends; null while none is open.
  * @property Carbon|null $sftp_password_set_at When the SFTP password was last set; null while the account has none.
+ * @property bool $ssh_enabled Whether the account turned SSH on; it only works while its package allows SSH.
  * @property string|null $cron_email Where cron mails the output of the account's jobs; null mails nothing.
  * @property Carbon|null $last_login_at
  * @property string|null $two_factor_secret
@@ -61,6 +62,15 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable, PasskeyAuthenticatable, TwoFactorAuthenticatable;
+
+    /**
+     * The defaults of new accounts, as the database has them.
+     *
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'ssh_enabled' => false,
+    ];
 
     /**
      * Get the attributes that should be cast.
@@ -82,6 +92,7 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
             'bandwidth_suspended_at' => 'datetime',
             'phpmyadmin_expires_at' => 'datetime',
             'sftp_password_set_at' => 'datetime',
+            'ssh_enabled' => 'boolean',
             'two_factor_confirmed_at' => 'datetime',
         ];
     }
@@ -175,6 +186,16 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     public function databaseRemoteHosts(): HasMany
     {
         return $this->hasMany(DatabaseRemoteHost::class);
+    }
+
+    /**
+     * The public keys this account added in the panel.
+     *
+     * @return HasMany<SshKey, $this>
+     */
+    public function sshKeys(): HasMany
+    {
+        return $this->hasMany(SshKey::class);
     }
 
     /**

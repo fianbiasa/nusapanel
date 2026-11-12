@@ -44,10 +44,11 @@ use InvalidArgumentException;
  * @property int|null $cron_jobs
  * @property bool $ssl
  * @property bool $cgi Whether the accounts may run CGI scripts, which can start any program as the account.
+ * @property bool $ssh Whether the accounts may turn on SSH: a shell, in a jail of their own.
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['name', 'description', 'disk_mb', 'inodes', 'bandwidth_mb', 'domains', 'subdomains', 'pointers', 'email_accounts', 'email_forwarders', 'databases', 'ftp_accounts', 'cron_jobs', 'ssl', 'cgi'])]
+#[Fillable(['name', 'description', 'disk_mb', 'inodes', 'bandwidth_mb', 'domains', 'subdomains', 'pointers', 'email_accounts', 'email_forwarders', 'databases', 'ftp_accounts', 'cron_jobs', 'ssl', 'cgi', 'ssh'])]
 class Package extends Model
 {
     /** @use HasFactory<PackageFactory> */
@@ -78,6 +79,7 @@ class Package extends Model
     protected $attributes = [
         'ssl' => true,
         'cgi' => false,
+        'ssh' => false,
     ];
 
     /**
@@ -91,6 +93,7 @@ class Package extends Model
             ...array_fill_keys(self::LIMITS, 'integer'),
             'ssl' => 'boolean',
             'cgi' => 'boolean',
+            'ssh' => 'boolean',
         ];
     }
 

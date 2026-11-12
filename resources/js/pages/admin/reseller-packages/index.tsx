@@ -37,6 +37,7 @@ function keyLimits(pkg: ResellerPackage): string {
         domains === null ? 'Domain tanpa batas' : `${domains} domain`,
         pkg.ssl ? 'SSL' : 'Tanpa SSL',
         pkg.cgi && 'CGI',
+        pkg.ssh && 'SSH',
         pkg.oversell && 'Overselling',
     ]
         .filter(Boolean)

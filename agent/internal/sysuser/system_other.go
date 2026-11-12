@@ -32,6 +32,11 @@ func (System) EnsureGroupMember(context.Context, string, string) (int, error) {
 	return 0, unsupported()
 }
 
+// RemoveGroupMember is not supported on this platform.
+func (System) RemoveGroupMember(context.Context, string, string) error {
+	return unsupported()
+}
+
 // AddUser is not supported on this platform.
 func (System) AddUser(context.Context, NewUser) error {
 	return unsupported()
