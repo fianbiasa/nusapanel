@@ -1,6 +1,6 @@
 # 1. Daftar Fitur
 
-Target: **minimal setara DirectAdmin**. Setiap fitur diberi fase pengerjaan (lihat [Roadmap](05-roadmap.md)); PB adalah fase UI dua bahasa.
+Target: **minimal setara DirectAdmin**. Setiap fitur diberi fase pengerjaan (lihat [Roadmap](05-roadmap.md)); PB adalah fase UI dua bahasa, dikerjakan bersama P5.
 Tanda ★ = fitur tambahan yang tidak ada di DirectAdmin standar.
 
 Pembagian level sama seperti DirectAdmin:

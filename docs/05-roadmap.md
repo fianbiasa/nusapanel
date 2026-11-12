@@ -6,14 +6,14 @@ Estimasi untuk **satu developer full-time dibantu AI**. Kalau dikerjakan paruh w
 | ---- | ------------------------ | ------------- | ------------------------------------------------------------------------------- |
 | P0   | Fondasi                  | 1–2 minggu    | Panel & agent tersambung, sistem task, audit log, installer awal                |
 | P1   | Hosting inti             | 5–7 minggu    | Bisa hosting website: akun, domain, PHP, SSL, database, FTP, file manager, cron |
-| PB   | Dua bahasa               | 1–2 minggu    | UI Indonesia & English, bahasa default server; bisa dikerjakan setelah P1       |
 | P2   | DNS & email              | 5–7 minggu    | DNS & email lengkap                                                             |
 | P3   | Reseller, statistik, API | 4–6 minggu    | Siap dipakai banyak user & reseller                                             |
 | P4   | Backup, migrasi, WHMCS   | 4–6 minggu    | Bisa memindahkan pelanggan & jualan otomatis                                    |
 | P5   | Keamanan & hardening     | 2–4 minggu    | **Siap produksi**                                                               |
+| PB   | Dua bahasa               | 1–2 minggu    | UI Indonesia & English, bahasa default server; dikerjakan bersama P5            |
 | P6   | Fitur lanjutan           | Berkelanjutan | Software manager, WordPress, Node.js, multi-server, dll.                        |
 
-**Total sampai siap produksi (P0–P5): sekitar 5–8 bulan full-time.**
+**Total sampai siap produksi (P0–P5, termasuk PB): sekitar 5–8 bulan full-time.**
 Aturan main: tidak ada fitur P6 sebelum P5 selesai.
 
 ---
@@ -140,13 +140,6 @@ Semua fitur P1 sudah ada. Yang dipindah ke fase lain: CGI dan batas disk & bandw
 - `rayxo rebuild` menghasilkan config yang identik; ✅ teruji di VPS: dua kali berturut-turut, checksum config, crontab, kuota dan izin folder sama persis;
 - user A terbukti tidak bisa membaca file user B (diuji otomatis). ✅ `make isolation`, dijalankan di VPS: semua jalur ditolak.
 
-## PB — Dua bahasa
-
-- Semua teks UI panel lewat terjemahan (Indonesia & English), pilihan bahasa per user, bahasa default server di Pengaturan Server.
-- Pesan dari server (validasi, toast) mengikuti bahasa user.
-
-**Selesai kalau:** setiap halaman bisa dipakai penuh dalam kedua bahasa, dan tes otomatis menolak teks UI tanpa terjemahan.
-
 ## P2 — DNS & email
 
 **Status:**
@@ -215,8 +208,18 @@ Semua fitur P2 sudah ada, terpasang di server produksi dan dirilis sebagai v0.6.
 - Kebijakan 2FA & password, update panel satu klik, deteksi config drift.
 - Audit keamanan: review kode + pentest internal (eskalasi hak antar user, injeksi config, path traversal, symlink, CSRF/XSS di panel).
 - Uji beban dengan ratusan akun.
+- UI dua bahasa (PB, di bawah).
 
 **Selesai kalau:** checklist keamanan lolos dan uji migrasi percobaan di server staging dengan beberapa akun nyata berjalan stabil 2 minggu.
+
+## PB — Dua bahasa
+
+Dikerjakan bersama P5 (diputuskan 12 November 2026), supaya halaman baru dari P3 dan P4 ikut diterjemahkan sekali jalan, saat tampilan sudah stabil. Sampai saat itu, teks tampilan React tetap ditulis dalam bahasa Indonesia, dan pesan dari server memakai kunci bahasa Inggris lewat `__()` dengan terjemahan Indonesia di `lang/id.json`.
+
+- Semua teks UI panel lewat terjemahan (Indonesia & English), pilihan bahasa per user, bahasa default server di Pengaturan Server.
+- Pesan dari server (validasi, toast) mengikuti bahasa user.
+
+**Selesai kalau:** setiap halaman bisa dipakai penuh dalam kedua bahasa, dan tes otomatis menolak teks UI tanpa terjemahan.
 
 ## P6 — Fitur lanjutan
 
