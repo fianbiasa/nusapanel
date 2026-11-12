@@ -2190,7 +2190,7 @@ MAPS
         "smtpd_tls_mandatory_protocols = >=TLSv1.2" \
         "smtpd_tls_protocols = >=TLSv1.2" \
         "smtpd_helo_required = yes" \
-        "smtpd_relay_restrictions = permit_mynetworks, permit_sasl_authenticated, reject_unauth_destination" \
+        "smtpd_relay_restrictions = permit_sasl_authenticated, reject_unauth_destination" \
         "local_header_rewrite_clients = permit_inet_interfaces, permit_sasl_authenticated" \
         "smtpd_milters = unix:rspamd/milter.sock, local:opendkim/opendkim.sock" \
         "non_smtpd_milters = \$smtpd_milters" \
@@ -3091,6 +3091,22 @@ sys.exit(0 if code >= 500 else 1)
 PYTHON
     then
         die "Postfix meneruskan email ke domain lain tanpa login (open relay); server bisa dipakai untuk spam"
+    fi
+    # The same from 127.0.0.1, which hosting accounts can open: mail they
+    # send goes through the local sendmail (sender checked, counted against
+    # the daily limit, DKIM-signed) or a signed-in 587, never an unsigned
+    # relay on port 25 under any sender.
+    if ! runuser -u nobody -- python3 - >>"$INSTALL_LOG" 2>&1 <<'PYTHON'
+import smtplib, sys
+smtp = smtplib.SMTP("127.0.0.1", 25, timeout=20)
+smtp.ehlo("relay-check.invalid")
+smtp.mail("check@example.org")
+code, _ = smtp.rcpt("check@example.net")
+smtp.quit()
+sys.exit(0 if code >= 500 else 1)
+PYTHON
+    then
+        die "Postfix meneruskan email ke domain lain dari 127.0.0.1 tanpa login; akun hosting bisa mengirim spam tanpa batas kirim"
     fi
     info "Postfix aktif dan menolak meneruskan email tanpa login"
 
