@@ -56,6 +56,8 @@ type SystemInfo = {
     disk: { mount: string; total_gb: number; used_gb: number };
     uptime_seconds: number;
     agent_version: string;
+    /** The server programs RAYXO runs and their versions. */
+    software?: { name: string; version: string }[];
     simulated?: boolean;
 };
 
@@ -395,6 +397,27 @@ function ServerPanel({ result }: { result?: SystemInfoResult }) {
                 />
                 <Fact label="Agent" value={info.agent_version} />
             </dl>
+
+            {info.software && info.software.length > 0 && (
+                <div className="grid gap-2 text-sm">
+                    <p className="text-muted-foreground">Software</p>
+                    <ul className="flex flex-wrap gap-2">
+                        {info.software.map((program) => (
+                            <li
+                                key={program.name}
+                                className="rounded-lg bg-muted/60 px-2.5 py-1"
+                            >
+                                <span className="font-medium">
+                                    {program.name}
+                                </span>{' '}
+                                <span className="font-mono text-muted-foreground">
+                                    {program.version}
+                                </span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
 
             <div className="grid gap-4 sm:grid-cols-3">
                 <ResourceRing

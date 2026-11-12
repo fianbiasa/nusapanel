@@ -10,6 +10,8 @@ import (
 	"runtime"
 
 	"golang.org/x/sys/unix"
+
+	"rayxo/agent/internal/runner"
 )
 
 func collect() (*Info, error) {
@@ -77,6 +79,7 @@ func collect() (*Info, error) {
 		Memory:        Memory{TotalMB: totalKB / 1024, UsedMB: (totalKB - availableKB) / 1024},
 		Disk:          disk,
 		UptimeSeconds: uptime,
+		Software:      collectSoftware(runner.Run),
 	}, nil
 }
 

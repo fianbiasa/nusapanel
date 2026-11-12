@@ -14,6 +14,9 @@ type Info struct {
 	Disk          Disk       `json:"disk"`
 	UptimeSeconds uint64     `json:"uptime_seconds"`
 	AgentVersion  string     `json:"agent_version"`
+	// Software is the version of each server program RAYXO runs; empty
+	// where dpkg cannot be asked (development on macOS).
+	Software []Software `json:"software"`
 }
 
 // OS identifies the operating system.
@@ -44,7 +47,16 @@ type Disk struct {
 
 // Collect gathers information about the host the agent runs on.
 func Collect() (*Info, error) {
-	return collect()
+	info, err := collect()
+	if err != nil {
+		return nil, err
+	}
+
+	if info.Software == nil {
+		info.Software = []Software{}
+	}
+
+	return info, nil
 }
 
 func roundGiB(bytes uint64) float64 {

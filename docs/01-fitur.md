@@ -140,23 +140,23 @@ Pembagian level sama seperti DirectAdmin:
 
 ### Akun
 
-| Fitur                      | Keterangan                                              | Fase |
-| -------------------------- | ------------------------------------------------------- | ---- |
-| Buat user                  | ✅                                                      | P1   |
-| Buat reseller & admin lain |                                                         | P3   |
-| Semua akun                 | Cari, filter, aksi massal (suspend, hapus, ganti paket) | P1   |
-| Paket user                 | ✅                                                      | P1   |
-| Paket reseller             |                                                         | P3   |
-| Pindah pemilik             | Pindahkan user antar reseller                           | P3   |
-| Login as                   | Masuk sebagai reseller/user, tercatat di audit log      | P3   |
-| Pesan massal               | Ke semua reseller/user                                  | P3   |
-| Ganti username             |                                                         | P6   |
+| Fitur                      | Keterangan                                                 | Fase |
+| -------------------------- | ---------------------------------------------------------- | ---- |
+| Buat user                  | ✅                                                         | P1   |
+| Buat reseller & admin lain |                                                            | P3   |
+| Semua akun                 | ✅ Cari, filter, aksi massal (suspend, hapus, ganti paket) | P1   |
+| Paket user                 | ✅                                                         | P1   |
+| Paket reseller             |                                                            | P3   |
+| Pindah pemilik             | Pindahkan user antar reseller                              | P3   |
+| Login as                   | Masuk sebagai reseller/user, tercatat di audit log         | P3   |
+| Pesan massal               | Ke semua reseller/user                                     | P3   |
+| Ganti username             |                                                            | P6   |
 
 ### Server
 
 | Fitur                                 | Keterangan                                                                              | Fase |
 | ------------------------------------- | --------------------------------------------------------------------------------------- | ---- |
-| Info sistem                           | CPU, RAM, disk, load, uptime, versi software                                            | P1   |
+| Info sistem                           | ✅ CPU, RAM, disk, load, uptime, versi software                                         | P1   |
 | Service monitor                       | ✅ Status, start/stop/restart; restart otomatis kalau mati                              | P1   |
 | Pengaturan server                     | ✅ Hostname, timezone, port panel, SSL panel, batas upload; bahasa default ikut fase PB | P1   |
 | Rebuild config                        | ✅ Tulis ulang semua config dari database (setara `rewrite_confs`)                      | P1   |

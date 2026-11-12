@@ -87,6 +87,37 @@ class AccountManagementTest extends TestCase
         }
     }
 
+    public function test_admins_can_filter_accounts_by_status_and_package()
+    {
+        $admin = User::factory()->admin()->create(['username' => 'root1']);
+        $basic = Package::factory()->create(['name' => 'Basic']);
+        $pro = Package::factory()->create(['name' => 'Pro']);
+        User::factory()->create(['username' => 'budi', 'package_id' => $basic->id]);
+        User::factory()->create(['username' => 'siti', 'package_id' => $pro->id, 'status' => AccountStatus::Suspended]);
+        User::factory()->create(['username' => 'joko', 'package_id' => $basic->id, 'status' => AccountStatus::Suspended]);
+
+        $filters = [
+            [['status' => 'suspended'], ['joko', 'siti']],
+            [['package' => $basic->id], ['budi', 'joko']],
+            [['status' => 'suspended', 'package' => $pro->id], ['siti']],
+            [['status' => 'failed'], []],
+        ];
+
+        foreach ($filters as [$query, $expected]) {
+            $this->actingAs($admin)
+                ->get(route('admin.accounts.index', $query))
+                ->assertOk()
+                ->assertInertia(fn (Assert $page) => $page
+                    ->where('filters.status', (string) ($query['status'] ?? ''))
+                    ->where('filters.package', (string) ($query['package'] ?? ''))
+                    ->where('accounts.data', fn ($rows) => collect($rows)->pluck('username')->sort()->values()->all() === $expected));
+        }
+
+        $this->actingAs($admin)
+            ->get(route('admin.accounts.index', ['status' => 'unknown', 'package' => 'abc']))
+            ->assertSessionHasErrors(['status', 'package']);
+    }
+
     /**
      * @return array<string, array{string, string}>
      */

@@ -263,6 +263,14 @@ final class FakeAgentClient implements AgentClient
             'disk' => ['mount' => '/', 'total_gb' => 160, 'used_gb' => 48],
             'uptime_seconds' => 1_036_800,
             'agent_version' => 'fake',
+            'software' => [
+                ['name' => 'Nginx', 'version' => '1.24.0'],
+                ['name' => 'Apache', 'version' => '2.4.58'],
+                ['name' => 'MariaDB', 'version' => '10.11.13'],
+                ['name' => 'Postfix', 'version' => '3.8.6'],
+                ['name' => 'Dovecot', 'version' => '2.3.21'],
+                ['name' => 'PHP 8.4', 'version' => '8.4.14'],
+            ],
             'simulated' => true,
         ];
     }

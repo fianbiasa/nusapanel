@@ -90,7 +90,7 @@ rayxo/
 
 - SSL hostname/panel ✅: `setup.sh` mengambil sertifikat Let's Encrypt untuk hostname setiap kali dijalankan (kalau belum ada atau sisa masa berlakunya kurang dari 30 hari), dipakai panel (port 2222) dan FTP, lalu diperpanjang `certbot.timer`; kalau gagal, panel memakai sertifikat self-signed sampai `setup.sh` dijalankan lagi. Menerbitkan ulang dari panel ada di Pengaturan Server (lihat pengaturan server tahap 1).
 
-- info sistem ✅ (sejak P0): dashboard admin menampilkan hostname, sistem operasi, CPU, load, memori, disk, uptime dan versi agent dari `system.info`.
+- info sistem ✅ (sejak P0): dashboard admin menampilkan hostname, sistem operasi, CPU, load, memori, disk, uptime dan versi agent dari `system.info`, juga versi software server (Nginx, Apache, MariaDB, Postfix, Dovecot, Rspamd, Redis, PowerDNS, Pure-FTPd dan setiap versi PHP, dari `dpkg-query`). Teruji di VPS uji: semua versi terbaca.
 
 - 2FA ✅ (sejak P0): Settings > Security mengaktifkan 2FA lewat aplikasi authenticator (dengan konfirmasi kode dan recovery code) serta passkey; keduanya meminta konfirmasi password dulu.
 
@@ -115,6 +115,8 @@ rayxo/
 - kuota per login FTP ✅: login FTP bisa diberi batas MB (kosong berarti tanpa batas); Pure-FTPd membacanya dari view `v_ftp_users` dan menyimpan pemakaian di `.ftpquota` folder login, yang tidak bisa dihapus lewat FTP dan ditolak Nginx (403). Saat kuota dipasang, agent menghitung isi folder dulu dengan `pure-quotacheck`, dan setiap malam semua folder berkuota dihitung ulang supaya file dari file manager, SFTP atau website ikut terhitung. Teruji di VPS: upload melewati kuota ditolak, login tanpa kuota tidak terpengaruh, dan setelah file dihapus di luar FTP, hitung ulang membuka ruangnya lagi.
 
 - email output cron ✅: halaman Cron Jobs punya satu alamat email per akun (`MAILTO`), yang dicek ketat di panel dan agent (alamat biasa saja, tanpa tanda kutip, spasi, `%`, atau tanda minus di depan). Cron hanya mengirim email kalau job menghasilkan output; `>/dev/null 2>&1` membuat satu job diam. Teruji di VPS: email dikirim lewat Postfix lokal dan ditandatangani DKIM hostname.
+
+- cari dan filter akun ✅: daftar akun admin bisa dicari (username, nama, email) dan disaring per status (aktif, suspend, disiapkan, gagal, dihapus) dan per paket.
 
 - aksi massal akun ✅: admin mencentang akun di daftar akun lalu suspend (dengan alasan), buka suspend, hapus (konfirmasi ketik HAPUS) atau ganti paket sekaligus, paling banyak 100 akun. Setiap akun melewati pemeriksaan yang sama seperti aksi satu akun; akun yang tidak cocok (admin, akun sendiri, status yang salah) dilewati dan disebut beserta alasannya. Teruji di VPS dengan dua akun sementara: suspend massal lalu hapus massal tanpa sisa.
 

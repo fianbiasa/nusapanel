@@ -49,6 +49,7 @@ class DashboardTest extends TestCase
                 ->missing('systemInfo')
                 ->loadDeferredProps(fn (Assert $reload) => $reload
                     ->where('systemInfo.data.hostname', 'server.rayxo.test')
+                    ->where('systemInfo.data.software.0', ['name' => 'Nginx', 'version' => '1.24.0'])
                     ->where('systemInfo.error', null)));
     }
 

@@ -35,6 +35,13 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { useInitials } from '@/hooks/use-initials';
 import { cn } from '@/lib/utils';
@@ -76,8 +83,19 @@ type AccountAction =
 type Props = {
     accounts: Paginated<AccountRow>;
     packages: PackageOption[];
-    filters: { search: string };
+    filters: { search: string; status: AccountStatus | ''; package: string };
 };
+
+/** The statuses the list can be narrowed to, as the status badges name them. */
+const statusFilters: { value: AccountStatus; label: string }[] = [
+    { value: 'active', label: 'Aktif' },
+    { value: 'suspended', label: 'Suspend' },
+    { value: 'pending', label: 'Disiapkan' },
+    { value: 'failed', label: 'Gagal' },
+    { value: 'deleting', label: 'Dihapus' },
+];
+
+const filterTriggerClass = 'h-10 w-36 rounded-xl bg-card';
 
 const busyStatuses: AccountStatus[] = ['pending', 'deleting'];
 
@@ -89,6 +107,14 @@ export default function AccountsIndex({ accounts, packages, filters }: Props) {
     const [action, setAction] = useState<AccountAction | null>(null);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [selected, setSelected] = useState<number[]>([]);
+    const [statusFilter, setStatusFilter] = useState(filters.status || 'all');
+    const [packageFilter, setPackageFilter] = useState(
+        filters.package || 'all',
+    );
+    const isFiltered =
+        filters.search !== '' ||
+        filters.status !== '' ||
+        filters.package !== '';
 
     // Refresh the list while the agent is still creating or deleting accounts.
     const hasBusyAccounts = accounts.data.some((account) =>
@@ -171,8 +197,68 @@ export default function AccountsIndex({ accounts, packages, filters }: Props) {
                     <Form
                         {...index.form()}
                         options={{ preserveState: true, replace: true }}
-                        className="hidden w-full max-w-sm items-center gap-2 md:flex"
+                        className="hidden w-full max-w-2xl items-center gap-2 md:flex"
                     >
+                        {statusFilter !== 'all' && (
+                            <input
+                                type="hidden"
+                                name="status"
+                                value={statusFilter}
+                            />
+                        )}
+                        {packageFilter !== 'all' && (
+                            <input
+                                type="hidden"
+                                name="package"
+                                value={packageFilter}
+                            />
+                        )}
+                        <Select
+                            value={statusFilter}
+                            onValueChange={setStatusFilter}
+                        >
+                            <SelectTrigger
+                                aria-label="Filter status"
+                                className={filterTriggerClass}
+                            >
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="rounded-xl">
+                                <SelectItem value="all">
+                                    Semua status
+                                </SelectItem>
+                                {statusFilters.map((option) => (
+                                    <SelectItem
+                                        key={option.value}
+                                        value={option.value}
+                                    >
+                                        {option.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <Select
+                            value={packageFilter}
+                            onValueChange={setPackageFilter}
+                        >
+                            <SelectTrigger
+                                aria-label="Filter paket"
+                                className={filterTriggerClass}
+                            >
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="rounded-xl">
+                                <SelectItem value="all">Semua paket</SelectItem>
+                                {packages.map((option) => (
+                                    <SelectItem
+                                        key={option.id}
+                                        value={String(option.id)}
+                                    >
+                                        {option.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                         <div className="relative flex-1">
                             <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground" />
                             <Input
@@ -199,7 +285,9 @@ export default function AccountsIndex({ accounts, packages, filters }: Props) {
                         <p className="max-w-sm text-sm text-muted-foreground">
                             {filters.search
                                 ? `Tidak ada akun yang cocok dengan "${filters.search}".`
-                                : 'Belum ada akun. Buat akun pertama untuk memulai.'}
+                                : isFiltered
+                                  ? 'Tidak ada akun yang cocok dengan filter ini.'
+                                  : 'Belum ada akun. Buat akun pertama untuk memulai.'}
                         </p>
                     </div>
                 ) : (

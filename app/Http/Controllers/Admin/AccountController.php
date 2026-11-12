@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\AccountStatus;
 use App\Enums\BulkAccountAction;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\BulkAccountActionRequest;
@@ -30,9 +31,13 @@ class AccountController extends Controller
     {
         $validated = $request->validate([
             'search' => ['nullable', 'string', 'max:100'],
+            'status' => ['nullable', Rule::enum(AccountStatus::class)],
+            'package' => ['nullable', 'integer', 'min:1'],
         ]);
 
         $search = trim((string) ($validated['search'] ?? ''));
+        $status = $validated['status'] ?? null;
+        $package = isset($validated['package']) ? (int) $validated['package'] : null;
 
         $accounts = User::query()
             ->with(['owner:id,username', 'package:id,name,disk_mb', 'primaryDomain:id,user_id,name', 'diskUsage'])
@@ -40,6 +45,8 @@ class AccountController extends Controller
                 ->where('username', 'like', "%{$search}%")
                 ->orWhere('name', 'like', "%{$search}%")
                 ->orWhere('email', 'like', "%{$search}%")))
+            ->when($status !== null, fn (Builder $query) => $query->where('status', $status))
+            ->when($package !== null, fn (Builder $query) => $query->where('package_id', $package))
             ->latest('id')
             ->paginate(25)
             ->withQueryString()
@@ -62,7 +69,7 @@ class AccountController extends Controller
         return Inertia::render('admin/accounts/index', [
             'accounts' => $accounts,
             'packages' => $this->packageOptions(),
-            'filters' => ['search' => $search],
+            'filters' => ['search' => $search, 'status' => $status ?? '', 'package' => $package === null ? '' : (string) $package],
         ]);
     }
 
