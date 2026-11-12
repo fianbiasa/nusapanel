@@ -1,4 +1,4 @@
-import { Form, Head, router, usePoll } from '@inertiajs/react';
+import { Form, Head, Link, router, usePoll } from '@inertiajs/react';
 import {
     ChevronDown,
     CornerDownRight,
@@ -59,6 +59,7 @@ import { store as storeCertificate } from '@/routes/domains/certificate';
 import { update as updateForceHttps } from '@/routes/domains/force-https';
 import { update as updateDocumentRoot } from '@/routes/domains/document-root';
 import { update as updatePhpEnabled } from '@/routes/domains/php-enabled';
+import { show as showWebSettings } from '@/routes/domains/web';
 import { update as updateWww } from '@/routes/domains/www';
 import { update as updatePhpVersion } from '@/routes/domains/php';
 import { destroy as destroySsl, store as storeSsl } from '@/routes/domains/ssl';
@@ -703,8 +704,17 @@ function RowActions({
         canInstallCertificate;
     const canDelete =
         deletableStatuses.includes(domain.status) && !isSslBusy(domain);
+    // A pointer shows its domain's web settings.
+    const canEditWeb =
+        domain.type !== 'pointer' && (isActive || domain.status === 'failed');
 
-    if (!hasSslActions && !canChooseWww && !canChooseFolder && !canDelete) {
+    if (
+        !hasSslActions &&
+        !canChooseWww &&
+        !canChooseFolder &&
+        !canEditWeb &&
+        !canDelete
+    ) {
         return null;
     }
 
@@ -775,23 +785,28 @@ function RowActions({
                             <X /> Batalkan
                         </DropdownMenuItem>
                     )}
+                    {(canChooseFolder || canEditWeb) && hasSslActions && (
+                        <DropdownMenuSeparator />
+                    )}
                     {canChooseFolder && (
-                        <>
-                            {hasSslActions && <DropdownMenuSeparator />}
-                            <DropdownMenuItem
-                                onSelect={() =>
-                                    onAction('document-root', domain)
-                                }
-                            >
-                                <FolderOpen /> Folder website…
-                            </DropdownMenuItem>
-                        </>
+                        <DropdownMenuItem
+                            onSelect={() => onAction('document-root', domain)}
+                        >
+                            <FolderOpen /> Folder website…
+                        </DropdownMenuItem>
+                    )}
+                    {canEditWeb && (
+                        <DropdownMenuItem asChild>
+                            <Link href={showWebSettings(domain.id)}>
+                                <SlidersHorizontal /> Pengaturan web…
+                            </Link>
+                        </DropdownMenuItem>
                     )}
                     {canChooseWww && (
                         <>
-                            {(hasSslActions || canChooseFolder) && (
-                                <DropdownMenuSeparator />
-                            )}
+                            {(hasSslActions ||
+                                canChooseFolder ||
+                                canEditWeb) && <DropdownMenuSeparator />}
                             <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground">
                                 Alamat www
                             </DropdownMenuLabel>
@@ -813,7 +828,10 @@ function RowActions({
                             </DropdownMenuRadioGroup>
                         </>
                     )}
-                    {(hasSslActions || canChooseWww || canChooseFolder) &&
+                    {(hasSslActions ||
+                        canChooseWww ||
+                        canChooseFolder ||
+                        canEditWeb) &&
                         canDelete && <DropdownMenuSeparator />}
                     {canDelete && (
                         <DropdownMenuItem

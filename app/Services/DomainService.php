@@ -20,6 +20,7 @@ use App\Rules\ValidDomain;
 use App\Support\AccountLimits;
 use App\Support\CustomCertificate;
 use App\Support\PhpSettings;
+use App\Support\WebSettings;
 use Carbon\CarbonImmutable;
 use Carbon\Exceptions\InvalidFormatException;
 use Illuminate\Database\Eloquent\Builder;
@@ -904,7 +905,7 @@ class DomainService
         $queued = 0;
 
         Domain::query()
-            ->with(['account', 'parent', 'urlRedirects'])
+            ->with(['account', 'parent.protectedDirectories.logins', 'urlRedirects', 'protectedDirectories.logins'])
             ->where('status', DomainStatus::Active)
             ->whereHas('account', fn (Builder $query) => $query->whereIn('status', [
                 AccountStatus::Active,
@@ -926,6 +927,30 @@ class DomainService
     public function reapply(Domain $domain, User $actor): void
     {
         $this->dispatchApply($domain, $domain->account, $actor);
+    }
+
+    /**
+     * Queue the configuration of a domain or subdomain again together with
+     * the alias pointers that show it, after a change of its web settings
+     * ({@see WebSettings}). Each is pending until the agent applied it.
+     * Callers hold a transaction.
+     */
+    public function reapplyWebsite(Domain $domain, User $actor): void
+    {
+        $account = $domain->account;
+
+        $domain->forceFill(['status' => DomainStatus::Pending])->save();
+        $this->dispatchApply($domain, $account, $actor);
+
+        $domain->children()
+            ->where('type', DomainType::Pointer)
+            ->where('pointer_mode', PointerMode::Alias)
+            ->where('status', '!=', DomainStatus::Deleting)
+            ->orderBy('id')
+            ->each(function (Domain $pointer) use ($account, $actor): void {
+                $pointer->forceFill(['status' => DomainStatus::Pending])->save();
+                $this->dispatchApply($pointer, $account, $actor);
+            });
     }
 
     /**
@@ -1001,6 +1026,14 @@ class DomainService
 
             if ($redirects->isNotEmpty()) {
                 $params['redirects'] = $redirects->map(fn (UrlRedirect $redirect): array => $redirect->toAgentParams())->all();
+            }
+
+            // An alias shows its domain's folder with its web settings:
+            // the same error pages, and the same folders ask for a login.
+            $website = $domain->type === DomainType::Pointer ? $domain->parent : $domain;
+
+            if ($website !== null) {
+                $params += WebSettings::forAgent($website);
             }
         }
 

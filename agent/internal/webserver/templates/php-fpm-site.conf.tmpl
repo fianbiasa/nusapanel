@@ -18,7 +18,7 @@ request_terminate_timeout = 300s
 chdir = {{.Home}}
 env[TMPDIR] = {{.Home}}/tmp
 env[PATH] = /usr/local/bin:/usr/bin:/bin
-security.limit_extensions = .php .phtml
+security.limit_extensions = {{.LimitExtensions}}
 
 ; Fixed for every site of this account.
 php_admin_value[open_basedir] = {{.Home}}/:/usr/share/php/

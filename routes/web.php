@@ -17,6 +17,7 @@ use App\Http\Controllers\DatabaseController;
 use App\Http\Controllers\DatabaseUserController;
 use App\Http\Controllers\DnsController;
 use App\Http\Controllers\DomainController;
+use App\Http\Controllers\DomainWebSettingsController;
 use App\Http\Controllers\EmailController;
 use App\Http\Controllers\FileManagerController;
 use App\Http\Controllers\FtpAccountController;
@@ -52,6 +53,19 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('domains/{domain}/document-root', [DomainController::class, 'updateDocumentRoot'])->name('domains.document-root.update');
         Route::put('domains/{domain}/php', [DomainController::class, 'updatePhpVersion'])->name('domains.php.update');
         Route::put('domains/{domain}/php-settings', [DomainController::class, 'updatePhpSettings'])->name('domains.php-settings.update');
+        Route::get('domains/{domain}/web', [DomainWebSettingsController::class, 'show'])->name('domains.web.show');
+        Route::put('domains/{domain}/error-pages/{status}', [DomainWebSettingsController::class, 'saveErrorPage'])->whereIn('status', ['400', '401', '403', '404', '500', '503'])->name('domains.error-pages.update');
+        Route::delete('domains/{domain}/error-pages/{status}', [DomainWebSettingsController::class, 'removeErrorPage'])->whereIn('status', ['400', '401', '403', '404', '500', '503'])->name('domains.error-pages.destroy');
+        Route::post('domains/{domain}/protected-directories', [DomainWebSettingsController::class, 'protectDirectory'])->name('domains.protected-directories.store');
+        Route::scopeBindings()->group(function () {
+            Route::delete('domains/{domain}/protected-directories/{protectedDirectory}', [DomainWebSettingsController::class, 'unprotectDirectory'])->name('domains.protected-directories.destroy');
+            Route::post('domains/{domain}/protected-directories/{protectedDirectory}/logins', [DomainWebSettingsController::class, 'addLogin'])->name('domains.protected-directories.logins.store');
+            Route::put('domains/{domain}/protected-directories/{protectedDirectory}/logins/{login}', [DomainWebSettingsController::class, 'changeLoginPassword'])->name('domains.protected-directories.logins.update');
+            Route::delete('domains/{domain}/protected-directories/{protectedDirectory}/logins/{login}', [DomainWebSettingsController::class, 'removeLogin'])->name('domains.protected-directories.logins.destroy');
+        });
+        Route::put('domains/{domain}/hotlink', [DomainWebSettingsController::class, 'updateHotlink'])->name('domains.hotlink.update');
+        Route::put('domains/{domain}/mime-types', [DomainWebSettingsController::class, 'updateMimeTypes'])->name('domains.mime-types.update');
+        Route::put('domains/{domain}/php-extensions', [DomainWebSettingsController::class, 'updatePhpExtensions'])->name('domains.php-extensions.update');
         Route::get('databases', [DatabaseController::class, 'index'])->name('databases.index');
         Route::post('databases', [DatabaseController::class, 'store'])->name('databases.store');
         Route::delete('databases/{database}', [DatabaseController::class, 'destroy'])->name('databases.destroy');

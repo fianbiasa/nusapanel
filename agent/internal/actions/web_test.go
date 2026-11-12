@@ -254,6 +254,15 @@ func TestWebMethodsRejectInvalidParams(t *testing.T) {
 			{"username": "budi", "domain": "example.com", "php_version": "8.4", "redirects": []map[string]any{{"path": "/a", "destination": "https://example.org/$host", "status": 301}}},
 			{"username": "budi", "domain": "example.com", "php_version": "8.4", "redirects": []map[string]any{{"path": "/a", "destination": "https://example.org/", "status": 200}}},
 			{"username": "budi", "domain": "example.com", "php_version": "8.4", "redirects": []map[string]any{{"path": "/a", "destination": "https://example.org/", "status": 301, "regex": true}}},
+			{"username": "budi", "domain": "example.com", "php_version": "8.4", "error_pages": []int{418}},
+			{"username": "budi", "domain": "example.com", "php_version": "8.4", "error_pages": []string{"404"}},
+			{"username": "budi", "domain": "example.com", "php_version": "8.4", "protected_directories": []map[string]any{{"path": "/a", "realm": "x", "users": []map[string]any{{"name": "a", "hash": "plain"}}}}},
+			{"username": "budi", "domain": "example.com", "php_version": "8.4", "protected_directories": []map[string]any{{"path": "/../etc", "realm": "x"}}},
+			{"username": "budi", "domain": "example.com", "php_version": "8.4", "protected_directories": []map[string]any{{"path": "/a", "realm": "x\"; allow all; #"}}},
+			{"username": "budi", "domain": "example.com", "php_version": "8.4", "hotlink": map[string]any{"extensions": []string{"php"}}},
+			{"username": "budi", "domain": "example.com", "php_version": "8.4", "hotlink": map[string]any{"extensions": []string{"jpg"}, "redirect_to": "https://example.com/x.png"}},
+			{"username": "budi", "domain": "example.com", "php_version": "8.4", "mime_types": []map[string]any{{"extension": "foo", "type": "text/plain; x"}}},
+			{"username": "budi", "domain": "example.com", "php_version": "8.4", "php_extensions": []string{"js"}},
 		},
 		"web.remove_domain": {
 			{"username": "budi"},
@@ -372,6 +381,64 @@ func TestApplyDomainSetsUpPointersAndRedirects(t *testing.T) {
 
 	if _, err := os.Stat(env.cfg.ApacheDir + "/budi/example.net.conf"); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("a forward kept its Apache vhost (%v)", err)
+	}
+}
+
+func TestApplyDomainSetsUpTheWebSettings(t *testing.T) {
+	env := newWebEnv(t)
+
+	hash := "$6$abcdefgh12345678$H.n1EWQmWoEgsATLJ.dVjWe9Vj1ZCEW73beozLP7CEywnTxqwob8sTUvv52IPEcyMI/6uWNNTntLRkDaTMPKS/"
+	params := map[string]any{
+		"username":    "budi",
+		"domain":      "example.com",
+		"php_version": "8.4",
+		"error_pages": []int{404},
+		"protected_directories": []map[string]any{
+			{"path": "/admin", "realm": "Admin area", "users": []map[string]any{{"name": "budi", "hash": hash}}},
+		},
+		"hotlink":        map[string]any{"extensions": []string{"jpg"}, "domains": []string{"example.org"}, "allow_direct": true, "redirect_to": "https://example.net/no.png"},
+		"mime_types":     []map[string]any{{"extension": "foo", "type": "application/x-foo"}},
+		"php_extensions": []string{"html"},
+	}
+
+	if _, err := env.call("web.apply_domain", params); err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+
+	nginx, err := os.ReadFile(env.cfg.NginxDir + "/budi/example.com.conf")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, want := range []string{
+		"error_page 404 /.errors/404.html;",
+		"location ~ ^/admin(?:/|$) {\n        auth_basic \"Admin area\";",
+		"valid_referers none blocked server_names *.example.com example.org *.example.org;",
+		`return 302 "https://example.net/no.png";`,
+	} {
+		if !strings.Contains(string(nginx), want) {
+			t.Errorf("the nginx vhost lacks %q:\n%s", want, nginx)
+		}
+	}
+
+	apache, err := os.ReadFile(env.cfg.ApacheDir + "/budi/example.com.conf")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, want := range []string{"ErrorDocument 404 /.errors/404.html", "AddType application/x-foo .foo", `<FilesMatch "\.(php|phtml|html)$">`, `<Directory "/home/budi/domains/example.com/public_html/admin">`} {
+		if !strings.Contains(string(apache), want) {
+			t.Errorf("the apache vhost lacks %q:\n%s", want, apache)
+		}
+	}
+
+	files, err := filepath.Glob(env.cfg.NginxDir + "/budi/example.com@*.htpasswd")
+	if err != nil || len(files) != 1 {
+		t.Fatalf("user files %v (%v)", files, err)
+	}
+
+	if content, err := os.ReadFile(files[0]); err != nil || string(content) != "budi:"+hash+"\n" {
+		t.Fatalf("user file %q (%v)", content, err)
 	}
 }
 

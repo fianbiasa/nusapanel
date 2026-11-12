@@ -27,10 +27,10 @@ Pembagian level sama seperti DirectAdmin:
 | Site redirection               | ✅ Redirect 301/302 per path                                                                                                                           | P1   |
 | PHP selector                   | ✅ Versi PHP per domain/subdomain                                                                                                                      | P1   |
 | PHP settings                   | ✅ `memory_limit`, `upload_max_filesize`, `post_max_size`, `max_execution_time`, `max_input_vars`, `display_errors`, dll. (hanya kunci yang diizinkan) | P1   |
-| Custom error pages             | 400, 401, 403, 404, 500, 503                                                                                                                           | P3   |
-| Password protected directories | htpasswd + realm, kelola user per folder                                                                                                               | P3   |
-| Hotlink protection             | Daftar domain diizinkan, ekstensi, URL pengalihan                                                                                                      | P3   |
-| MIME types & handlers          | Per domain                                                                                                                                             | P3   |
+| Custom error pages             | ✅ 400, 401, 403, 404, 500, 503 (503 juga untuk 502/504), HTML-nya diedit di panel                                                                     | P3   |
+| Password protected directories | ✅ htpasswd + realm, kelola user per folder; dicek Nginx dan Apache                                                                                    | P3   |
+| Hotlink protection             | ✅ Daftar domain diizinkan, ekstensi, URL pengalihan                                                                                                   | P3   |
+| MIME types & handlers          | ✅ Tipe MIME per ekstensi dan ekstensi tambahan yang jalan sebagai PHP, per domain                                                                     | P3   |
 
 ### SSL
 

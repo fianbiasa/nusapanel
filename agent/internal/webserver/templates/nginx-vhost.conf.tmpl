@@ -92,6 +92,33 @@ server {
     disable_symlinks if_not_owner;
     client_max_body_size {{.ClientMaxBodySize}};
 {{- template "suspended" .}}
+{{- with .Hotlink}}
+
+    # Hotlink protection: other websites may not embed these files.
+    valid_referers {{.Referers}};
+    set $rayxo_hotlink "";
+    if ($uri ~* "\.(?:{{.Pattern}})$") {
+        set $rayxo_hotlink $invalid_referer;
+    }
+    if ($rayxo_hotlink) {
+        return {{if .RedirectTo}}302 "{{.RedirectTo}}"{{else}}403{{end}};
+    }
+{{- end}}
+{{- if .ErrorPages}}
+
+    # The website's own pages for the errors of Nginx itself; Apache shows
+    # them for its own errors.
+{{- range .ErrorPages}}
+    error_page {{.NginxStatuses}} {{.URI}};
+{{- end}}
+
+    # Only ever shown as an error page: nothing else in the folder, not
+    # even a script, is served from it.
+    location ^~ /.errors/ {
+        internal;
+        try_files $uri =404;
+    }
+{{- end}}
 {{- range .Redirects}}
 
     # Redirect {{.Path}}{{if .Wildcard}} and everything under it{{end}}.
@@ -109,12 +136,17 @@ server {
     location ~ /\.(?:ht|ftpquota$) {
         deny all;
     }
+{{- range .Protected}}
 
-    # Static files straight from disk. Missing ones go to Apache, so rewrites
-    # in .htaccess still work.
-    location ~* \.(?:css|js|mjs|map|jpg|jpeg|png|gif|webp|avif|svg|ico|bmp|woff|woff2|ttf|otf|eot|mp4|webm|ogg|mp3|wav|pdf|txt|zip|gz|tgz|rar|7z)$ {
-        try_files $uri @apache;
+    # {{.Path}} and everything in it ask for a username and password.
+    location ~ {{.Location}} {
+        auth_basic "{{.Realm}}";
+        auth_basic_user_file {{.File}};
+{{- template "static" ($.Static "    ")}}
+{{template "proxy" $}}
     }
+{{- end}}
+{{- template "static" (.Static "")}}
 
     location / {
 {{- template "proxy" .}}
@@ -123,6 +155,22 @@ server {
     location @apache {
 {{- template "proxy" .}}
     }
+{{- end}}
+{{- /* Static files straight from disk, with the content types the site sets for some. */ -}}
+{{define "static"}}
+
+{{.Indent}}    # Static files straight from disk. Missing ones go to Apache, so rewrites
+{{.Indent}}    # in .htaccess still work.
+{{.Indent}}    location ~* \.(?:{{.Pattern}})$ {
+{{- range .Types}}
+{{$.Indent}}        location ~* \.{{.Extension}}$ {
+{{$.Indent}}            types {}
+{{$.Indent}}            default_type {{.Type}};
+{{$.Indent}}            try_files $uri @apache;
+{{$.Indent}}        }
+{{- end}}
+{{.Indent}}        try_files $uri @apache;
+{{.Indent}}    }
 {{- end}}
 {{- /* Apache behind Nginx. X-Forwarded-Proto tells Apache (and PHP) whether the visitor uses HTTPS. */ -}}
 {{define "proxy"}}

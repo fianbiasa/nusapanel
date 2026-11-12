@@ -9,6 +9,7 @@ use App\Enums\SslSource;
 use App\Enums\SslStatus;
 use App\Enums\WwwMode;
 use App\Support\PhpSettings;
+use App\Support\WebSettings;
 use Database\Factories\DomainFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Casts\Attribute;
@@ -55,6 +56,10 @@ use Illuminate\Support\Carbon;
  * @property bool $php_enabled Whether the website runs PHP; a pointer follows its domain.
  * @property string|null $document_root The folder a subdomain is served from, relative to the home; null is domains/<name>/public_html.
  * @property WwwMode $www_mode Which of its two names visitors end up on; a redirecting pointer ignores it.
+ * @property list<int>|null $error_pages The statuses the website shows its own page for ({@see WebSettings}); a pointer shows its domain's.
+ * @property array{extensions: list<string>, domains: list<string>, allow_direct: bool, redirect_to: string|null}|null $hotlink Hotlink protection; null is off.
+ * @property list<array{extension: string, type: string}>|null $mime_types Content types the website sets itself.
+ * @property list<string>|null $php_extensions Extensions that also run as PHP.
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
@@ -109,6 +114,10 @@ class Domain extends Model
             'force_https' => 'boolean',
             'www_mode' => WwwMode::class,
             'php_enabled' => 'boolean',
+            'error_pages' => 'array',
+            'hotlink' => 'array',
+            'mime_types' => 'array',
+            'php_extensions' => 'array',
         ];
     }
 
@@ -166,6 +175,16 @@ class Domain extends Model
     public function canHaveRedirects(): bool
     {
         return $this->pointer_mode !== PointerMode::Redirect;
+    }
+
+    /**
+     * The folders of the website that ask for a login.
+     *
+     * @return HasMany<ProtectedDirectory, $this>
+     */
+    public function protectedDirectories(): HasMany
+    {
+        return $this->hasMany(ProtectedDirectory::class);
     }
 
     /**

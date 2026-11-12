@@ -32,6 +32,10 @@ var (
 type fileChange struct {
 	path    string
 	content []byte
+	// mode is the mode of the new file; zero means 0644.
+	mode fs.FileMode
+	// gid, when not zero, is the group the new file is given.
+	gid int
 }
 
 // savedFile is a file as it was before a fileChange.
@@ -39,6 +43,9 @@ type savedFile struct {
 	path    string
 	content []byte
 	existed bool
+	// mode and gid are those of the change, which the file had before too.
+	mode fs.FileMode
+	gid  int
 }
 
 // commit applies changes, tests the configuration of every service and
@@ -94,12 +101,12 @@ func applyChanges(changes []fileChange) ([]savedFile, error) {
 			return saved, fmt.Errorf("read %s: %w", change.path, err)
 		}
 
-		saved = append(saved, savedFile{path: change.path, content: content, existed: err == nil})
+		saved = append(saved, savedFile{path: change.path, content: content, existed: err == nil, mode: change.mode, gid: change.gid})
 
 		if change.content == nil {
 			err = removeFile(change.path)
 		} else {
-			err = writeFileAtomic(change.path, change.content, 0o644, nil)
+			err = writeFile(change.path, change.content, change.mode, change.gid)
 		}
 
 		if err != nil {
@@ -119,7 +126,7 @@ func restoreFiles(saved []savedFile) error {
 
 		var err error
 		if file.existed {
-			err = writeFileAtomic(file.path, file.content, 0o644, nil)
+			err = writeFile(file.path, file.content, file.mode, file.gid)
 		} else {
 			err = removeFile(file.path)
 		}
@@ -130,6 +137,28 @@ func restoreFiles(saved []savedFile) error {
 	}
 
 	return errors.Join(errs...)
+}
+
+// writeFile replaces path with content through writeFileAtomic, with mode
+// (0644 when zero) and, when gid is not zero, in that group.
+func writeFile(path string, content []byte, mode fs.FileMode, gid int) error {
+	if mode == 0 {
+		mode = 0o644
+	}
+
+	var setGroup func(temp string) error
+
+	if gid != 0 {
+		setGroup = func(temp string) error {
+			if err := os.Chown(temp, -1, gid); err != nil {
+				return fmt.Errorf("write %s: %w", path, err)
+			}
+
+			return nil
+		}
+	}
+
+	return writeFileAtomic(path, content, mode, setGroup)
 }
 
 // writeFileAtomic replaces path with content: it writes a temporary file in

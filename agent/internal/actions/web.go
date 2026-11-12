@@ -60,6 +60,47 @@ type applyDomainParams struct {
 	// PHPSettings are the website's php.ini settings that differ from the
 	// defaults, such as {"memory_limit": "512M"}.
 	PHPSettings map[string]string `json:"php_settings"`
+	// ErrorPages are the HTTP statuses the website answers with its own
+	// page, <document root>/.errors/<status>.html.
+	ErrorPages []int `json:"error_pages"`
+	// ProtectedDirectories ask for a login before their files are served;
+	// an alias carries those of the website it shows.
+	ProtectedDirectories []protectedDirectoryParams `json:"protected_directories"`
+	// Hotlink keeps other websites from embedding files; null is off.
+	Hotlink *hotlinkParams `json:"hotlink"`
+	// MIMETypes override the content type of file extensions.
+	MIMETypes []mimeTypeParams `json:"mime_types"`
+	// PHPExtensions also run as PHP, on top of .php and .phtml.
+	PHPExtensions []string `json:"php_extensions"`
+}
+
+// protectedDirectoryParams are one protected directory of
+// web.apply_domain.
+type protectedDirectoryParams struct {
+	Path  string                `json:"path"`
+	Realm string                `json:"realm"`
+	Users []protectedUserParams `json:"users"`
+}
+
+// protectedUserParams are one login of a protected directory, with the
+// SHA-512 crypt hash of its password.
+type protectedUserParams struct {
+	Name string `json:"name"`
+	Hash string `json:"hash"`
+}
+
+// hotlinkParams are the hotlink protection of web.apply_domain.
+type hotlinkParams struct {
+	Extensions  []string `json:"extensions"`
+	Domains     []string `json:"domains"`
+	AllowDirect bool     `json:"allow_direct"`
+	RedirectTo  string   `json:"redirect_to"`
+}
+
+// mimeTypeParams are one content type of web.apply_domain.
+type mimeTypeParams struct {
+	Extension string `json:"extension"`
+	Type      string `json:"type"`
 }
 
 // redirectParams are one URL redirect of web.apply_domain.
@@ -100,23 +141,49 @@ func (p applyDomainParams) site(user sysuser.User) webserver.Site {
 		redirects[i] = webserver.Redirect(redirect)
 	}
 
+	directories := make([]webserver.ProtectedDirectory, len(p.ProtectedDirectories))
+	for i, directory := range p.ProtectedDirectories {
+		users := make([]webserver.ProtectedUser, len(directory.Users))
+		for j, login := range directory.Users {
+			users[j] = webserver.ProtectedUser(login)
+		}
+
+		directories[i] = webserver.ProtectedDirectory{Path: directory.Path, Realm: directory.Realm, Users: users}
+	}
+
+	var hotlink *webserver.Hotlink
+	if p.Hotlink != nil {
+		converted := webserver.Hotlink(*p.Hotlink)
+		hotlink = &converted
+	}
+
+	mimeTypes := make([]webserver.MIMEType, len(p.MIMETypes))
+	for i, mime := range p.MIMETypes {
+		mimeTypes[i] = webserver.MIMEType(mime)
+	}
+
 	return webserver.Site{
-		User:              user.Name,
-		UID:               user.UID,
-		GID:               user.GID,
-		Domain:            p.Domain,
-		PHPVersion:        p.PHPVersion,
-		SSL:               p.SSL,
-		ForceHTTPS:        p.ForceHTTPS,
-		WWW:               webserver.WWWMode(p.WWW),
-		NoPHP:             p.NoPHP,
-		Root:              p.Root,
-		CustomCertificate: p.Certificate == "custom",
-		CertificateDomain: p.CertificateDomain,
-		Kind:              webserver.Kind(p.Kind),
-		Parent:            p.Parent,
-		Redirects:         redirects,
-		PHPSettings:       p.PHPSettings,
+		User:                 user.Name,
+		UID:                  user.UID,
+		GID:                  user.GID,
+		Domain:               p.Domain,
+		PHPVersion:           p.PHPVersion,
+		SSL:                  p.SSL,
+		ForceHTTPS:           p.ForceHTTPS,
+		WWW:                  webserver.WWWMode(p.WWW),
+		NoPHP:                p.NoPHP,
+		Root:                 p.Root,
+		CustomCertificate:    p.Certificate == "custom",
+		CertificateDomain:    p.CertificateDomain,
+		Kind:                 webserver.Kind(p.Kind),
+		Parent:               p.Parent,
+		Redirects:            redirects,
+		PHPSettings:          p.PHPSettings,
+		ErrorPages:           p.ErrorPages,
+		ProtectedDirectories: directories,
+		Hotlink:              hotlink,
+		MIMETypes:            mimeTypes,
+		PHPExtensions:        p.PHPExtensions,
 	}
 }
 

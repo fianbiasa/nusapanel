@@ -56,6 +56,33 @@ type siteData struct {
 	// Redirects are the site's URL redirects, in the order Nginx checks
 	// them.
 	Redirects []redirectData
+	// ErrorPages are the site's own error pages, by status.
+	ErrorPages []errorPageData
+	// Protected are the folders that ask for a login.
+	Protected []protectedData
+	// Hotlink, when set, refuses other websites' requests for some files.
+	Hotlink *hotlinkData
+	// StaticPattern matches the files Nginx serves from disk, and
+	// StaticTypes are the content types the site sets for some of them.
+	StaticPattern string
+	StaticTypes   []mimeData
+	// MIMETypes are every content type the site sets, for Apache.
+	MIMETypes []mimeData
+	// PHPPattern matches the files Apache runs as PHP.
+	PHPPattern string
+}
+
+// staticData is what the template of the static files location sees.
+type staticData struct {
+	// Indent goes before every line, for a location nested in another.
+	Indent  string
+	Pattern string
+	Types   []mimeData
+}
+
+// Static is the static files location of the site, indented by indent.
+func (d siteData) Static(indent string) staticData {
+	return staticData{Indent: indent, Pattern: d.StaticPattern, Types: d.StaticTypes}
 }
 
 // poolData is what the pool section template sees: the PHP-FPM pool of
@@ -72,6 +99,9 @@ type poolData struct {
 	Socket   string
 	PoolName string
 	Settings []phpSetting
+	// LimitExtensions are the only files the pool runs: .php, .phtml and
+	// the website's own PHP extensions.
+	LimitExtensions string
 }
 
 // masterData is what the account's main PHP-FPM configuration of one
@@ -133,10 +163,12 @@ func (m *Manager) siteData(site Site) siteData {
 		certificate, certificateKey = m.customCertificateFile(site.Domain), m.customCertificateKeyFile(site.Domain)
 	}
 
+	documentRoot := m.siteDocumentRoot(site)
+
 	return siteData{
 		User:              site.User,
 		Domain:            site.Domain,
-		DocumentRoot:      m.siteDocumentRoot(site),
+		DocumentRoot:      documentRoot,
 		ForwardTo:         forwardTo,
 		Redirects:         redirectsData(site.Redirects),
 		LogDir:            m.cfg.LogDir,
@@ -153,6 +185,13 @@ func (m *Manager) siteData(site Site) siteData {
 		WWW:               wwwRedirect(site.WWW),
 		Certificate:       certificate,
 		CertificateKey:    certificateKey,
+		ErrorPages:        errorPagesData(site.ErrorPages),
+		Protected:         m.protectedData(site, documentRoot),
+		Hotlink:           hotlinkTemplateData(site.Domain, site.Hotlink),
+		StaticPattern:     strings.Join(StaticExtensions, "|"),
+		StaticTypes:       mimeTypesData(site.MIMETypes, isStaticExtension),
+		MIMETypes:         mimeTypesData(site.MIMETypes, nil),
+		PHPPattern:        phpPattern(site.PHPExtensions),
 	}
 }
 
@@ -171,6 +210,8 @@ func (m *Manager) sitePoolData(site Site) poolData {
 		Socket:     m.cfg.RunDir + "/" + name + ".sock",
 		PoolName:   name,
 		Settings:   phpSettingsData(site.PHPSettings),
+		// Apache hands the pool exactly these files (phpPattern).
+		LimitExtensions: limitExtensions(site.PHPExtensions),
 	}
 }
 
@@ -181,14 +222,15 @@ func (m *Manager) legacyPoolData(user, version string) poolData {
 	name := m.masterName(user, version)
 
 	return poolData{
-		User:       user,
-		PHPVersion: version,
-		PHPTag:     phpTag(version),
-		Home:       m.home(user),
-		Section:    user,
-		Socket:     m.cfg.RunDir + "/" + name + ".sock",
-		PoolName:   name,
-		Settings:   phpSettingsData(nil),
+		User:            user,
+		PHPVersion:      version,
+		PHPTag:          phpTag(version),
+		Home:            m.home(user),
+		Section:         user,
+		Socket:          m.cfg.RunDir + "/" + name + ".sock",
+		PoolName:        name,
+		Settings:        phpSettingsData(nil),
+		LimitExtensions: limitExtensions(nil),
 	}
 }
 

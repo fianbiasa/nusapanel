@@ -13,7 +13,7 @@
 
     # PHP runs in the account's own pool. Every pool has its own FastCGI
     # worker name, so Apache never shares a connection between two pools.
-    <FilesMatch "\.(php|phtml)$">
+    <FilesMatch "\.({{.PHPPattern}})$">
         SetHandler "proxy:unix:{{.Socket}}|fcgi://{{.PoolName}}"
     </FilesMatch>
 {{- else}}
@@ -25,5 +25,37 @@
     <FilesMatch "\.(php[0-9]?|phtml|phar)$">
         Require all denied
     </FilesMatch>
+{{- end}}
+{{- if .MIMETypes}}
+
+    # Content types the website sets itself.
+{{- range .MIMETypes}}
+    AddType {{.Type}} .{{.Extension}}
+{{- end}}
+{{- end}}
+{{- if .ErrorPages}}
+
+    # The website's own error pages.
+{{- range .ErrorPages}}
+    ErrorDocument {{.Status}} {{.URI}}
+{{- end}}
+{{- end}}
+{{- range .Protected}}
+
+    # {{.Path}} asks for a username and password here too, so a request
+    # that reaches Apache without passing Nginx still needs one.
+    <Directory "{{.Directory}}">
+        AuthType Basic
+        AuthName "{{.Realm}}"
+        AuthUserFile {{.File}}
+        Require valid-user
+    </Directory>
+{{- end}}
+{{- if and .ErrorPages .Protected}}
+
+    # The error pages show without a login, also that of a wrong login.
+    <Directory "{{.DocumentRoot}}/.errors">
+        Require all granted
+    </Directory>
 {{- end}}
 </VirtualHost>

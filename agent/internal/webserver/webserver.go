@@ -66,6 +66,10 @@ type Config struct {
 	LogDir string
 	// LogGroup is the group of LogDir; empty leaves the group as it is.
 	LogGroup string
+	// WebGroup is the group Nginx and Apache run as. The user files of
+	// protected directories are readable by root and this group only;
+	// empty leaves them in root's group.
+	WebGroup string
 	// RunDir holds the pools' sockets and pid files. systemd creates it as
 	// the units' RuntimeDirectory, so it must be directly inside /run.
 	RunDir string
@@ -137,6 +141,7 @@ func DefaultConfig() Config {
 		UnitDir:        "/etc/systemd/system",
 		LogDir:         "/var/log/rayxo/domains",
 		LogGroup:       "adm",
+		WebGroup:       "www-data",
 		RunDir:         "/run/rayxo-php",
 		HomeRoot:       "/home",
 		PHPFPMDir:      "/usr/sbin",
@@ -278,6 +283,20 @@ type Site struct {
 	// that differ from the defaults, such as "memory_limit": "512M". An
 	// alias carries those of the website it shows; a forward has none.
 	PHPSettings map[string]string
+	// ErrorPages are the HTTP statuses, from ErrorPageStatuses, the site
+	// answers with its own page, <document root>/.errors/<status>.html.
+	ErrorPages []int
+	// ProtectedDirectories ask for a login before their files are served.
+	// An alias must carry those of the website it shows, or its folders
+	// would be open through the alias.
+	ProtectedDirectories []ProtectedDirectory
+	// Hotlink keeps other websites from embedding the site's files; nil
+	// turns it off.
+	Hotlink *Hotlink
+	// MIMETypes override the content type of file extensions.
+	MIMETypes []MIMEType
+	// PHPExtensions also run as PHP, on top of .php and .phtml.
+	PHPExtensions []string
 }
 
 // kind returns the Kind of the site, KindDomain when it is not set.
@@ -342,6 +361,10 @@ func (s Site) Validate() error {
 	}
 
 	if err := validatePHPSettings(s.PHPSettings); err != nil {
+		return err
+	}
+
+	if err := validateWebSettings(site); err != nil {
 		return err
 	}
 
@@ -609,16 +632,32 @@ func (m *Manager) RemoveDomain(ctx context.Context, user, domain string) error {
 	return nil
 }
 
-// removeDomainVhosts deletes the vhosts of domain, then tests and reloads
-// Nginx and Apache.
+// removeDomainVhosts deletes the vhosts of domain and the user files of its
+// protected directories, then tests and reloads Nginx and Apache.
 func (m *Manager) removeDomainVhosts(ctx context.Context, user, domain string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	return m.commit(ctx, []fileChange{
+	gid, err := m.webGID()
+	if err != nil {
+		return err
+	}
+
+	htpasswd, err := m.htpasswdFiles(user, domain)
+	if err != nil {
+		return err
+	}
+
+	changes := []fileChange{
 		{path: m.nginxVhost(user, domain)},
 		{path: m.apacheVhost(user, domain)},
-	}, nginxService, apacheService)
+	}
+
+	for _, path := range htpasswd {
+		changes = append(changes, fileChange{path: path, mode: 0o640, gid: gid})
+	}
+
+	return m.commit(ctx, changes, nginxService, apacheService)
 }
 
 // RemovePool stops and disables the PHP-FPM pool of user for version and
@@ -891,10 +930,19 @@ func (m *Manager) applyVhosts(ctx context.Context, site Site) error {
 		}
 	}
 
-	return m.commit(ctx, []fileChange{
-		{path: m.nginxVhost(site.User, site.Domain), content: nginx},
-		{path: m.apacheVhost(site.User, site.Domain), content: apache},
-	}, nginxService, apacheService)
+	// The user files first, so the vhosts never name a file that is not
+	// there yet.
+	changes, err := m.htpasswdChanges(site)
+	if err != nil {
+		return err
+	}
+
+	changes = append(changes,
+		fileChange{path: m.nginxVhost(site.User, site.Domain), content: nginx},
+		fileChange{path: m.apacheVhost(site.User, site.Domain), content: apache},
+	)
+
+	return m.commit(ctx, changes, nginxService, apacheService)
 }
 
 // ensureLogDir creates the per-domain log directory, root-owned with mode
