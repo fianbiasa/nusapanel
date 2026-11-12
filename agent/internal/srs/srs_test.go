@@ -86,6 +86,27 @@ func TestReverseRefusesForgedAndOldAddresses(t *testing.T) {
 	}
 }
 
+func TestReverseRefusesAnAddressWithItsPartsSplitDifferently(t *testing.T) {
+	r := newRewriter(t, day)
+
+	// someone who owns a.co gets the address for mx@a.co ...
+	address, _ := r.Forward("mx@a.co")
+	if hash := strings.SplitN(address, "=", 3)[1]; len(hash) != hashLength || hashLength < 8 {
+		t.Fatalf("hash %q of %q is shorter than 8 characters", hash, address)
+	}
+
+	// ... and moves a character from the local part to the domain, to have
+	// mail relayed to x@a.com with the same hash.
+	forged := strings.Replace(address, "=a.co=mx@", "=a.com=x@", 1)
+	if forged == address {
+		t.Fatalf("unexpected address %q", address)
+	}
+
+	if original, ok := r.Reverse(forged); ok {
+		t.Fatalf("Reverse(%q) = %q", forged, original)
+	}
+}
+
 func TestAnotherForwardersAddressBecomesSRS1(t *testing.T) {
 	first := newRewriter(t, day)
 	first.domain = "fwd1.example"
@@ -171,7 +192,7 @@ func TestSocketmap(t *testing.T) {
 }
 
 func TestMalformedNetstrings(t *testing.T) {
-	for _, input := range []string{"x:abc,", "3:abc;", "999999999:a,", "5:abc"} {
+	for _, input := range []string{"x:abc,", "3:abc;", "999999999:a,", "5:abc", strings.Repeat("1", 4096) + ":a,"} {
 		if _, err := readNetstring(bufio.NewReader(strings.NewReader(input))); err == nil {
 			t.Errorf("%q was read", input)
 		}

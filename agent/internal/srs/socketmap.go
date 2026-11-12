@@ -25,6 +25,8 @@ const Arg = "srs"
 const (
 	// maxRequest is the longest request Postfix sends, in bytes.
 	maxRequest = 100000
+	// maxLengthDigits bounds the digits of a netstring's length.
+	maxLengthDigits = 6
 	// idleTimeout closes a connection Postfix left unused.
 	idleTimeout = 5 * time.Minute
 )
@@ -173,12 +175,26 @@ func (r *Rewriter) answer(request string) string {
 
 // readNetstring reads one "<length>:<data>," netstring.
 func readNetstring(reader *bufio.Reader) (string, error) {
-	digits, err := reader.ReadString(':')
-	if err != nil {
-		return "", err
+	var digits []byte
+
+	for {
+		c, err := reader.ReadByte()
+		if err != nil {
+			return "", err
+		}
+
+		if c == ':' {
+			break
+		}
+
+		if len(digits) == maxLengthDigits {
+			return "", errors.New("netstring length too long")
+		}
+
+		digits = append(digits, c)
 	}
 
-	length, err := strconv.Atoi(strings.TrimSuffix(digits, ":"))
+	length, err := strconv.Atoi(string(digits))
 	if err != nil || length < 0 || length > maxRequest {
 		return "", errors.New("malformed netstring length")
 	}

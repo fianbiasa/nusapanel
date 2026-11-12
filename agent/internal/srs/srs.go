@@ -3,9 +3,9 @@
 // someone@gmail.com becomes SRS0=<hash>=<day>=gmail.com=someone@<server>,
 // which this server may send for, and a bounce to that address comes back
 // here and goes on to someone@gmail.com. The hash (an HMAC of the address
-// and day under a secret key) makes sure only addresses this server made
-// are turned back, and only for 21 days, so they cannot be used to relay
-// mail anywhere.
+// and day under a secret key, 40 bits) makes sure only addresses this server
+// made are turned back, and SRS0 ones only for 21 days, so they cannot be
+// used to relay mail anywhere.
 //
 // Postfix asks through a socketmap (see Serve): "forward <address>" for
 // envelope senders and "reverse <address>" for envelope recipients.
@@ -13,17 +13,20 @@ package srs
 
 import (
 	"crypto/hmac"
-	"crypto/sha1"
-	"encoding/base64"
+	"crypto/sha256"
+	"encoding/base32"
+	"encoding/binary"
 	"errors"
 	"strings"
 	"time"
 )
 
 const (
-	// hashLength is how many base64 characters of the HMAC an address
-	// carries (the length most SRS implementations use).
-	hashLength = 4
+	// hashLength is how many base32 characters of the HMAC an address
+	// carries: 40 bits, far more than anyone can guess by trying addresses
+	// on port 25. Base32 has one case, so mail servers that lowercase the
+	// address on its way back do not weaken it.
+	hashLength = 8
 	// MaxAgeDays is how long a rewritten address is turned back.
 	MaxAgeDays = 21
 	// MinSecretLength is the shortest secret key accepted, in bytes.
@@ -125,15 +128,21 @@ func (r *Rewriter) Reverse(address string) (string, bool) {
 	return "", false
 }
 
-// hash is the first characters of the base64 HMAC-SHA1 of the lowercased
-// parts, as libsrs2 makes it.
+// hash is the first characters of the base32 HMAC-SHA256 of the lowercased
+// parts. Each part goes in with its length first, so moving characters from
+// one part to the next (a.co and mx, a.com and x) changes the hash.
 func (r *Rewriter) hash(parts ...string) string {
-	mac := hmac.New(sha1.New, r.secret)
+	mac := hmac.New(sha256.New, r.secret)
 	for _, part := range parts {
-		mac.Write([]byte(strings.ToLower(part)))
+		part = strings.ToLower(part)
+
+		var length [4]byte
+		binary.BigEndian.PutUint32(length[:], uint32(len(part)))
+		mac.Write(length[:])
+		mac.Write([]byte(part))
 	}
 
-	return base64.StdEncoding.EncodeToString(mac.Sum(nil))[:hashLength]
+	return base32.StdEncoding.EncodeToString(mac.Sum(nil))[:hashLength]
 }
 
 // validHash compares without regard to case: mail servers may lowercase
@@ -143,7 +152,7 @@ func (r *Rewriter) validHash(hash string, parts ...string) bool {
 		return false
 	}
 
-	return hmac.Equal([]byte(strings.ToLower(hash)), []byte(strings.ToLower(r.hash(parts...))))
+	return hmac.Equal([]byte(strings.ToUpper(hash)), []byte(r.hash(parts...)))
 }
 
 // stamp is today, in days since 1970, as two base32 characters.
