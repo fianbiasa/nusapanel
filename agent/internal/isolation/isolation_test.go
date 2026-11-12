@@ -66,6 +66,7 @@ func TestAnAccountCannotReadAnotherAccountsFiles(t *testing.T) {
 	t.Run("through .htaccess", s.throughHtaccess)
 	t.Run("through the other account's PHP-FPM socket", s.throughPHPSocket)
 	t.Run("through the file manager", s.throughFileManager)
+	t.Run("through a symlinked document root", s.throughDocumentRootSymlink)
 	t.Run("a home opened to others would be caught", s.openedHomeIsCaught)
 }
 
@@ -177,6 +178,39 @@ func (s *server) throughSymlinks(t *testing.T) {
 		status, body := get(t, s.a.domain, path)
 		s.refute(t, fmt.Sprintf("GET %s (%d)", path, status), body)
 		s.refuteListing(t, fmt.Sprintf("GET %s (%d)", path, status), body)
+	}
+}
+
+// throughDocumentRootSymlink replaces the attacker's whole document root,
+// which the attacker owns and may rename, with a symlink to the victim's
+// document root and then to the victim's home: the web server must check
+// the document root itself too, not only what is below it.
+func (s *server) throughDocumentRootSymlink(t *testing.T) {
+	docroot := s.a.docroot()
+	moved := docroot + ".moved"
+
+	if err := os.Rename(docroot, moved); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() {
+		_ = os.Remove(docroot)
+		_ = os.Rename(moved, docroot)
+	})
+
+	targets := map[string][]string{
+		s.b.docroot(): {"/secret.txt", "/secret.html", "/wp-config.php"},
+		s.b.Home:      {"/notes.txt"},
+	}
+
+	for target, paths := range targets {
+		_ = os.Remove(docroot)
+		symlinkAs(t, s.a, target, docroot)
+
+		for _, path := range paths {
+			status, body := get(t, s.a.domain, path)
+			s.refute(t, fmt.Sprintf("GET %s with the document root linked to %s (%d)", path, target, status), body)
+		}
 	}
 }
 

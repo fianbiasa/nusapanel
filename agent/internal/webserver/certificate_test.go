@@ -211,7 +211,7 @@ func TestRenderedNginxVhostWithHTTPS(t *testing.T) {
 		"error_log "+env.cfg.LogDir+"/example.com.error.log;",
 		"server_tokens off;",
 		"root /home/budi/domains/example.com/public_html;",
-		"disable_symlinks if_not_owner from=$document_root;",
+		"disable_symlinks if_not_owner;",
 		"client_max_body_size 256m;",
 		"include "+env.cfg.NginxDir+"/budi/suspended*.inc;",
 		"location ~ /\\.(?:ht|ftpquota$) {\n        deny all;\n    }",

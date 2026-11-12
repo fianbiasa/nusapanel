@@ -86,8 +86,10 @@ server {
     root {{.DocumentRoot}};
 
     # Never serve a file through a symlink that someone else owns, such as a
-    # link to another account's wp-config.php.
-    disable_symlinks if_not_owner from=$document_root;
+    # link to another account's wp-config.php. Every part of the path is
+    # checked, the document root too: an account owns its document root and
+    # could replace it with a link into another account's home.
+    disable_symlinks if_not_owner;
     client_max_body_size {{.ClientMaxBodySize}};
 {{- template "suspended" .}}
 {{- range .Redirects}}
