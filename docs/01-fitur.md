@@ -34,13 +34,13 @@ Pembagian level sama seperti DirectAdmin:
 
 ### SSL
 
-| Fitur                | Keterangan                                                        | Fase |
-| -------------------- | ----------------------------------------------------------------- | ---- |
-| Let's Encrypt        | ✅ Otomatis, termasuk www, mail, dan alias; perpanjangan otomatis | P1   |
-| Sertifikat kustom    | ✅ Upload cert + private key + CA bundle, dicek kecocokannya      | P1   |
-| Wildcard SSL         | ✅ Lewat DNS-01 (kalau DNS domain di server ini)                  | P2   |
-| SSL untuk mail & FTP | ✅ mail.<domain> dengan SNI di Postfix & Dovecot; FTP menyusul    | P2   |
-| CSR & self-signed    | Generator CSR dan sertifikat self-signed                          | P3   |
+| Fitur                | Keterangan                                                                                                             | Fase |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---- |
+| Let's Encrypt        | ✅ Otomatis, termasuk www, mail, dan alias; perpanjangan otomatis                                                      | P1   |
+| Sertifikat kustom    | ✅ Upload cert + private key + CA bundle, dicek kecocokannya                                                           | P1   |
+| Wildcard SSL         | ✅ Lewat DNS-01 (kalau DNS domain di server ini)                                                                       | P2   |
+| SSL untuk mail & FTP | ✅ mail.<domain> dengan SNI di Postfix & Dovecot; FTP dengan sertifikat hostname (login FTP sudah dibatasi per folder) | P2   |
+| CSR & self-signed    | Generator CSR dan sertifikat self-signed                                                                               | P3   |
 
 ### DNS
 

@@ -176,7 +176,7 @@ Semua fitur P1 sudah ada. Yang dipindah ke fase lain: CGI dan batas disk & bandw
 - Akun email, forwarder, catch-all, autoresponder, vacation, filter, spam filter.
 - DKIM/SPF/DMARC otomatis, batas kirim, mail queue, SSL untuk mail & FTP.
 
-Semua fitur P2 sudah ada, terpasang di server produksi dan dirilis sebagai v0.6.0 (12 November 2026). SSL FTP tetap memakai sertifikat hostname (sejak P1); SNI per domain hanya untuk email.
+Semua fitur P2 sudah ada, terpasang di server produksi dan dirilis sebagai v0.6.0 (12 November 2026). SSL FTP sengaja tetap memakai sertifikat hostname (sejak P1): setiap login FTP sudah terikat ke foldernya sendiri, jadi sertifikat per domain tidak dibutuhkan; SNI per domain hanya untuk email.
 
 **Selesai kalau:**
 
