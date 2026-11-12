@@ -214,13 +214,13 @@ Pembagian level sama seperti DirectAdmin:
 
 ## 1.4 Proses latar belakang (tanpa UI)
 
-| Proses                    | Keterangan                                                              | Fase |
-| ------------------------- | ----------------------------------------------------------------------- | ---- |
-| Quota disk & inode        | ✅ Filesystem quota                                                     | P1   |
-| Rotasi log per domain     | ✅                                                                      | P1   |
-| Perpanjangan SSL          | ✅                                                                      | P1   |
-| Watchdog service          | ✅                                                                      | P1   |
-| Hitung bandwidth          | ✅ Dari log web, email, FTP; suspend otomatis kalau lewat batas (opsional)| P3   |
-| Snapshot pemakaian harian | ✅ Untuk grafik                                                         | P3   |
-| Backup terjadwal          |                                                                         | P4   |
-| Deteksi config drift ★    | Bandingkan config di disk dengan database                               | P5   |
+| Proses                    | Keterangan                                                                 | Fase |
+| ------------------------- | -------------------------------------------------------------------------- | ---- |
+| Quota disk & inode        | ✅ Filesystem quota                                                        | P1   |
+| Rotasi log per domain     | ✅                                                                         | P1   |
+| Perpanjangan SSL          | ✅                                                                         | P1   |
+| Watchdog service          | ✅                                                                         | P1   |
+| Hitung bandwidth          | ✅ Dari log web, email, FTP; suspend otomatis kalau lewat batas (opsional) | P3   |
+| Snapshot pemakaian harian | ✅ Untuk grafik                                                            | P3   |
+| Backup terjadwal          |                                                                            | P4   |
+| Deteksi config drift ★    | Bandingkan config di disk dengan database                                  | P5   |
