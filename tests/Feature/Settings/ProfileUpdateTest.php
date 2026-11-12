@@ -17,6 +17,7 @@ class ProfileUpdateTest extends TestCase
 
         $response = $this
             ->actingAs($user)
+            ->withSession(['auth.password_confirmed_at' => time()])
             ->get(route('profile.edit'));
 
         $response->assertOk();
@@ -28,6 +29,7 @@ class ProfileUpdateTest extends TestCase
 
         $response = $this
             ->actingAs($user)
+            ->withSession(['auth.password_confirmed_at' => time()])
             ->patch(route('profile.update'), [
                 'name' => 'Test User',
                 'email' => 'test@example.com',
@@ -44,12 +46,28 @@ class ProfileUpdateTest extends TestCase
         $this->assertNull($user->email_verified_at);
     }
 
+    public function test_the_email_cannot_change_without_the_password_confirmed()
+    {
+        $user = User::factory()->create(['email' => 'budi@example.com']);
+
+        $this->actingAs($user)
+            ->get(route('profile.edit'))
+            ->assertRedirect(route('password.confirm'));
+
+        $this->actingAs($user)
+            ->patch(route('profile.update'), ['name' => $user->name, 'email' => 'attacker@example.net'])
+            ->assertRedirect(route('password.confirm'));
+
+        $this->assertSame('budi@example.com', $user->refresh()->email);
+    }
+
     public function test_email_verification_status_is_unchanged_when_the_email_address_is_unchanged()
     {
         $user = User::factory()->create();
 
         $response = $this
             ->actingAs($user)
+            ->withSession(['auth.password_confirmed_at' => time()])
             ->patch(route('profile.update'), [
                 'name' => 'Test User',
                 'email' => $user->email,
@@ -66,7 +84,7 @@ class ProfileUpdateTest extends TestCase
     {
         $user = User::factory()->create(['username' => 'budi']);
 
-        $this->actingAs($user)->patch(route('profile.update'), [
+        $this->actingAs($user)->withSession(['auth.password_confirmed_at' => time()])->patch(route('profile.update'), [
             'name' => 'Test User',
             'email' => $user->email,
             'username' => 'root',

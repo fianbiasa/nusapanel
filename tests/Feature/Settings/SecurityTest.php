@@ -5,6 +5,7 @@ namespace Tests\Feature\Settings;
 use App\Models\AuditLog;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Fortify\Features;
@@ -97,6 +98,27 @@ class SecurityTest extends TestCase
             ->assertRedirect(route('security.edit'));
 
         $this->assertTrue(Hash::check('new-password', $user->refresh()->password));
+    }
+
+    public function test_changing_the_password_signs_the_account_out_elsewhere()
+    {
+        $user = User::factory()->create(['remember_token' => 'stolen-cookie-token']);
+        DB::table('sessions')->insert([
+            ['id' => 'other-device', 'user_id' => $user->id, 'payload' => '', 'last_activity' => time()],
+            ['id' => 'someone-else', 'user_id' => User::factory()->create()->id, 'payload' => '', 'last_activity' => time()],
+        ]);
+
+        $this->actingAs($user)
+            ->from(route('security.edit'))
+            ->put(route('user-password.update'), [
+                'current_password' => 'password',
+                'password' => 'new-password',
+                'password_confirmation' => 'new-password',
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(['someone-else'], DB::table('sessions')->pluck('id')->all());
+        $this->assertNotSame('stolen-cookie-token', $user->refresh()->remember_token);
     }
 
     public function test_correct_password_must_be_provided_to_update_password()

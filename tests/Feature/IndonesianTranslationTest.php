@@ -30,6 +30,7 @@ class IndonesianTranslationTest extends TestCase
         $user = User::factory()->create(['name' => 'Budi']);
 
         $this->actingAs($user)
+            ->withSession(['auth.password_confirmed_at' => time()])
             ->patch(route('profile.update'), ['name' => '', 'email' => $user->email])
             ->assertSessionHasErrors(['name' => 'Kolom nama wajib diisi.']);
 

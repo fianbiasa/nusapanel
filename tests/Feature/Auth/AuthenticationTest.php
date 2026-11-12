@@ -6,6 +6,8 @@ use App\Enums\AccountStatus;
 use App\Models\AuditLog;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Laravel\Fortify\Features;
 use Tests\TestCase;
@@ -96,6 +98,24 @@ class AuthenticationTest extends TestCase
         $response->assertRedirect(route('two-factor.login'));
         $response->assertSessionHas('login.id', $user->id);
         $this->assertGuest();
+    }
+
+    public function test_an_unknown_username_still_has_its_password_checked()
+    {
+        $this->assertFalse(Cache::has('auth.unknown-user-hash'));
+
+        $this->post(route('login.store'), [
+            'username' => 'nobody',
+            'password' => 'some-password',
+        ]);
+
+        $this->assertGuest();
+
+        // The password was checked against a hash, as for a real account, so
+        // the answer takes as long and its time does not tell which usernames
+        // exist.
+        $hash = Cache::get('auth.unknown-user-hash');
+        $this->assertTrue(is_string($hash) && Hash::info($hash)['algoName'] !== 'unknown');
     }
 
     public function test_users_can_not_authenticate_with_invalid_password()

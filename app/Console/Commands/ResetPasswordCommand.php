@@ -53,8 +53,8 @@ class ResetPasswordCommand extends Command
             $user->forceFill(['password' => $password])->save();
 
             // Sign the account out everywhere: whoever had the old password
-            // must not keep a session.
-            DB::table('sessions')->where('user_id', $user->id)->delete();
+            // must not keep a session or a "remember me" cookie.
+            $user->endSessions();
 
             $audit->record('account.password_reset', $user, ['via' => 'cli']);
         });

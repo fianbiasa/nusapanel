@@ -15,6 +15,8 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Laravel\Fortify\Contracts\PasskeyUser;
 use Laravel\Fortify\PasskeyAuthenticatable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
@@ -187,6 +189,21 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     public function primaryDomain(): HasOne
     {
         return $this->hasOne(Domain::class)->where('is_primary', true);
+    }
+
+    /**
+     * Sign the account out everywhere but the session except: its other
+     * sessions end and a "remember me" cookie stops working, so whoever
+     * signed in with an old password or a stolen cookie is out.
+     */
+    public function endSessions(?string $except = null): void
+    {
+        DB::table('sessions')
+            ->where('user_id', $this->id)
+            ->when($except !== null, fn ($query) => $query->where('id', '!=', $except))
+            ->delete();
+
+        $this->forceFill(['remember_token' => Str::random(60)])->save();
     }
 
     public function hasRole(Role ...$roles): bool

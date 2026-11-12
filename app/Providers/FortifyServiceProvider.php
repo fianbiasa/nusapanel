@@ -3,9 +3,12 @@
 namespace App\Providers;
 
 use App\Actions\Fortify\ResetUserPassword;
+use App\Http\Controllers\PasswordResetLinkController;
+use App\Http\Responses\PasswordResetLinkResponse;
 use App\Models\User;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
@@ -13,8 +16,11 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
+use Laravel\Fortify\Contracts\FailedPasswordResetLinkRequestResponse;
+use Laravel\Fortify\Contracts\SuccessfulPasswordResetLinkRequestResponse;
 use Laravel\Fortify\Features;
 use Laravel\Fortify\Fortify;
+use Laravel\Fortify\Http\Controllers\PasswordResetLinkController as FortifyPasswordResetLinkController;
 
 class FortifyServiceProvider extends ServiceProvider
 {
@@ -23,7 +29,11 @@ class FortifyServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // A password reset request answers the same for every email, and
+        // is limited (see the two classes).
+        $this->app->bind(FortifyPasswordResetLinkController::class, PasswordResetLinkController::class);
+        $this->app->bind(FailedPasswordResetLinkRequestResponse::class, PasswordResetLinkResponse::class);
+        $this->app->bind(SuccessfulPasswordResetLinkRequestResponse::class, PasswordResetLinkResponse::class);
     }
 
     /**
@@ -63,7 +73,12 @@ class FortifyServiceProvider extends ServiceProvider
             ->orWhere('email', $login)
             ->first();
 
-        if ($user === null || ! Hash::check((string) $request->input('password'), $user->password)) {
+        // Without an account the password is still checked, against a hash
+        // of nothing, so the answer takes as long and the time does not tell
+        // which usernames exist.
+        $hash = $user->password ?? Cache::rememberForever('auth.unknown-user-hash', fn (): string => Hash::make(Str::random(40)));
+
+        if (! Hash::check((string) $request->input('password'), $hash) || $user === null) {
             return null;
         }
 

@@ -98,6 +98,9 @@ class SecurityController extends Controller
             'password' => $request->password,
         ]);
 
+        // Whoever was signed in with the old password, elsewhere, is out.
+        $request->user()->endSessions(except: $request->session()->getId());
+
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Password updated.')]);
 
         return back();

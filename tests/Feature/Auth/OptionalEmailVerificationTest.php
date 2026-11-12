@@ -36,6 +36,7 @@ class OptionalEmailVerificationTest extends TestCase
         $user = User::factory()->create();
 
         $this->actingAs($user)
+            ->withSession(['auth.password_confirmed_at' => time()])
             ->patch(route('profile.update'), ['name' => $user->name, 'email' => 'baru@example.com'])
             ->assertSessionHasNoErrors();
 
@@ -50,11 +51,13 @@ class OptionalEmailVerificationTest extends TestCase
 
         config(['mail.default' => 'log']);
         $this->actingAs($user)
+            ->withSession(['auth.password_confirmed_at' => time()])
             ->get(route('profile.edit'))
             ->assertInertia(fn (Assert $page) => $page->where('mustVerifyEmail', false));
 
         config(['mail.default' => 'smtp']);
         $this->actingAs($user)
+            ->withSession(['auth.password_confirmed_at' => time()])
             ->get(route('profile.edit'))
             ->assertInertia(fn (Assert $page) => $page->where('mustVerifyEmail', true));
     }
