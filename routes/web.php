@@ -25,6 +25,7 @@ use App\Http\Controllers\FileManagerController;
 use App\Http\Controllers\FtpAccountController;
 use App\Http\Controllers\ImpersonationController;
 use App\Http\Controllers\MailboxRulesController;
+use App\Http\Controllers\MailClientConfigController;
 use App\Http\Controllers\MailDnsCheckController;
 use App\Http\Controllers\MailForwarderController;
 use App\Http\Controllers\MailModeController;
@@ -35,9 +36,25 @@ use App\Http\Controllers\SftpPasswordController;
 use App\Http\Controllers\SubdomainController;
 use App\Http\Controllers\UrlRedirectController;
 use App\Http\Controllers\WebmailController;
+use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard')->name('home');
+
+// What mail apps look up on their own for an address of a domain whose mail
+// this server takes: Thunderbird (autoconfig.<domain>) and Outlook (sent to
+// the hostname by _autodiscover._tcp). Nginx passes them on from port 80 of
+// any name and from the hostname's port 443.
+Route::get('mail/config-v1.1.xml', [MailClientConfigController::class, 'autoconfig'])
+    ->middleware('throttle:60,1,mail-autoconfig')
+    ->name('mail-client.autoconfig');
+Route::get('.well-known/autoconfig/mail/config-v1.1.xml', [MailClientConfigController::class, 'autoconfig'])
+    ->middleware('throttle:60,1,mail-autoconfig')
+    ->name('mail-client.autoconfig.well-known');
+Route::match(['get', 'post'], 'autodiscover/autodiscover.xml', [MailClientConfigController::class, 'autodiscover'])
+    ->middleware('throttle:60,1,mail-autodiscover')
+    ->withoutMiddleware(PreventRequestForgery::class)
+    ->name('mail-client.autodiscover');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');

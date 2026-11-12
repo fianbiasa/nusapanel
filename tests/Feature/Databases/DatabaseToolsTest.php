@@ -101,7 +101,9 @@ class DatabaseToolsTest extends TestCase
             ->post(route('database-remote-hosts.store'), ['host' => '203.0.113.7'])
             ->assertSessionHasErrors(['host' => 'This host is allowed already.']);
 
-        DatabaseRemoteHost::factory()->for($this->account, 'account')->count(DatabaseHost::MAX_PER_ACCOUNT - 1)->create();
+        DatabaseRemoteHost::factory()->for($this->account, 'account')->count(DatabaseHost::MAX_PER_ACCOUNT - 1)
+            ->sequence(fn ($sequence) => ['host' => '198.51.100.'.($sequence->index + 1)])
+            ->create();
 
         $this->actingAs($this->account)
             ->post(route('database-remote-hosts.store'), ['host' => '%'])

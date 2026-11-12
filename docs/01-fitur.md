@@ -85,7 +85,7 @@ Pembagian level sama seperti DirectAdmin:
 | MX & mode email    | ✅ Per domain: server ini, Google Workspace, Zoho Mail (MX & SPF diatur otomatis), atau layanan lain   | P2   |
 | Webmail            | ✅ Roundcube dengan SSO dari panel                                                                     | P2   |
 | Pemakaian email    | ✅ Ukuran dan jumlah pesan per akun email, diukur tiap 15 menit                                        | P2   |
-| Konfigurasi klien  | Autoconfig (Thunderbird) & autodiscover (Outlook)                                                      | P3   |
+| Konfigurasi klien  | ✅ Autoconfig (Thunderbird) & autodiscover (Outlook), dengan record DNS-nya                            | P3   |
 | Mailing list       |                                                                                                        | P6   |
 | Lacak pengiriman ★ | Cari log mail untuk domain sendiri                                                                     | P6   |
 

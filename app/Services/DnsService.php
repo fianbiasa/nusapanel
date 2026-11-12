@@ -6,6 +6,7 @@ use App\Enums\AccountStatus;
 use App\Enums\DomainStatus;
 use App\Enums\DomainType;
 use App\Enums\MailDomainMode;
+use App\Enums\MailDomainStatus;
 use App\Enums\MailProvider;
 use App\Enums\Role;
 use App\Enums\TaskStatus;
@@ -276,6 +277,10 @@ class DnsService
                 if ($ip !== null && ! $zone->records()->where('name', "mail.{$domain->name}")->exists()) {
                     $zone->records()->create($this->record("mail.{$domain->name}", 'A', $ip));
                 }
+            }
+
+            if (! $external) {
+                $this->addMailClientRecords($zone, $domain->name);
             }
 
             if ($zone->account->status !== AccountStatus::Pending) {
@@ -576,6 +581,7 @@ class DnsService
             ->whereIn('status', [AccountStatus::Active, AccountStatus::Suspended]);
 
         $this->ensureZones($accounts);
+        $this->ensureMailClientRecords($accounts);
 
         $queued = 0;
 
@@ -589,6 +595,61 @@ class DnsService
             });
 
         return $queued;
+    }
+
+    /**
+     * The records mail apps find their settings with: autoconfig.<domain>
+     * (Thunderbird) and autodiscover.<domain> at this server, and
+     * _autodiscover._tcp sending Outlook to the server hostname, whose
+     * certificate it trusts. Only names the zone does not have yet are
+     * added, so the customer's own records stay.
+     *
+     * @return bool Whether a record was added.
+     */
+    private function addMailClientRecords(DnsZone $zone, string $domain): bool
+    {
+        $added = false;
+        $ip = $this->publicIp();
+
+        foreach (["autoconfig.{$domain}", "autodiscover.{$domain}"] as $name) {
+            if ($ip !== null && ! $zone->records()->where('name', $name)->exists()) {
+                $zone->records()->create($this->record($name, 'A', $ip));
+                $added = true;
+            }
+        }
+
+        $hostname = parse_url((string) config('app.url'), PHP_URL_HOST);
+        $srv = "_autodiscover._tcp.{$domain}";
+
+        if (is_string($hostname) && $hostname !== '' && ! $zone->records()->where('name', $srv)->exists()) {
+            $zone->records()->create($this->record($srv, 'SRV', '0 443 '.strtolower($hostname), 0));
+            $added = true;
+        }
+
+        return $added;
+    }
+
+    /**
+     * Give the zones of the accounts' domains that take mail here the
+     * records of mail apps they lack, e.g. after an upgrade from a release
+     * without them.
+     *
+     * @param  Builder<User>  $accounts
+     */
+    private function ensureMailClientRecords(Builder $accounts): void
+    {
+        DnsZone::query()
+            ->with('domain')
+            ->whereIn('user_id', $accounts->clone()->select('id'))
+            ->whereHas('domain.mailDomain', fn (Builder $query) => $query
+                ->where('status', MailDomainStatus::Active)
+                ->where('mode', '!=', MailDomainMode::External))
+            ->orderBy('id')
+            ->each(function (DnsZone $zone): void {
+                if ($zone->domain !== null) {
+                    $this->addMailClientRecords($zone, $zone->domain->name);
+                }
+            });
     }
 
     /**
