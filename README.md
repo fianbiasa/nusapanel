@@ -104,7 +104,7 @@ bash setup.sh --admin-email kamu@domainmu.com
 - Hostname berupa FQDN, misalnya `server1.domainmu.com`.
 - **A record** hostname → IP publik server (kalau memakai Cloudflare: _DNS only_, bukan proxy). Tidak boleh ada AAAA record yang mengarah ke server lain.
 - **PTR (reverse DNS)** IP publik → hostname, diatur lewat provider VPS.
-- Port 80 dan 2222 terbuka dari internet.
+- Port 80 dan 2222 terbuka dari internet. Untuk email dan DNS buka juga 25, 110, 143, 465, 587, 993, 995, dan 53 (TCP dan UDP).
 
 Dengan syarat itu terpenuhi, `setup.sh` otomatis memasang **SSL Let's Encrypt** untuk hostname (diperpanjang otomatis oleh `certbot.timer`), sehingga panel bisa dibuka normal di `https://<hostname>:2222`, dan `http://<hostname>` diarahkan ke sana.
 
