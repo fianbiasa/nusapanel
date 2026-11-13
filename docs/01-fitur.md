@@ -177,17 +177,17 @@ Pembagian level sama seperti DirectAdmin:
 
 ### Keamanan
 
-| Fitur                     | Keterangan                                                                              | Fase |
-| ------------------------- | --------------------------------------------------------------------------------------- | ---- |
-| Audit log                 | ✅ Siapa melakukan apa, kapan, dari IP mana                                             | P0   |
-| 2FA                       | ✅ Untuk semua level                                                                    | P1   |
-| Riwayat login semua akun  |                                                                                         | P3   |
-| Batas resource per user ★ | CPU, RAM, jumlah proses, IO (cgroups v2)                                                | P3   |
-| Brute force monitor       | Deteksi login gagal di SSH, FTP, email, panel, WordPress; blokir otomatis; daftar putih | P5   |
-| Firewall                  | Buka/tutup port, allow/deny IP (nftables)                                               | P5   |
-| ModSecurity + OWASP CRS   | On/off global & per domain                                                              | P5   |
-| Kebijakan keamanan        | Wajib 2FA untuk admin/reseller, aturan password                                         | P5   |
-| Malware scan ★            | ClamAV/maldet                                                                           | P6   |
+| Fitur                     | Keterangan                                                                                                                                      | Fase |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| Audit log                 | ✅ Siapa melakukan apa, kapan, dari IP mana                                                                                                     | P0   |
+| 2FA                       | ✅ Untuk semua level                                                                                                                            | P1   |
+| Riwayat login semua akun  | ✅ Admin: semua akun, termasuk percobaan dengan nama yang tidak terdaftar; reseller: akun-akunnya. Saring berhasil/gagal, cari username atau IP | P3   |
+| Batas resource per user ★ | ✅ CPU, RAM, jumlah proses, prioritas IO per paket (cgroups v2), untuk PHP-FPM dan sesi SSH akun; cron job belum ikut                           | P3   |
+| Brute force monitor       | Deteksi login gagal di SSH, FTP, email, panel, WordPress; blokir otomatis; daftar putih                                                         | P5   |
+| Firewall                  | Buka/tutup port, allow/deny IP (nftables)                                                                                                       | P5   |
+| ModSecurity + OWASP CRS   | On/off global & per domain                                                                                                                      | P5   |
+| Kebijakan keamanan        | Wajib 2FA untuk admin/reseller, aturan password                                                                                                 | P5   |
+| Malware scan ★            | ClamAV/maldet                                                                                                                                   | P6   |
 
 ### Backup & migrasi
 

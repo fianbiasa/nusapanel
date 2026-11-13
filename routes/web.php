@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\AccountController;
 use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\DnsController as AdminDnsController;
+use App\Http\Controllers\Admin\LoginHistoryController;
 use App\Http\Controllers\Admin\MailQueueController;
 use App\Http\Controllers\Admin\PackageController;
 use App\Http\Controllers\Admin\ProcessController;
@@ -211,6 +212,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('packages/{package}', [PackageController::class, 'update'])->name('packages.update');
         Route::delete('packages/{package}', [PackageController::class, 'destroy'])->name('packages.destroy');
         Route::get('statistics', [StatisticsController::class, 'index'])->name('statistics.index');
+        Route::get('login-history', [LoginHistoryController::class, 'index'])->name('login-history.index');
     });
 
     // Back to one's own account after "login as".
@@ -245,6 +247,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('statistics', [StatisticsController::class, 'index'])->name('statistics.index');
         Route::get('tasks', [TaskController::class, 'index'])->name('tasks.index');
         Route::get('audit-logs', [AuditLogController::class, 'index'])->name('audit-logs.index');
+        Route::get('login-history', [LoginHistoryController::class, 'index'])->name('login-history.index');
         Route::get('services', [ServiceController::class, 'index'])->name('services.index');
         Route::get('processes', [ProcessController::class, 'index'])->middleware('throttle:60,1,admin-processes')->name('processes.index');
         Route::post('processes/kill', [ProcessController::class, 'kill'])->middleware('throttle:30,1,admin-process-kill')->name('processes.kill');

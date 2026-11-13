@@ -7,6 +7,7 @@ import (
 	"errors"
 	"slices"
 
+	"rayxo/agent/internal/cgroup"
 	"rayxo/agent/internal/quota"
 	"rayxo/agent/internal/rpc"
 	"rayxo/agent/internal/validate"
@@ -15,14 +16,34 @@ import (
 // maxDiskMB is the largest disk_mb whose limit fits the quota format.
 const maxDiskMB = quota.MaxBlocksKB / 1024
 
-// setQuotaParams are the params of account.set_quota. Both limits are
+// setQuotaParams are the params of account.set_quota. Both disk limits are
 // required, so a caller that forgets one never removes a limit by accident.
+// The resource limits are optional, but come all four or not at all;
+// without them the account's resource limits stay as they are.
 type setQuotaParams struct {
 	Username string `json:"username"`
 	// DiskMB limits disk space in MiB; 0 is unlimited.
 	DiskMB *int64 `json:"disk_mb"`
 	// Inodes limits the number of files and directories; 0 is unlimited.
 	Inodes *int64 `json:"inodes"`
+	// CPUPercent limits CPU time in percent of one CPU; 0 is unlimited.
+	CPUPercent *int `json:"cpu_percent"`
+	// MemoryMB limits memory in MiB; 0 is unlimited.
+	MemoryMB *int `json:"memory_mb"`
+	// Tasks limits the number of processes and threads; 0 is unlimited.
+	Tasks *int `json:"tasks"`
+	// IOWeight is the share of disk IO, 1 to 10000; 0 is the default.
+	IOWeight *int `json:"io_weight"`
+}
+
+// resourceLimits returns the resource limits in the params, and whether
+// there are any.
+func (p setQuotaParams) resourceLimits() (cgroup.Limits, bool) {
+	if p.CPUPercent == nil || p.MemoryMB == nil || p.Tasks == nil || p.IOWeight == nil {
+		return cgroup.Limits{}, false
+	}
+
+	return cgroup.Limits{CPUPercent: *p.CPUPercent, MemoryMB: *p.MemoryMB, Tasks: *p.Tasks, IOWeight: *p.IOWeight}, true
 }
 
 func (p setQuotaParams) validate() error {
@@ -41,7 +62,16 @@ func (p setQuotaParams) validate() error {
 		return errors.New("inodes must be 0 (unlimited) or a positive number")
 	}
 
-	return nil
+	limits, given := p.resourceLimits()
+	if !given {
+		if p.CPUPercent != nil || p.MemoryMB != nil || p.Tasks != nil || p.IOWeight != nil {
+			return errors.New("cpu_percent, memory_mb, tasks and io_weight come together")
+		}
+
+		return nil
+	}
+
+	return limits.Check()
 }
 
 // setQuotaResult is the result of account.set_quota.
@@ -97,8 +127,9 @@ func decodeSetQuotaParams(raw json.RawMessage) (setQuotaParams, error) {
 
 // setQuota implements account.set_quota: it limits the disk space and the
 // inodes of the account on the filesystem of the homes, with soft and hard
-// limits alike (no grace period). When that filesystem has no user quotas
-// on, nothing changes and applied is false.
+// limits alike (no grace period), and, when the params have them, its CPU,
+// memory, processes and disk IO. When that filesystem has no user quotas
+// on, the disk limits change nothing and applied is false.
 func (a accountActions) setQuota(ctx context.Context, raw json.RawMessage) (any, error) {
 	params, err := decodeSetQuotaParams(raw)
 	if err != nil {
@@ -116,6 +147,12 @@ func (a accountActions) setQuota(ctx context.Context, raw json.RawMessage) (any,
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	if limits, given := params.resourceLimits(); given {
+		if err := a.limits.Apply(ctx, user.Name, user.UID, limits); err != nil {
+			return nil, err
+		}
 	}
 
 	return setQuotaResult{Applied: applied}, nil

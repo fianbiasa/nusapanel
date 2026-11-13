@@ -15,9 +15,11 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Disk quotas of hosting accounts. The server limits each account's disk
- * space and number of files (inodes) to what its package allows, and
- * reports how much of both every account uses.
+ * Disk quotas and resource limits of hosting accounts. The server limits
+ * each account's disk space and number of files (inodes) to what its
+ * package allows, and reports how much of both every account uses. With
+ * the quota go the package's CPU, memory, process and disk IO limits,
+ * which the server enforces with cgroups.
  *
  * Only hosting accounts that exist on the server (active or suspended) get
  * a quota: an account that is still being created gets one once it exists,
@@ -36,9 +38,9 @@ class QuotaService
     ) {}
 
     /**
-     * Queue the account's quota on the server: its package's disk and inode
-     * limits, where 0 means unlimited. Accounts that do not exist on the
-     * server are skipped.
+     * Queue the account's quota on the server: its package's disk, inode
+     * and resource limits, where 0 means unlimited. Accounts that do not
+     * exist on the server are skipped.
      *
      * @return bool Whether the quota was queued.
      */
@@ -48,10 +50,16 @@ class QuotaService
             return false;
         }
 
+        $package = $account->package;
+
         $this->tasks->dispatch('account.set_quota', [
             'username' => $account->username,
-            'disk_mb' => $account->package->disk_mb ?? 0,
-            'inodes' => $account->package->inodes ?? 0,
+            'disk_mb' => $package->disk_mb ?? 0,
+            'inodes' => $package->inodes ?? 0,
+            'cpu_percent' => $package->cpu_percent ?? 0,
+            'memory_mb' => $package->memory_mb ?? 0,
+            'tasks' => $package->max_processes ?? 0,
+            'io_weight' => $package->io_weight ?? 0,
         ], $account, $actor);
 
         return true;
@@ -59,14 +67,14 @@ class QuotaService
 
     /**
      * Queue the quota of an account the agent has just created. A new Linux
-     * user has no quota, so only a package that limits disk space or inodes
-     * needs one.
+     * user has no quota or resource limits, so only a package that limits
+     * something needs one.
      */
     public function applyToNewAccount(User $account, ?User $actor): void
     {
         $package = $account->package;
 
-        if ($package === null || ($package->disk_mb === null && $package->inodes === null)) {
+        if ($package === null || collect(['disk_mb', 'inodes', ...Package::RESOURCE_LIMITS])->every(fn (string $key): bool => $package->getAttribute($key) === null)) {
             return;
         }
 
@@ -75,7 +83,7 @@ class QuotaService
 
     /**
      * Queue the quota of every account on the package again, e.g. after its
-     * disk or inode limit changed.
+     * disk, inode or resource limits changed.
      *
      * @return int The number of accounts queued.
      */

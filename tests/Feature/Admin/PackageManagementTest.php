@@ -21,7 +21,7 @@ class PackageManagementTest extends TestCase
     {
         $admin = User::factory()->admin()->create();
         $pro = Package::factory()->unlimited()->withoutSsl()->create(['name' => 'Pro']);
-        $basic = Package::factory()->create(['name' => 'Basic', 'description' => 'Small sites', 'domains' => 3, 'disk_mb' => 1024, 'inodes' => 50000]);
+        $basic = Package::factory()->create(['name' => 'Basic', 'description' => 'Small sites', 'domains' => 3, 'disk_mb' => 1024, 'inodes' => 50000, 'memory_mb' => 512]);
         User::factory()->count(2)->create(['package_id' => $basic->id]);
 
         $this->actingAs($admin)
@@ -38,6 +38,7 @@ class PackageManagementTest extends TestCase
                     ->where('limits.disk_mb', 1024)
                     ->where('limits.inodes', 50000)
                     ->has('limits', 11)
+                    ->where('resources', ['cpu_percent' => null, 'memory_mb' => 512, 'max_processes' => null, 'io_weight' => null])
                     ->where('ssl', true)
                     ->where('cgi', false)
                     ->where('ssh', false)
@@ -217,8 +218,8 @@ class PackageManagementTest extends TestCase
 
         $this->assertCount(2, $tasks);
         $this->assertSame([
-            ['username' => 'budi', 'disk_mb' => 2048, 'inodes' => 0],
-            ['username' => 'sari', 'disk_mb' => 2048, 'inodes' => 0],
+            ['username' => 'budi', 'disk_mb' => 2048, 'inodes' => 0, 'cpu_percent' => 0, 'memory_mb' => 0, 'tasks' => 0, 'io_weight' => 0],
+            ['username' => 'sari', 'disk_mb' => 2048, 'inodes' => 0, 'cpu_percent' => 0, 'memory_mb' => 0, 'tasks' => 0, 'io_weight' => 0],
         ], $tasks->sortBy(fn (Task $task) => $task->payload['username'])->pluck('payload')->values()->all());
         $this->assertSame($budi->id, $tasks->firstWhere('payload.username', 'budi')->user_id);
         $this->assertSame([$admin->id], $tasks->pluck('actor_id')->unique()->values()->all());
@@ -348,6 +349,68 @@ class PackageManagementTest extends TestCase
      * @param  array<string, string>  $overrides
      * @return array<string, string>
      */
+    public function test_changing_a_resource_limit_queues_the_limits_of_the_hosting_accounts_on_the_package()
+    {
+        Queue::fake();
+
+        $package = Package::factory()->create(['name' => 'Basic', 'disk_mb' => 1024, 'inodes' => 50000]);
+        User::factory()->create(['username' => 'budi', 'package_id' => $package->id]);
+
+        $this->actingAs(User::factory()->admin()->create())
+            ->put(route('admin.packages.update', $package), $this->validPackageData([
+                'cpu_percent' => '150',
+                'memory_mb' => '512',
+                'max_processes' => '',
+                'io_weight' => '',
+            ]))
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(
+            ['cpu_percent' => 150, 'memory_mb' => 512, 'max_processes' => null, 'io_weight' => null],
+            $package->fresh()->only(Package::RESOURCE_LIMITS),
+        );
+        $this->assertSame(
+            ['username' => 'budi', 'disk_mb' => 1024, 'inodes' => 50000, 'cpu_percent' => 150, 'memory_mb' => 512, 'tasks' => 0, 'io_weight' => 0],
+            Task::query()->where('action', 'account.set_quota')->sole()->payload,
+        );
+    }
+
+    public function test_a_package_form_without_resource_limits_keeps_them()
+    {
+        Queue::fake();
+
+        $package = Package::factory()->create(['name' => 'Basic', 'disk_mb' => 1024, 'inodes' => 50000, 'max_processes' => 100, 'io_weight' => 50]);
+        User::factory()->create(['package_id' => $package->id]);
+
+        $this->actingAs(User::factory()->admin()->create())
+            ->put(route('admin.packages.update', $package), $this->validPackageData(['domains' => '7']))
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(100, $package->fresh()->max_processes);
+        $this->assertSame(50, $package->fresh()->io_weight);
+        $this->assertDatabaseCount('tasks', 0);
+    }
+
+    public function test_resource_limits_must_leave_enough_for_php_to_run()
+    {
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($admin)
+            ->post(route('admin.packages.store'), $this->validPackageData([
+                'cpu_percent' => '5',
+                'memory_mb' => '32',
+                'max_processes' => '10',
+                'io_weight' => '10001',
+            ]))
+            ->assertSessionHasErrors(['cpu_percent', 'memory_mb', 'max_processes', 'io_weight']);
+
+        $this->actingAs($admin)
+            ->post(route('admin.packages.store'), $this->validPackageData(['cpu_percent' => 'many']))
+            ->assertSessionHasErrors('cpu_percent');
+
+        $this->assertDatabaseCount('packages', 0);
+    }
+
     private function validPackageData(array $overrides = []): array
     {
         return [

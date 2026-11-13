@@ -15,12 +15,23 @@ export type QuotaKey =
 /** A package's quantity limits; null means unlimited. */
 export type PackageLimits = Record<QuotaKey, number | null>;
 
+/** What each account on a hosting package may use of the server at once. */
+export type ResourceKey =
+    | 'cpu_percent'
+    | 'memory_mb'
+    | 'max_processes'
+    | 'io_weight';
+
+/** A package's resource limits; null means unlimited (or for io_weight the server's default). */
+export type ResourceLimits = Record<ResourceKey, number | null>;
+
 /** A hosting package as the admin pages show it. */
 export type HostingPackage = {
     id: number;
     name: string;
     description: string | null;
     limits: PackageLimits;
+    resources: ResourceLimits;
     ssl: boolean;
     cgi: boolean;
     ssh: boolean;

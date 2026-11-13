@@ -272,7 +272,7 @@ func TestDeleteClearsTheQuotaOnlyWhenQuotasAreOn(t *testing.T) {
 			t.Fatalf("%s: delete failed: %v", state, err)
 		}
 
-		assertCalls(t, system, "lookup budi", "web remove budi", "db remove budi", "kill 1001", "quotaon -p -u /", "crontab remove budi", "userdel budi")
+		assertCalls(t, system, "lookup budi", "web remove budi", "db remove budi", "unlimit budi 1001", "kill 1001", "quotaon -p -u /", "crontab remove budi", "userdel budi")
 	}
 }
 
@@ -304,4 +304,53 @@ type rawParams string
 
 func (r rawParams) MarshalJSON() ([]byte, error) {
 	return []byte(r), nil
+}
+
+func TestSetQuotaAppliesTheResourceLimitsAfterTheDiskLimits(t *testing.T) {
+	system := newFakeSystem()
+	system.addAccount("budi", 1001)
+
+	_, err := callAccount(t, system, "account.set_quota", map[string]any{
+		"username": "budi", "disk_mb": 1024, "inodes": 0,
+		"cpu_percent": 150, "memory_mb": 512, "tasks": 100, "io_weight": 0,
+	})
+	if err != nil {
+		t.Fatalf("set_quota failed: %v", err)
+	}
+
+	assertCalls(t, system, "lookup budi", "quotaon -p -u /", "setquota -u -- budi 1048576 1048576 0 0 /",
+		"limits budi 1001 cpu=150 mem=512 tasks=100 io=0")
+}
+
+func TestSetQuotaWithoutResourceLimitsLeavesThem(t *testing.T) {
+	system := newFakeSystem()
+	system.addAccount("budi", 1001)
+
+	if _, err := callAccount(t, system, "account.set_quota", map[string]any{"username": "budi", "disk_mb": 1024, "inodes": 0}); err != nil {
+		t.Fatalf("set_quota failed: %v", err)
+	}
+
+	assertCalls(t, system, "lookup budi", "quotaon -p -u /", "setquota -u -- budi 1048576 1048576 0 0 /")
+}
+
+func TestSetQuotaRejectsInvalidResourceLimits(t *testing.T) {
+	invalid := []string{
+		`{"username":"budi","disk_mb":0,"inodes":0,"cpu_percent":100}`,
+		`{"username":"budi","disk_mb":0,"inodes":0,"cpu_percent":100,"memory_mb":512,"tasks":100}`,
+		`{"username":"budi","disk_mb":0,"inodes":0,"cpu_percent":-1,"memory_mb":0,"tasks":0,"io_weight":0}`,
+		`{"username":"budi","disk_mb":0,"inodes":0,"cpu_percent":0,"memory_mb":8,"tasks":0,"io_weight":0}`,
+		`{"username":"budi","disk_mb":0,"inodes":0,"cpu_percent":0,"memory_mb":0,"tasks":1,"io_weight":0}`,
+		`{"username":"budi","disk_mb":0,"inodes":0,"cpu_percent":0,"memory_mb":0,"tasks":0,"io_weight":10001}`,
+		`{"username":"budi","disk_mb":0,"inodes":0,"cpu_percent":"100","memory_mb":0,"tasks":0,"io_weight":0}`,
+	}
+
+	for _, params := range invalid {
+		system := newFakeSystem()
+		system.addAccount("budi", 1001)
+
+		_, err := callAccount(t, system, "account.set_quota", rawParams(params))
+
+		assertCode(t, err, rpc.CodeInvalidParams)
+		assertCalls(t, system)
+	}
 }

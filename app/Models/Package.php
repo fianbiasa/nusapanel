@@ -20,7 +20,8 @@ use InvalidArgumentException;
  * A hosting package: what the hosting accounts on it may use. Every
  * quantity limit is null when the package does not limit it.
  * {@see AccountLimits} reads the limits of an account; the server enforces
- * `disk_mb` and `inodes` as the account's disk quota ({@see QuotaService}).
+ * `disk_mb` and `inodes` as the account's disk quota, and the
+ * {@see self::RESOURCE_LIMITS} with cgroups ({@see QuotaService}).
  *
  * A package belongs to the administrators (its owner is an admin, or was
  * one) or to one reseller, whose accounts are the only ones put on it.
@@ -45,10 +46,14 @@ use InvalidArgumentException;
  * @property bool $ssl
  * @property bool $cgi Whether the accounts may run CGI scripts, which can start any program as the account.
  * @property bool $ssh Whether the accounts may turn on SSH: a shell, in a jail of their own.
+ * @property int|null $cpu_percent CPU time in percent of one CPU: 200 is two CPUs.
+ * @property int|null $memory_mb
+ * @property int|null $max_processes Processes and threads at once.
+ * @property int|null $io_weight Share of disk IO, 1 to 10000; null is the server's default of 100.
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['name', 'description', 'disk_mb', 'inodes', 'bandwidth_mb', 'domains', 'subdomains', 'pointers', 'email_accounts', 'email_forwarders', 'databases', 'ftp_accounts', 'cron_jobs', 'ssl', 'cgi', 'ssh'])]
+#[Fillable(['name', 'description', 'disk_mb', 'inodes', 'bandwidth_mb', 'domains', 'subdomains', 'pointers', 'email_accounts', 'email_forwarders', 'databases', 'ftp_accounts', 'cron_jobs', 'ssl', 'cgi', 'ssh', 'cpu_percent', 'memory_mb', 'max_processes', 'io_weight'])]
 class Package extends Model
 {
     /** @use HasFactory<PackageFactory> */
@@ -74,6 +79,20 @@ class Package extends Model
     ];
 
     /**
+     * What each account may use of the server at once, in the order the
+     * panel shows them. Unlike {@see self::LIMITS} they are not shared out
+     * by a reseller package: they only hold back the account itself.
+     *
+     * @var list<string>
+     */
+    public const RESOURCE_LIMITS = [
+        'cpu_percent',
+        'memory_mb',
+        'max_processes',
+        'io_weight',
+    ];
+
+    /**
      * @var array<string, mixed>
      */
     protected $attributes = [
@@ -91,6 +110,7 @@ class Package extends Model
     {
         return [
             ...array_fill_keys(self::LIMITS, 'integer'),
+            ...array_fill_keys(self::RESOURCE_LIMITS, 'integer'),
             'ssl' => 'boolean',
             'cgi' => 'boolean',
             'ssh' => 'boolean',

@@ -134,11 +134,31 @@ class ApplyAccountTaskResultTest extends TestCase
 
         $task = Task::query()->where('action', 'account.set_quota')->sole();
 
-        $this->assertSame(['username' => 'budi', 'disk_mb' => 2048, 'inodes' => 0], $task->payload);
+        $this->assertSame(['username' => 'budi', 'disk_mb' => 2048, 'inodes' => 0, 'cpu_percent' => 0, 'memory_mb' => 0, 'tasks' => 0, 'io_weight' => 0], $task->payload);
         $this->assertSame($account->id, $task->user_id);
         $this->assertSame($admin->id, $task->actor_id);
 
         Queue::assertPushed(RunAgentTask::class, fn (RunAgentTask $job) => $job->task->is($task));
+    }
+
+    public function test_a_new_account_whose_package_limits_only_resources_gets_them()
+    {
+        Queue::fake();
+
+        $this->app->make(AccountService::class)->create([
+            'username' => 'budi',
+            'name' => 'Budi Santoso',
+            'email' => 'budi@example.com',
+            'password' => 'correct-horse-battery',
+            'package_id' => Package::factory()->create(['disk_mb' => null, 'inodes' => null, 'max_processes' => 100])->id,
+        ], User::factory()->admin()->create());
+
+        $this->runQueuedTask('account.create', ['username' => 'budi', 'uid' => 1001]);
+
+        $this->assertSame(
+            ['username' => 'budi', 'disk_mb' => 0, 'inodes' => 0, 'cpu_percent' => 0, 'memory_mb' => 0, 'tasks' => 100, 'io_weight' => 0],
+            Task::query()->where('action', 'account.set_quota')->sole()->payload,
+        );
     }
 
     public function test_a_new_account_whose_package_limits_no_disk_space_gets_no_quota()

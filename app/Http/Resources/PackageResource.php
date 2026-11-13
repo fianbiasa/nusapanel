@@ -23,6 +23,7 @@ class PackageResource extends JsonResource
             'name' => $this->name,
             'description' => $this->description,
             'limits' => collect(Package::LIMITS)->mapWithKeys(fn (string $key): array => [$key => $this->limit($key)])->all(),
+            'resources' => $this->resource->only(Package::RESOURCE_LIMITS),
             'ssl' => $this->ssl,
             'cgi' => $this->cgi,
             'ssh' => $this->ssh,

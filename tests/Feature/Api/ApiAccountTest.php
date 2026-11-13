@@ -127,6 +127,7 @@ class ApiAccountTest extends TestCase
         $this->withToken(self::RESELLER_KEY)->getJson('/api/v1/packages')
             ->assertOk()
             ->assertJsonPath('data.*.name', ['Starter'])
-            ->assertJsonPath('data.0.ssl', true);
+            ->assertJsonPath('data.0.ssl', true)
+            ->assertJsonPath('data.0.resources', ['cpu_percent' => null, 'memory_mb' => null, 'max_processes' => null, 'io_weight' => null]);
     }
 }

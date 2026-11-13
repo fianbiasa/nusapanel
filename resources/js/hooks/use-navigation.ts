@@ -9,6 +9,7 @@ import {
     FolderOpen,
     FolderUp,
     Globe,
+    History,
     House,
     LifeBuoy,
     Megaphone,
@@ -30,6 +31,7 @@ import { index as databasesIndex } from '@/routes/databases';
 import { index as dnsIndex } from '@/routes/dns';
 import { index as accountsIndex } from '@/routes/admin/accounts';
 import { index as auditLogsIndex } from '@/routes/admin/audit-logs';
+import { index as loginHistoryIndex } from '@/routes/admin/login-history';
 import { index as adminDnsIndex } from '@/routes/admin/dns';
 import { index as mailQueueIndex } from '@/routes/admin/mail-queue';
 import { index as packagesIndex } from '@/routes/admin/packages';
@@ -40,6 +42,7 @@ import { index as servicesIndex } from '@/routes/admin/services';
 import { index as statisticsIndex } from '@/routes/admin/statistics';
 import { index as tasksIndex } from '@/routes/admin/tasks';
 import { index as resellerAccountsIndex } from '@/routes/reseller/accounts';
+import { index as resellerLoginHistoryIndex } from '@/routes/reseller/login-history';
 import { index as resellerOwnPackagesIndex } from '@/routes/reseller/packages';
 import { index as resellerStatisticsIndex } from '@/routes/reseller/statistics';
 import { index as domainsIndex } from '@/routes/domains';
@@ -133,6 +136,11 @@ export function useNavigation(): {
             href: auditLogsIndex(),
             icon: ScrollText,
         };
+        const loginHistory: NavItem = {
+            title: 'Riwayat Login',
+            href: loginHistoryIndex(),
+            icon: History,
+        };
         const services: NavItem = {
             title: 'Services',
             href: servicesIndex(),
@@ -177,6 +185,7 @@ export function useNavigation(): {
                     serverSettings,
                     tasks,
                     auditLog,
+                    loginHistory,
                 ],
             },
         );
@@ -263,6 +272,11 @@ export function useNavigation(): {
                     title: 'Statistik',
                     href: resellerStatisticsIndex(),
                     icon: ChartColumn,
+                },
+                {
+                    title: 'Riwayat Login',
+                    href: resellerLoginHistoryIndex(),
+                    icon: History,
                 },
                 ticketsItem,
                 announcementsItem,

@@ -13,6 +13,7 @@ import type {
     QuotaKey,
     ResellerPackageLimits,
     ResellerQuotaKey,
+    ResourceKey,
 } from '@/types';
 import type { RouteDefinition, RouteFormDefinition } from '@/wayfinder';
 
@@ -50,11 +51,50 @@ const quotaFields: Record<
     cron_jobs: { label: 'Cron job' },
 };
 
+/** How each resource limit of a hosting package is asked for in the form. */
+const resourceFields: Record<
+    ResourceKey,
+    {
+        label: string;
+        unit?: string;
+        min: number;
+        hint: string;
+        unlimitedLabel?: string;
+    }
+> = {
+    cpu_percent: {
+        label: 'CPU',
+        unit: '%',
+        min: 10,
+        hint: '100% = 1 core CPU penuh, 200% = 2 core.',
+    },
+    memory_mb: {
+        label: 'Memori (RAM)',
+        unit: 'MB',
+        min: 64,
+        hint: 'RAM semua proses akun dijumlah. Proses yang melewatinya dihentikan; PHP-FPM menyala lagi sendiri.',
+    },
+    max_processes: {
+        label: 'Jumlah proses',
+        min: 20,
+        hint: 'Proses dan thread yang berjalan bersamaan.',
+    },
+    io_weight: {
+        label: 'Prioritas disk (IO)',
+        min: 1,
+        hint: '1 sampai 10.000; bawaan server 100. Saat disk sibuk, akun dengan angka lebih besar didahulukan.',
+        unlimitedLabel: 'Bawaan',
+    },
+};
+
+const resourceKeys = Object.keys(resourceFields) as ResourceKey[];
+
 /** What the form starts from when it changes a package. */
 export type PackageFormValues = {
     name: string;
     description: string | null;
     limits: Partial<Record<ResellerQuotaKey, number | null>>;
+    resources?: Partial<Record<ResourceKey, number | null>>;
     ssl: boolean;
     cgi?: boolean;
     ssh?: boolean;
@@ -66,7 +106,9 @@ export type PackageFormValues = {
  * `kind` "reseller" a reseller package, which also limits the number of
  * accounts and may oversell. Every limit is always sent; an empty limit
  * means unlimited. A reseller's own packages may not go over its reseller
- * package (`resellerLimits`): those limits cannot be left unlimited.
+ * package (`resellerLimits`): those limits cannot be left unlimited. A
+ * hosting package also limits what each account may use of the server at
+ * once (CPU, memory, processes, disk IO).
  */
 export function PackageForm({
     pkg = null,
@@ -187,6 +229,33 @@ export function PackageForm({
                             })}
                         </div>
                     </Panel>
+
+                    {kind === 'hosting' && (
+                        <Panel
+                            title="Batas resource"
+                            description="Yang boleh dipakai setiap akun sekaligus. Server menerapkannya ke PHP dan sesi SSH akun; cron job tidak ikut dibatasi. Perubahan menyalakan ulang PHP akun yang belum dibatasi."
+                        >
+                            <div className="grid gap-5 md:grid-cols-2">
+                                {resourceKeys.map((key) => (
+                                    <QuotaField
+                                        key={key}
+                                        name={key}
+                                        label={resourceFields[key].label}
+                                        unit={resourceFields[key].unit}
+                                        min={resourceFields[key].min}
+                                        hint={resourceFields[key].hint}
+                                        unlimitedLabel={
+                                            resourceFields[key].unlimitedLabel
+                                        }
+                                        defaultValue={
+                                            pkg?.resources?.[key] ?? null
+                                        }
+                                        error={errors[key]}
+                                    />
+                                ))}
+                            </div>
+                        </Panel>
+                    )}
 
                     <Panel title="Fitur">
                         <div className="grid gap-5">
@@ -343,9 +412,9 @@ export function PackageForm({
 }
 
 /**
- * A number input for one limit with a "Tanpa batas" checkbox. While
- * unlimited, an empty value is sent in its place. A limit with a `max`
- * cannot be unlimited.
+ * A number input for one limit with a "Tanpa batas" checkbox (or
+ * `unlimitedLabel`). While unlimited, an empty value is sent in its place.
+ * A limit with a `max` cannot be unlimited.
  */
 function QuotaField({
     name,
@@ -354,15 +423,17 @@ function QuotaField({
     min = 0,
     max = null,
     hint,
+    unlimitedLabel = 'Tanpa batas',
     defaultValue,
     error,
 }: {
-    name: ResellerQuotaKey;
+    name: ResellerQuotaKey | ResourceKey;
     label: string;
     unit?: string;
     min?: number;
     max?: number | null;
     hint?: string;
+    unlimitedLabel?: string;
     defaultValue: number | null;
     error?: string;
 }) {
@@ -393,7 +464,7 @@ function QuotaField({
                         disabled={unlimited}
                         value={unlimited ? '' : value}
                         onChange={(event) => setValue(event.target.value)}
-                        placeholder={unlimited ? 'Tanpa batas' : String(min)}
+                        placeholder={unlimited ? unlimitedLabel : String(min)}
                         aria-invalid={error ? true : undefined}
                         className={unit ? 'pr-12' : undefined}
                     />
@@ -417,7 +488,7 @@ function QuotaField({
                         htmlFor={`${name}_unlimited`}
                         className="font-normal"
                     >
-                        Tanpa batas
+                        {unlimitedLabel}
                     </Label>
                 </div>
             </div>

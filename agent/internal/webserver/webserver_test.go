@@ -535,6 +535,7 @@ func TestRenderedPoolAndUnit(t *testing.T) {
 		"ConditionPathExists="+poolDir+"/%i.conf\n",
 		"ConditionPathExists=!"+env.cfg.NginxDir+"/%i/suspended.inc\n",
 		"Type=notify\n",
+		"Slice=rayxo-%i.slice\n",
 		"ExecStart="+env.cfg.PHPFPMDir+"/php-fpm8.4 --nodaemonize --fpm-config "+poolDir+"/%i.conf\n",
 		"ExecReload=/bin/kill -USR2 $MAINPID\n",
 		"RuntimeDirectory=rayxo-php\n",

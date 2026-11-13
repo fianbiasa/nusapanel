@@ -148,7 +148,7 @@ class PackageController extends Controller
     }
 
     /**
-     * @return array{id: int, name: string, description: string|null, limits: array<string, int|null>, ssl: bool, cgi: bool, ssh: bool, accounts_count: int}
+     * @return array{id: int, name: string, description: string|null, limits: array<string, int|null>, resources: array<string, int|null>, ssl: bool, cgi: bool, ssh: bool, accounts_count: int}
      */
     private function packageData(Package $package): array
     {
@@ -163,6 +163,7 @@ class PackageController extends Controller
             'name' => $package->name,
             'description' => $package->description,
             'limits' => $limits,
+            'resources' => $package->only(Package::RESOURCE_LIMITS),
             'ssl' => $package->ssl,
             'cgi' => $package->cgi,
             'ssh' => $package->ssh,

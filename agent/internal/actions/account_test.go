@@ -17,6 +17,7 @@ import (
 	"strings"
 	"testing"
 
+	"rayxo/agent/internal/cgroup"
 	"rayxo/agent/internal/database"
 	"rayxo/agent/internal/jail"
 	"rayxo/agent/internal/quota"
@@ -75,7 +76,7 @@ func TestAccountMethodsLockTheAccount(t *testing.T) {
 	params := map[string]string{"account.set_quota": `{"username":"budi","disk_mb":1024,"inodes":0}`}
 
 	system := newFakeSystem()
-	for name, method := range accountMethods(system, system, system.quotaManager(), system.databases(), system) {
+	for name, method := range accountMethods(system, system, system.quotaManager(), system.databases(), system, system.limits()) {
 		if name == "quota.report" {
 			if method.LockKey != nil {
 				t.Fatal("quota.report only reads, but locks")
@@ -263,7 +264,7 @@ func TestDeleteRemovesWebsitesKillsProcessesThenRemovesTheAccount(t *testing.T) 
 		t.Fatalf("unexpected result %s", result)
 	}
 
-	assertCalls(t, system, "lookup budi", "web remove budi", "db remove budi", "kill 1001",
+	assertCalls(t, system, "lookup budi", "web remove budi", "db remove budi", "unlimit budi 1001", "kill 1001",
 		"quotaon -p -u /", "setquota -u -- budi 0 0 0 0 /", "crontab remove budi", "userdel budi")
 
 	if _, exists := system.users["budi"]; exists {
@@ -285,7 +286,7 @@ func TestDeleteOfAMissingAccountSucceeds(t *testing.T) {
 
 	// Web configuration and databases left behind by the account are still
 	// removed.
-	assertCalls(t, system, "lookup budi", "web remove budi", "db remove budi")
+	assertCalls(t, system, "lookup budi", "web remove budi", "db remove budi", "unlimit budi 0")
 }
 
 func TestWebFailuresOfAccountMethodsAreReadable(t *testing.T) {
@@ -387,13 +388,16 @@ func callAccount(t *testing.T, system accountSystem, method string, params any) 
 
 	var jails accountJails = jail.New(jail.Config{Root: t.TempDir()})
 
+	var limits accountLimits = unreachableLimits{t}
+
 	if fake, ok := system.(*fakeSystem); ok {
 		quotas = fake.quotaManager()
 		databases = fake.databases()
 		jails = fake
+		limits = fake.limits()
 	}
 
-	registered, ok := accountMethods(system, web, quotas, databases, jails)[method]
+	registered, ok := accountMethods(system, web, quotas, databases, jails, limits)[method]
 	if !ok {
 		t.Fatalf("unknown method %s", method)
 	}
@@ -722,6 +726,41 @@ func (f *fakeSystem) RemoveAccount(_ context.Context, user string) error {
 
 // fakeDatabases records the account methods' calls to MariaDB with the
 // other calls of its system.
+// fakeLimits records the resource limits of accounts as calls.
+type fakeLimits struct {
+	f *fakeSystem
+}
+
+func (f *fakeSystem) limits() fakeLimits {
+	return fakeLimits{f: f}
+}
+
+func (l fakeLimits) Apply(_ context.Context, user string, uid int, limits cgroup.Limits) error {
+	return l.f.record("limits %s %d cpu=%d mem=%d tasks=%d io=%d", user, uid, limits.CPUPercent, limits.MemoryMB, limits.Tasks, limits.IOWeight)
+}
+
+func (l fakeLimits) Remove(_ context.Context, user string, uid int) error {
+	return l.f.record("unlimit %s %d", user, uid)
+}
+
+// unreachableLimits fails the test when an account method gets as far as
+// the resource limits, for systems that must fail before that.
+type unreachableLimits struct {
+	t *testing.T
+}
+
+func (u unreachableLimits) Apply(_ context.Context, user string, _ int, _ cgroup.Limits) error {
+	u.t.Errorf("the resource limits were reached for %s", user)
+
+	return errors.New("unreachable")
+}
+
+func (u unreachableLimits) Remove(_ context.Context, user string, _ int) error {
+	u.t.Errorf("the resource limits were reached for %s", user)
+
+	return errors.New("unreachable")
+}
+
 type fakeDatabases struct {
 	f *fakeSystem
 }

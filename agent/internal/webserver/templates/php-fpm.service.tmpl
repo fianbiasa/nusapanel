@@ -9,6 +9,9 @@ ConditionPathExists=!{{.NginxDir}}/%i/suspended.inc
 
 [Service]
 Type=notify
+# The account's CPU, memory, process and IO limits, when its package has
+# any, are set on this slice.
+Slice=rayxo-%i.slice
 ExecStart={{.Binary}} --nodaemonize --fpm-config {{.PoolDir}}/%i.conf
 ExecReload=/bin/kill -USR2 $MAINPID
 RuntimeDirectory={{.RuntimeDirectory}}

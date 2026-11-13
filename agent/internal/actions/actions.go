@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 
 	"rayxo/agent/internal/bandwidth"
+	"rayxo/agent/internal/cgroup"
 	"rayxo/agent/internal/clock"
 	"rayxo/agent/internal/database"
 	"rayxo/agent/internal/dns"
@@ -19,6 +20,7 @@ import (
 	"rayxo/agent/internal/quota"
 	"rayxo/agent/internal/reconfigure"
 	"rayxo/agent/internal/rpc"
+	"rayxo/agent/internal/runner"
 	"rayxo/agent/internal/services"
 	"rayxo/agent/internal/sitelogs"
 	"rayxo/agent/internal/sysinfo"
@@ -47,8 +49,9 @@ func Register(registry *rpc.Registry, config Config) {
 	quotas := quota.New(quota.DefaultConfig())
 	databases := database.New(database.DefaultConfig())
 	jails := jail.New(jail.DefaultConfig())
+	limits := cgroup.New(cgroup.Config{UnitDir: "/etc/systemd/system", Run: runner.Run})
 
-	for name, method := range accountMethods(sysuser.System{}, web, quotas, databases, jails) {
+	for name, method := range accountMethods(sysuser.System{}, web, quotas, databases, jails, limits) {
 		registry.Register(name, method)
 	}
 

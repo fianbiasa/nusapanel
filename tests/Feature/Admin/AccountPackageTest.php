@@ -138,7 +138,7 @@ class AccountPackageTest extends TestCase
         $task = Task::query()->sole();
 
         $this->assertSame('account.set_quota', $task->action);
-        $this->assertSame(['username' => 'budi', 'disk_mb' => 5120, 'inodes' => 200000], $task->payload);
+        $this->assertSame(['username' => 'budi', 'disk_mb' => 5120, 'inodes' => 200000, 'cpu_percent' => 0, 'memory_mb' => 0, 'tasks' => 0, 'io_weight' => 0], $task->payload);
         $this->assertSame($account->id, $task->user_id);
         $this->assertSame($admin->id, $task->actor_id);
     }
@@ -158,7 +158,7 @@ class AccountPackageTest extends TestCase
             ['from' => true, 'to' => true],
         ));
         $this->assertSame(
-            ['username' => 'budi', 'disk_mb' => 0, 'inodes' => 0],
+            ['username' => 'budi', 'disk_mb' => 0, 'inodes' => 0, 'cpu_percent' => 0, 'memory_mb' => 0, 'tasks' => 0, 'io_weight' => 0],
             Task::query()->where('action', 'account.set_quota')->sole()->payload,
         );
     }

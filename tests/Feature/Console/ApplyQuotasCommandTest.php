@@ -39,9 +39,9 @@ class ApplyQuotasCommandTest extends TestCase
             ->mapWithKeys(fn (Task $task): array => [$task->payload['username'] => $task->payload]);
 
         $this->assertSame([
-            'budi' => ['username' => 'budi', 'disk_mb' => 1024, 'inodes' => 50000],
-            'free' => ['username' => 'free', 'disk_mb' => 0, 'inodes' => 0],
-            'sari' => ['username' => 'sari', 'disk_mb' => 512, 'inodes' => 0],
+            'budi' => ['username' => 'budi', 'disk_mb' => 1024, 'inodes' => 50000, 'cpu_percent' => 0, 'memory_mb' => 0, 'tasks' => 0, 'io_weight' => 0],
+            'free' => ['username' => 'free', 'disk_mb' => 0, 'inodes' => 0, 'cpu_percent' => 0, 'memory_mb' => 0, 'tasks' => 0, 'io_weight' => 0],
+            'sari' => ['username' => 'sari', 'disk_mb' => 512, 'inodes' => 0, 'cpu_percent' => 0, 'memory_mb' => 0, 'tasks' => 0, 'io_weight' => 0],
         ], $payloads->sortKeys()->all());
         $this->assertDatabaseCount('tasks', 3);
     }

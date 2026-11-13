@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 
+	"rayxo/agent/internal/cgroup"
 	"rayxo/agent/internal/quota"
 	"rayxo/agent/internal/rpc"
 	"rayxo/agent/internal/sysuser"
@@ -101,6 +102,18 @@ type accountQuota interface {
 	Report(ctx context.Context) (quota.Report, error)
 }
 
+// accountLimits is what the account actions need from cgroups: the CPU,
+// memory, process and disk IO limits of an account. *cgroup.Manager
+// implements it.
+type accountLimits interface {
+	// Apply sets the limits of the account, or removes them when there are
+	// none.
+	Apply(ctx context.Context, user string, uid int, limits cgroup.Limits) error
+	// Remove deletes the limits of an account about to be deleted; a uid of
+	// 0 is an account whose user is already gone.
+	Remove(ctx context.Context, user string, uid int) error
+}
+
 // accountParams are the params of every account.* method.
 type accountParams struct {
 	Username string `json:"username"`
@@ -122,13 +135,14 @@ type accountActions struct {
 	quotas    accountQuota
 	databases accountDatabases
 	jails     accountJails
+	limits    accountLimits
 }
 
 // accountMethods returns the account.* and quota.* methods by name. Calls
 // for the same username run one at a time; quota.report only reads and
 // locks nothing.
-func accountMethods(system accountSystem, web accountWeb, quotas accountQuota, databases accountDatabases, jails accountJails) map[string]rpc.Method {
-	accounts := accountActions{system: system, web: web, quotas: quotas, databases: databases, jails: jails}
+func accountMethods(system accountSystem, web accountWeb, quotas accountQuota, databases accountDatabases, jails accountJails, limits accountLimits) map[string]rpc.Method {
+	accounts := accountActions{system: system, web: web, quotas: quotas, databases: databases, jails: jails, limits: limits}
 
 	return map[string]rpc.Method{
 		"account.create":       {Handler: accounts.create, LockKey: accountLockKey},
@@ -291,8 +305,8 @@ func (a accountActions) unsuspend(ctx context.Context, raw json.RawMessage) (any
 }
 
 // remove implements account.delete: it removes the account's websites and
-// PHP pools, kills its processes, clears its disk quota (when quotas are
-// on), then removes the user and its home. Deleting an account that no
+// PHP pools and its resource limits, kills its processes, clears its disk
+// quota (when quotas are on), then removes the user and its home. Deleting an account that no
 // longer exists succeeds, after removing any web configuration it left
 // behind.
 func (a accountActions) remove(ctx context.Context, raw json.RawMessage) (any, error) {
@@ -322,6 +336,12 @@ func (a accountActions) remove(ctx context.Context, raw json.RawMessage) (any, e
 	// The SSH jail goes before the user: removing it ends the account's
 	// sessions and unmounts its home from the jail.
 	if err := a.disableJail(params.Username); err != nil {
+		return nil, err
+	}
+
+	// Session limits belong to the UID: without this, the next account
+	// that gets the UID would inherit them.
+	if err := a.limits.Remove(ctx, params.Username, user.UID); err != nil {
 		return nil, err
 	}
 

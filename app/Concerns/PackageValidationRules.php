@@ -17,7 +17,9 @@ trait PackageValidationRules
      * limit must be sent; an empty limit means unlimited. The disk quota
      * limits start at 1, because the server reads a quota of 0 as
      * unlimited. A name is unique among the owner's packages: a reseller's
-     * own, or all the administrators' packages.
+     * own, or all the administrators' packages. The resource limits may be
+     * left out, keeping what the package has; their least values still let
+     * PHP run.
      *
      * @return array<string, array<int, Unique|ValidationRule|array<mixed>|string>>
      */
@@ -46,6 +48,10 @@ trait PackageValidationRules
             'ssl' => ['required', 'boolean'],
             'cgi' => ['sometimes', 'boolean'],
             'ssh' => ['sometimes', 'boolean'],
+            'cpu_percent' => ['sometimes', 'nullable', 'integer', 'min:10', 'max:100000'],
+            'memory_mb' => ['sometimes', 'nullable', 'integer', 'min:64', 'max:1048576'],
+            'max_processes' => ['sometimes', 'nullable', 'integer', 'min:20', 'max:100000'],
+            'io_weight' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:10000'],
         ];
     }
 }
