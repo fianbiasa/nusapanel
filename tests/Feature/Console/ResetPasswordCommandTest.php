@@ -48,7 +48,22 @@ class ResetPasswordCommandTest extends TestCase
         // with nothing added (the console components add a full stop).
         $printed = $this->lineAfter('New password (shown only once):', Artisan::output());
         $this->assertNotSame($oldHash, $user->fresh()->password);
+        $this->assertMatchesRegularExpression('/^[A-Za-z0-9]{12}$/', $printed);
         $this->assertTrue(Hash::check($printed, $user->fresh()->password));
+    }
+
+    public function test_a_generated_password_is_accepted_where_chosen_ones_need_symbols()
+    {
+        $user = User::factory()->admin()->create(['username' => 'admin']);
+        $this->app['env'] = 'production';
+
+        $this->artisan('rayxo:reset-password', ['username' => 'admin', '--password' => 'NoSymbols12345'])
+            ->expectsOutputToContain('symbol')
+            ->assertFailed();
+
+        $this->assertFalse(Hash::check('NoSymbols12345', $user->fresh()->password));
+        $this->assertSame(0, Artisan::call('rayxo:reset-password', ['username' => 'admin']));
+        $this->assertTrue(Hash::check($this->lineAfter('New password (shown only once):', Artisan::output()), $user->fresh()->password));
     }
 
     private function lineAfter(string $label, string $output): string

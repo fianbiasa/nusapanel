@@ -4,11 +4,12 @@ namespace App\Console\Commands;
 
 use App\Models\User;
 use App\Services\AuditLogger;
+use App\Support\GeneratedPassword;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
+use Symfony\Component\Console\Output\OutputInterface;
 
 class ResetPasswordCommand extends Command
 {
@@ -17,7 +18,7 @@ class ResetPasswordCommand extends Command
      */
     protected $signature = 'rayxo:reset-password
         {username : Account whose password to reset}
-        {--password= : New password; a strong one is generated when omitted}';
+        {--password= : New password; one is generated when omitted}';
 
     /**
      * @var string
@@ -35,10 +36,12 @@ class ResetPasswordCommand extends Command
         }
 
         $generated = $this->option('password') === null;
-        $password = $generated ? Str::password(24) : (string) $this->option('password');
+        $password = $generated ? GeneratedPassword::make() : (string) $this->option('password');
 
+        // A generated password has no symbols, which the policy asks of
+        // passwords people choose; it is random instead.
         $validator = Validator::make(['password' => $password], [
-            'password' => ['required', 'string', Password::default()],
+            'password' => ['required', 'string', ...($generated ? [] : [Password::default()])],
         ]);
 
         if ($validator->fails()) {
@@ -64,9 +67,10 @@ class ResetPasswordCommand extends Command
         if ($generated) {
             // The password gets a line of its own, exactly as it is: a console
             // component adds a full stop to a message that does not end in one,
-            // and after a password that full stop looks like part of it.
+            // and after a password that full stop looks like part of it. Raw,
+            // so the console never reads "<" or "\" in it as formatting.
             $this->components->warn('New password (shown only once):');
-            $this->line($password);
+            $this->output->writeln($password, OutputInterface::OUTPUT_RAW);
         }
 
         return self::SUCCESS;

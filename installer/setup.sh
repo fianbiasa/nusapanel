@@ -312,20 +312,6 @@ follow_env_value() {
     fi
 }
 
-# A random password with upper case, lower case, a digit and a symbol, as
-# required by the panel's production password rules.
-generate_password() {
-    local password upper='[A-Z]' lower='[a-z]' digit='[0-9]' symbol='[#%]'
-
-    while true; do
-        password="$(openssl rand -base64 18 | tr '+/' '#%')"
-        if [[ "$password" =~ $upper && "$password" =~ $lower && "$password" =~ $digit && "$password" =~ $symbol ]]; then
-            printf '%s' "$password"
-            return
-        fi
-    done
-}
-
 # Copy a config template, filling in {{NAME}} placeholders.
 render() {
     sed \
@@ -1555,25 +1541,22 @@ create_admin() {
     fi
 
     step "Membuat admin pertama"
-    admin_password="$(generate_password)"
 
-    # The password travels in the environment, never on a command line where
-    # other processes could see it.
+    # The panel generates the password (12 letters and digits, no symbols)
+    # and prints it alone on the first non-empty line after the label; it
+    # never appears on a command line or in the environment.
     local output
     output="$(
-        export RAYXO_ADMIN_PASSWORD="$admin_password"
+        unset RAYXO_ADMIN_PASSWORD
         artisan rayxo:create-admin "$admin_user" "$admin_email" --no-ansi 2>&1
     )" || {
         printf '%s\n' "$output" >&2
         die "admin pertama gagal dibuat"
     }
 
-    # If the environment did not reach the command, it generated its own and
-    # printed it alone on the first non-empty line after the label.
-    if [[ "$output" == *"Generated password (shown only once):"* ]]; then
-        admin_password="$(printf '%s\n' "$output" |
-            awk 'found && NF {print; exit} /Generated password \(shown only once\):/ {found = 1}' | tr -d '[:space:]')"
-    fi
+    admin_password="$(printf '%s\n' "$output" |
+        awk 'found && NF {print; exit} /Generated password \(shown only once\):/ {found = 1}' | tr -d '[:space:]')"
+    [[ -n "$admin_password" ]] || die "password admin pertama tidak terbaca; buat yang baru dengan: rayxo reset-password $admin_user"
 
     touch "$CONFIG_DIR/admin-created"
     info "Admin \"$admin_user\" dibuat"

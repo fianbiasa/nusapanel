@@ -73,7 +73,24 @@ class CreateAdminCommandTest extends TestCase
 
         $admin = User::query()->where('username', 'fian')->sole();
         $this->assertSame(Role::Admin, $admin->role);
+        $this->assertMatchesRegularExpression('/^[A-Za-z0-9]{12}$/', $printed);
         $this->assertTrue(Hash::check($printed, $admin->password));
+    }
+
+    public function test_a_generated_password_is_accepted_where_chosen_ones_need_symbols()
+    {
+        $this->app['env'] = 'production';
+
+        $this->artisan('rayxo:create-admin', ['username' => 'nosym', 'email' => 'nosym@example.com', '--password' => 'NoSymbols12345'])
+            ->expectsOutputToContain('symbol')
+            ->assertFailed();
+
+        $this->artisan('rayxo:create-admin', ['username' => 'fian', 'email' => 'fian@example.com'])
+            ->expectsOutputToContain('Generated password (shown only once):')
+            ->assertSuccessful();
+
+        $this->assertDatabaseMissing('users', ['username' => 'nosym']);
+        $this->assertDatabaseHas('users', ['username' => 'fian']);
     }
 
     public function test_it_rejects_reserved_and_invalid_usernames()

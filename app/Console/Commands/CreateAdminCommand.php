@@ -7,11 +7,13 @@ use App\Enums\Role;
 use App\Models\User;
 use App\Rules\ValidUsername;
 use App\Services\AuditLogger;
+use App\Support\GeneratedPassword;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
+use Symfony\Component\Console\Output\OutputInterface;
 
 class CreateAdminCommand extends Command
 {
@@ -35,14 +37,16 @@ class CreateAdminCommand extends Command
         $email = Str::lower((string) $this->argument('email'));
         $password = $this->option('password') ?? $this->passwordFromEnvironment();
         $generated = $password === null;
-        $password = $generated ? Str::password(24) : (string) $password;
+        $password = $generated ? GeneratedPassword::make() : (string) $password;
 
         $validator = Validator::make(
             ['username' => $username, 'email' => $email, 'password' => $password],
             [
                 'username' => ['required', new ValidUsername, 'unique:users,username'],
                 'email' => ['required', 'email', 'max:255', 'unique:users,email'],
-                'password' => ['required', 'string', Password::default()],
+                // A generated password has no symbols, which the policy
+                // asks of passwords people choose; it is random instead.
+                'password' => ['required', 'string', ...($generated ? [] : [Password::default()])],
             ],
         );
 
@@ -77,9 +81,10 @@ class CreateAdminCommand extends Command
 
         if ($generated) {
             // On a line of its own, exactly as it is (see rayxo:reset-password);
-            // setup.sh reads it from the line after this one.
+            // setup.sh reads it from the line after this one. Raw, so the
+            // console never reads "<" or "\" in a password as formatting.
             $this->components->warn('Generated password (shown only once):');
-            $this->line($password);
+            $this->output->writeln($password, OutputInterface::OUTPUT_RAW);
         }
 
         return self::SUCCESS;

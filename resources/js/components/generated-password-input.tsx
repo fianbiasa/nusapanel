@@ -3,16 +3,40 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
-/** A random password of 20 letters and digits, without look-alikes. */
-export function generatePassword(): string {
-    const alphabet =
-        'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
-    const values = crypto.getRandomValues(new Uint32Array(20));
+const uppercase = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+const lowercase = 'abcdefghijkmnopqrstuvwxyz';
+const digits = '23456789';
 
-    return Array.from(
-        values,
-        (value) => alphabet[value % alphabet.length],
-    ).join('');
+/** A random index below `count`. */
+function randomIndex(count: number): number {
+    return crypto.getRandomValues(new Uint32Array(1))[0] % count;
+}
+
+/**
+ * A random password of 12 characters: upper and lower case letters with
+ * three digits, without symbols or look-alikes (0 O, 1 l I). The same rule
+ * as the passwords the server generates (App\Support\GeneratedPassword).
+ */
+export function generatePassword(): string {
+    const pick = (alphabet: string) => alphabet[randomIndex(alphabet.length)];
+    const characters = [
+        pick(uppercase),
+        pick(lowercase),
+        pick(digits),
+        pick(digits),
+        pick(digits),
+    ];
+
+    while (characters.length < 12) {
+        characters.push(pick(uppercase + lowercase));
+    }
+
+    for (let i = characters.length - 1; i > 0; i--) {
+        const j = randomIndex(i + 1);
+        [characters[i], characters[j]] = [characters[j], characters[i]];
+    }
+
+    return characters.join('');
 }
 
 /**
