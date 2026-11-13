@@ -43,6 +43,10 @@ const eventLabels: Record<string, { title: string; description: string }> = {
         description:
             'Disk atau bandwidth akun habis, atau website berhenti karena batasnya.',
     },
+    ticket: {
+        title: 'Tiket',
+        description: 'Tiket baru atau balasan untuk tiket kamu.',
+    },
     ssl_failed: {
         title: 'Masalah sertifikat SSL',
         description:

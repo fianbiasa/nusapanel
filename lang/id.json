@@ -494,5 +494,12 @@
     "The server disk is :percent% full": "Disk server terisi :percent%",
     ":used of :total GB is used on :mount. Websites, mail and databases stop working when it is full.": ":used dari :total GB terpakai di :mount. Website, email, dan database berhenti bekerja kalau disk penuh.",
     "Account :username used all of its disk space": "Akun :username sudah memakai seluruh ruang disk-nya",
-    "The account :username uses :used of its :limit MB. Uploads, new mail and database writes fail until space is freed or the package allows more.": "Akun :username memakai :used dari :limit MB. Upload, email baru, dan penulisan database gagal sampai ada ruang yang dikosongkan atau paketnya mengizinkan lebih."
+    "The account :username uses :used of its :limit MB. Uploads, new mail and database writes fail until space is freed or the package allows more.": "Akun :username memakai :used dari :limit MB. Upload, email baru, dan penulisan database gagal sampai ada ruang yang dikosongkan atau paketnya mengizinkan lebih.",
+    "Administrators answer tickets; they do not open them.": "Administrator menjawab tiket, tidak membuatnya.",
+    "New ticket from :username: :subject": "Tiket baru dari :username: :subject",
+    "Reply to ticket :subject": "Balasan untuk tiket :subject",
+    "The ticket is sent.": "Tiket terkirim.",
+    "Only administrators and resellers send messages to many accounts.": "Hanya administrator dan reseller yang bisa mengirim pesan massal.",
+    "The message is sent to :count accounts.": "Pesan dikirim ke :count akun.",
+    "Server administrator": "Administrator server"
 }

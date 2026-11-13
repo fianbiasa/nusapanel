@@ -23,6 +23,9 @@ final class NotificationEvents
     /** A certificate could not be issued, or ends within days. */
     public const SSL_FAILED = 'ssl_failed';
 
+    /** A ticket was opened or answered. */
+    public const TICKET = 'ticket';
+
     /**
      * @var array<string, list<Role>>
      */
@@ -31,6 +34,7 @@ final class NotificationEvents
         self::DISK_FULL => [Role::Admin],
         self::QUOTA_EXCEEDED => [Role::Admin, Role::Reseller, Role::User],
         self::SSL_FAILED => [Role::Admin, Role::Reseller, Role::User],
+        self::TICKET => [Role::Admin, Role::Reseller, Role::User],
     ];
 
     /**

@@ -6,10 +6,12 @@ use App\Agent\AgentClient;
 use App\Agent\AgentException;
 use App\Enums\Role;
 use App\Enums\TaskStatus;
+use App\Models\Announcement;
 use App\Models\AuditLog;
 use App\Models\Domain;
 use App\Models\Task;
 use App\Models\User;
+use App\Services\AnnouncementService;
 use App\Services\ProcessService;
 use App\Services\UsageStatisticsService;
 use App\Support\AccountLimits;
@@ -28,10 +30,23 @@ class DashboardController extends Controller
      * what they use and give out against their reseller package; hosting
      * accounts get their own domains and what their package allows.
      */
-    public function __invoke(Request $request, AgentClient $agent, UsageStatisticsService $statistics, ProcessService $processes): Response
+    public function __invoke(Request $request, AgentClient $agent, UsageStatisticsService $statistics, ProcessService $processes, AnnouncementService $announcements): Response
     {
         $user = $request->user();
         $props = [];
+
+        if (! $user->isAdmin()) {
+            $props['announcements'] = $announcements->receivedBy($user)
+                ->where('created_at', '>=', now()->subDays(30))
+                ->limit(3)
+                ->get()
+                ->map(fn (Announcement $announcement): array => [
+                    'id' => $announcement->id,
+                    'subject' => $announcement->subject,
+                    'body' => $announcement->body,
+                    'created_at' => $announcement->created_at?->toIso8601String(),
+                ]);
+        }
 
         if ($user->isAdmin()) {
             $props['stats'] = $this->serverStats();

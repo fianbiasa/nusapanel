@@ -56,7 +56,7 @@ class NotificationTest extends TestCase
             ->get(route('notifications.index'))
             ->assertInertia(fn (Assert $page) => $page
                 ->component('settings/notifications')
-                ->where('events', ['quota_exceeded', 'ssl_failed'])
+                ->where('events', ['quota_exceeded', 'ssl_failed', 'ticket'])
                 ->where('channels.email', null)
                 ->where('telegram_bot', null));
 

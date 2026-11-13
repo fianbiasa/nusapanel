@@ -91,48 +91,48 @@ Pembagian level sama seperti DirectAdmin:
 
 ### Fitur lanjutan
 
-| Fitur                       | Keterangan                                                                                                            | Fase |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------- | ---- |
-| Cron jobs                   | ✅ Preset jadwal, email hasil output                                                                                  | P1   |
-| 2FA                         | ✅ TOTP + kode cadangan                                                                                               | P1   |
-| Riwayat login               | ✅ IP, waktu, berhasil/gagal                                                                                          | P1   |
-| Tema                        | ✅ Mode terang/gelap                                                                                                  | P1   |
-| Bahasa                      | Indonesia & English, pilihan per user                                                                                 | PB   |
-| SSH access                  | ✅ Shell di jail sendiri (hanya program server & home akun), diizinkan per paket, on/off per akun                     | P3   |
-| SSH keys                    | ✅ Tambah/hapus public key, untuk SSH dan SFTP                                                                        | P3   |
-| Site statistics             | ✅ Laporan GoAccess per domain dari log 14 hari, dibuka di tab terpisah yang terisolasi dari panel                    | P3   |
-| Log viewer                  | ✅ Log akses, error Nginx, dan error PHP/Apache per domain: baris terakhir dengan saringan, unduh 14 hari             | P3   |
-| Pemakaian resource          | ✅ Disk & bandwidth (grafik 30 hari), inode (kuota); CPU & RAM saat ini ★                                             | P3   |
-| Disk usage explorer         | ✅ Folder & file terbesar, telusuri per folder                                                                        | P3   |
-| Login keys (API key)        | ✅ Izin per area (baca/tulis), batasi alamat IP, masa berlaku; key ditampilkan sekali dan hanya disimpan sebagai hash | P3   |
-| Pesan/tiket                 | Ke reseller atau admin                                                                                                | P3   |
-| Backup & restore            | Pilih item, download, restore sebagian                                                                                | P4   |
-| App installer ★             | WordPress satu klik                                                                                                   | P6   |
-| WordPress manager ★         | Update core/plugin/tema, reset password admin, mode maintenance, staging                                              | P6   |
-| Git deploy                  | Clone repo, deploy otomatis via webhook                                                                               | P6   |
-| Aplikasi Node.js / Python ★ | Proses dikelola systemd + reverse proxy                                                                               | P6   |
-| Redis per user ★            |                                                                                                                       | P6   |
-| Web terminal ★              |                                                                                                                       | P6   |
+| Fitur                       | Keterangan                                                                                                                   | Fase |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ---- |
+| Cron jobs                   | ✅ Preset jadwal, email hasil output                                                                                         | P1   |
+| 2FA                         | ✅ TOTP + kode cadangan                                                                                                      | P1   |
+| Riwayat login               | ✅ IP, waktu, berhasil/gagal                                                                                                 | P1   |
+| Tema                        | ✅ Mode terang/gelap                                                                                                         | P1   |
+| Bahasa                      | Indonesia & English, pilihan per user                                                                                        | PB   |
+| SSH access                  | ✅ Shell di jail sendiri (hanya program server & home akun), diizinkan per paket, on/off per akun                            | P3   |
+| SSH keys                    | ✅ Tambah/hapus public key, untuk SSH dan SFTP                                                                               | P3   |
+| Site statistics             | ✅ Laporan GoAccess per domain dari log 14 hari, dibuka di tab terpisah yang terisolasi dari panel                           | P3   |
+| Log viewer                  | ✅ Log akses, error Nginx, dan error PHP/Apache per domain: baris terakhir dengan saringan, unduh 14 hari                    | P3   |
+| Pemakaian resource          | ✅ Disk & bandwidth (grafik 30 hari), inode (kuota); CPU & RAM saat ini ★                                                    | P3   |
+| Disk usage explorer         | ✅ Folder & file terbesar, telusuri per folder                                                                               | P3   |
+| Login keys (API key)        | ✅ Izin per area (baca/tulis), batasi alamat IP, masa berlaku; key ditampilkan sekali dan hanya disimpan sebagai hash        | P3   |
+| Pesan/tiket                 | ✅ Tiket ke reseller-nya, atau ke admin kalau dibuat admin; balasan dan statusnya, notifikasi email/Telegram; lampiran belum | P3   |
+| Backup & restore            | Pilih item, download, restore sebagian                                                                                       | P4   |
+| App installer ★             | WordPress satu klik                                                                                                          | P6   |
+| WordPress manager ★         | Update core/plugin/tema, reset password admin, mode maintenance, staging                                                     | P6   |
+| Git deploy                  | Clone repo, deploy otomatis via webhook                                                                                      | P6   |
+| Aplikasi Node.js / Python ★ | Proses dikelola systemd + reverse proxy                                                                                      | P6   |
+| Redis per user ★            |                                                                                                                              | P6   |
+| Web terminal ★              |                                                                                                                              | P6   |
 
 ---
 
 ## 1.2 Level Reseller
 
-| Fitur                   | Keterangan                                       | Fase |
-| ----------------------- | ------------------------------------------------ | ---- |
-| Buat/ubah/hapus user    | ✅ Dalam batas paket reseller                    | P3   |
-| Suspend/unsuspend user  | ✅ Dengan alasan                                 | P3   |
-| Paket user              | ✅ Buat paket sendiri                            | P3   |
-| Daftar user + pemakaian | ✅ Cari, filter, urutkan, aksi massal            | P3   |
-| Login as user           | ✅ Tercatat di audit log                         | P3   |
-| Statistik reseller      | ✅ Total pemakaian vs jatah                      | P3   |
-| IP                      | Berikan IP dari pool reseller (shared/dedicated) | P3   |
-| Nameserver kustom       | `ns1/ns2.domain-reseller.com`                    | P3   |
-| Branding                | Logo, nama, warna, domain login panel sendiri    | P3   |
-| Overselling             | ✅ On/off (diatur admin)                         | P3   |
-| Pesan massal ke user    |                                                  | P3   |
-| Tiket dari user         |                                                  | P3   |
-| Backup & restore user   |                                                  | P4   |
+| Fitur                   | Keterangan                                                                         | Fase |
+| ----------------------- | ---------------------------------------------------------------------------------- | ---- |
+| Buat/ubah/hapus user    | ✅ Dalam batas paket reseller                                                      | P3   |
+| Suspend/unsuspend user  | ✅ Dengan alasan                                                                   | P3   |
+| Paket user              | ✅ Buat paket sendiri                                                              | P3   |
+| Daftar user + pemakaian | ✅ Cari, filter, urutkan, aksi massal                                              | P3   |
+| Login as user           | ✅ Tercatat di audit log                                                           | P3   |
+| Statistik reseller      | ✅ Total pemakaian vs jatah                                                        | P3   |
+| IP                      | Berikan IP dari pool reseller (shared/dedicated)                                   | P3   |
+| Nameserver kustom       | `ns1/ns2.domain-reseller.com`                                                      | P3   |
+| Branding                | Logo, nama, warna, domain login panel sendiri                                      | P3   |
+| Overselling             | ✅ On/off (diatur admin)                                                           | P3   |
+| Pesan massal ke user    | ✅ Ke semua akun hosting milik reseller: tampil di dashboard, opsional lewat email | P3   |
+| Tiket dari user         | ✅ Kotak masuk tiket dari akun-akunnya, balas dan tutup                            | P3   |
+| Backup & restore user   |                                                                                    | P4   |
 
 ---
 
@@ -140,17 +140,17 @@ Pembagian level sama seperti DirectAdmin:
 
 ### Akun
 
-| Fitur                      | Keterangan                                                 | Fase |
-| -------------------------- | ---------------------------------------------------------- | ---- |
-| Buat user                  | ✅                                                         | P1   |
-| Buat reseller & admin lain | ✅                                                         | P3   |
-| Semua akun                 | ✅ Cari, filter, aksi massal (suspend, hapus, ganti paket) | P1   |
-| Paket user                 | ✅                                                         | P1   |
-| Paket reseller             | ✅                                                         | P3   |
-| Pindah pemilik             | ✅ Pindahkan user antar reseller                           | P3   |
-| Login as                   | ✅ Masuk sebagai reseller/user, tercatat di audit log      | P3   |
-| Pesan massal               | Ke semua reseller/user                                     | P3   |
-| Ganti username             |                                                            | P6   |
+| Fitur                      | Keterangan                                                                                  | Fase |
+| -------------------------- | ------------------------------------------------------------------------------------------- | ---- |
+| Buat user                  | ✅                                                                                          | P1   |
+| Buat reseller & admin lain | ✅                                                                                          | P3   |
+| Semua akun                 | ✅ Cari, filter, aksi massal (suspend, hapus, ganti paket)                                  | P1   |
+| Paket user                 | ✅                                                                                          | P1   |
+| Paket reseller             | ✅                                                                                          | P3   |
+| Pindah pemilik             | ✅ Pindahkan user antar reseller                                                            | P3   |
+| Login as                   | ✅ Masuk sebagai reseller/user, tercatat di audit log                                       | P3   |
+| Pesan massal               | ✅ Ke semua reseller dan/atau semua akun hosting: tampil di dashboard, opsional lewat email | P3   |
+| Ganti username             |                                                                                             | P6   |
 
 ### Server
 

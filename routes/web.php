@@ -11,6 +11,7 @@ use App\Http\Controllers\Admin\ServerSettingController;
 use App\Http\Controllers\Admin\ServiceController;
 use App\Http\Controllers\Admin\StatisticsController;
 use App\Http\Controllers\Admin\TaskController;
+use App\Http\Controllers\AnnouncementController;
 use App\Http\Controllers\CatchAllController;
 use App\Http\Controllers\CertificateRequestController;
 use App\Http\Controllers\CronJobController;
@@ -37,6 +38,7 @@ use App\Http\Controllers\PointerController;
 use App\Http\Controllers\SftpPasswordController;
 use App\Http\Controllers\SshController;
 use App\Http\Controllers\SubdomainController;
+use App\Http\Controllers\TicketController;
 use App\Http\Controllers\UrlRedirectController;
 use App\Http\Controllers\WebmailController;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
@@ -61,6 +63,17 @@ Route::match(['get', 'post'], 'autodiscover/autodiscover.xml', [MailClientConfig
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
+
+    // Tickets go from an account to whoever looks after it; messages to
+    // many accounts come from administrators and resellers.
+    Route::get('tickets', [TicketController::class, 'index'])->name('tickets.index');
+    Route::post('tickets', [TicketController::class, 'store'])->middleware('throttle:10,1,tickets')->name('tickets.store');
+    Route::get('tickets/{ticket}', [TicketController::class, 'show'])->name('tickets.show');
+    Route::post('tickets/{ticket}/messages', [TicketController::class, 'reply'])->middleware('throttle:30,1,ticket-replies')->name('tickets.reply');
+    Route::post('tickets/{ticket}/close', [TicketController::class, 'close'])->name('tickets.close');
+    Route::post('tickets/{ticket}/reopen', [TicketController::class, 'reopen'])->name('tickets.reopen');
+    Route::get('announcements', [AnnouncementController::class, 'index'])->name('announcements.index');
+    Route::post('announcements', [AnnouncementController::class, 'store'])->middleware(['role:admin,reseller', 'throttle:5,1,announcements'])->name('announcements.store');
 
     Route::middleware('role:user')->group(function () {
         Route::get('domains', [DomainController::class, 'index'])->name('domains.index');

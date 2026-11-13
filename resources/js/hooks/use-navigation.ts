@@ -10,6 +10,8 @@ import {
     FolderUp,
     Globe,
     House,
+    LifeBuoy,
+    Megaphone,
     Milestone,
     ListChecks,
     Mail,
@@ -42,11 +44,13 @@ import { index as resellerOwnPackagesIndex } from '@/routes/reseller/packages';
 import { index as resellerStatisticsIndex } from '@/routes/reseller/statistics';
 import { index as domainsIndex } from '@/routes/domains';
 import { index as emailIndex } from '@/routes/email';
+import { index as announcementsIndex } from '@/routes/announcements';
 import { index as filesIndex } from '@/routes/files';
 import { index as ftpIndex } from '@/routes/ftp';
 import { edit as profileEdit } from '@/routes/profile';
 import { index as redirectsIndex } from '@/routes/redirects';
 import { index as sshIndex } from '@/routes/ssh';
+import { index as ticketsIndex } from '@/routes/tickets';
 import type { NavItem } from '@/types';
 
 export type NavSection = {
@@ -58,6 +62,18 @@ const dashboardItem: NavItem = {
     title: 'Dashboard',
     href: dashboard(),
     icon: House,
+};
+
+const ticketsItem: NavItem = {
+    title: 'Tiket',
+    href: ticketsIndex(),
+    icon: LifeBuoy,
+};
+
+const announcementsItem: NavItem = {
+    title: 'Pesan massal',
+    href: announcementsIndex(),
+    icon: Megaphone,
 };
 
 const settingsItem: NavItem = {
@@ -148,6 +164,8 @@ export function useNavigation(): {
                     resellerPackages,
                     adminDns,
                     statistics,
+                    ticketsItem,
+                    announcementsItem,
                 ],
             },
             {
@@ -223,6 +241,7 @@ export function useNavigation(): {
                 ssh,
                 cronJobs,
                 redirects,
+                ticketsItem,
             ],
         });
     } else if (role === 'reseller') {
@@ -245,6 +264,8 @@ export function useNavigation(): {
                     href: resellerStatisticsIndex(),
                     icon: ChartColumn,
                 },
+                ticketsItem,
+                announcementsItem,
             ],
         });
     } else {

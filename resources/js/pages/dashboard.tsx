@@ -50,6 +50,7 @@ import {
 } from '@/routes/reseller/accounts';
 import { index as auditLogsIndex } from '@/routes/admin/audit-logs';
 import { index as tasksIndex } from '@/routes/admin/tasks';
+import { index as announcementsIndex } from '@/routes/announcements';
 import { index as domainsIndex } from '@/routes/domains';
 import type {
     AccountLimits,
@@ -110,6 +111,12 @@ type Props = {
     }[];
     systemInfo?: SystemInfoResult;
     resourceUsage?: ResourceUsage | null;
+    announcements?: {
+        id: number;
+        subject: string;
+        body: string;
+        created_at: string | null;
+    }[];
 };
 
 /** What the account's processes use right now. */
@@ -130,6 +137,7 @@ export default function Dashboard({
     usageHistory,
     systemInfo,
     resourceUsage,
+    announcements = [],
 }: Props) {
     const { auth } = usePage().props;
     const firstName = auth.user.name.split(' ')[0];
@@ -172,6 +180,40 @@ export default function Dashboard({
                     ) : null
                 }
             />
+
+            {announcements.length > 0 && (
+                <Panel
+                    title="Pengumuman"
+                    action={
+                        <PanelLink href={announcementsIndex()}>
+                            Lihat semua
+                        </PanelLink>
+                    }
+                >
+                    <div className="grid gap-4">
+                        {announcements.map((announcement) => (
+                            <article
+                                key={announcement.id}
+                                className="grid gap-1"
+                            >
+                                <h3 className="font-semibold">
+                                    {announcement.subject}
+                                </h3>
+                                {announcement.created_at && (
+                                    <p className="text-xs text-muted-foreground">
+                                        {formatRelative(
+                                            announcement.created_at,
+                                        )}
+                                    </p>
+                                )}
+                                <p className="line-clamp-4 text-sm whitespace-pre-wrap">
+                                    {announcement.body}
+                                </p>
+                            </article>
+                        ))}
+                    </div>
+                </Panel>
+            )}
 
             {isAdmin && stats?.accounts && stats.domains && stats.tasks && (
                 <>
