@@ -206,7 +206,7 @@ Pembagian level sama seperti DirectAdmin:
 | Fitur       | Keterangan                                                                                                                                                          | Fase |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
 | CLI `rayxo` | ✅ Operasi lewat terminal                                                                                                                                           | P1   |
-| Notifikasi  | Email & Telegram ★: service mati, disk penuh, user lewat quota, backup gagal, SSL gagal                                                                             | P3   |
+| Notifikasi  | ✅ Email & Telegram ★: service mati, disk server penuh, kuota/batas akun habis, SSL gagal atau hampir habis; per akun memilih sendiri; backup gagal menyusul (P4)   | P3   |
 | REST API    | ✅ `/api/v1`: akun hosting (daftar, buat, suspend, ubah paket, hapus), paket, domain, database & user database, akun email, record DNS; aksi panel lainnya menyusul | P3   |
 | Modul WHMCS | Create, suspend, unsuspend, terminate, ganti paket, ganti password, SSO, sinkron pemakaian                                                                          | P4   |
 

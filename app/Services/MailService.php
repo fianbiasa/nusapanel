@@ -18,6 +18,7 @@ use App\Models\MailDomain;
 use App\Models\Task;
 use App\Models\User;
 use App\Support\AccountLimits;
+use App\Support\NotificationEvents;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -51,6 +52,7 @@ class MailService
         private DnsService $dns,
         private WebmailService $webmail,
         private MailSendLimitService $sendLimits,
+        private NotificationService $notifications,
     ) {}
 
     /**
@@ -310,6 +312,16 @@ class MailService
             'ssl_status' => SslStatus::Failed,
             'ssl_error' => $error === null ? null : Str::limit($error, 480),
         ])->save();
+
+        // Tried again every night, so said once a week.
+        $this->notifications->aboutAccount(
+            $mailDomain->domain->account,
+            NotificationEvents::SSL_FAILED,
+            __('No certificate for mail.:domain', ['domain' => $mailDomain->domain->display_name]),
+            __('Mail apps connect to the server name instead, until a certificate for mail.:domain can be issued: :error', ['domain' => $mailDomain->domain->display_name, 'error' => $error ?? '']),
+            "mail-ssl:{$mailDomain->id}",
+            24 * 7,
+        );
     }
 
     /**

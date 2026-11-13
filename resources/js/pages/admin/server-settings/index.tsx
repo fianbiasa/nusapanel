@@ -52,8 +52,10 @@ import {
     nameservers as updateNameservers,
     phpUploads,
     port as tryPort,
+    telegram as updateTelegram,
     timezone as updateTimezone,
 } from '@/routes/admin/server-settings';
+import { destroy as removeTelegram } from '@/routes/admin/server-settings/telegram';
 import {
     cancel as cancelPort,
     confirm as confirmPort,
@@ -106,6 +108,7 @@ type Props = {
     mail_limits: MailLimits;
     bandwidth: { suspend_over_limit: boolean };
     database_remote_access: boolean;
+    telegram_bot: string | null;
 };
 
 type MailLimits = {
@@ -125,6 +128,7 @@ export default function ServerSettings({
     mail_limits,
     bandwidth,
     database_remote_access,
+    telegram_bot,
 }: Props) {
     const { start, stop } = usePoll(
         5_000,
@@ -204,6 +208,8 @@ export default function ServerSettings({
             <BandwidthPanel suspendOverLimit={bandwidth.suspend_over_limit} />
 
             <DatabaseRemotePanel enabled={database_remote_access} />
+
+            <TelegramPanel bot={telegram_bot} />
 
             <NameserverPanel current={nameservers} publicIp={public_ip} />
         </>
@@ -822,6 +828,73 @@ function UploadPanel({
  * How many recipients the mail of hosting accounts may reach per 24 hours,
  * per account and for all accounts together. Empty is no limit.
  */
+/**
+ * The Telegram bot that sends alerts to the chats accounts set up under
+ * Settings > Notifikasi. Its token is kept encrypted and never shown again.
+ */
+function TelegramPanel({ bot }: { bot: string | null }) {
+    return (
+        <Panel
+            title="Bot Telegram untuk notifikasi"
+            description="Buat bot di @BotFather (perintah /newbot), lalu tempel token-nya di sini. Setiap akun memilih sendiri notifikasi apa yang dikirim bot ke chat Telegram-nya, di Pengaturan > Notifikasi."
+        >
+            <div className="grid gap-4">
+                {bot !== null && (
+                    <div className="flex flex-wrap items-center gap-3">
+                        <StatusBadge status="active" label={`@${bot}`} />
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                                router.delete(removeTelegram.url(), {
+                                    preserveScroll: true,
+                                })
+                            }
+                        >
+                            Lepas bot
+                        </Button>
+                    </div>
+                )}
+                <Form
+                    {...updateTelegram.form()}
+                    options={{ preserveScroll: true }}
+                    resetOnSuccess
+                    className="flex flex-wrap items-start gap-3"
+                >
+                    {({ processing, errors }) => (
+                        <>
+                            <div className="grid min-w-72 flex-1 gap-1.5">
+                                <Input
+                                    name="token"
+                                    type="password"
+                                    autoComplete="off"
+                                    required
+                                    maxLength={100}
+                                    placeholder={
+                                        bot === null
+                                            ? '123456789:AA…'
+                                            : 'Token baru untuk mengganti bot'
+                                    }
+                                    aria-label="Token bot"
+                                    aria-invalid={
+                                        errors.token ? true : undefined
+                                    }
+                                />
+                                <InputError message={errors.token} />
+                            </div>
+                            <Button type="submit" disabled={processing}>
+                                {processing && <Spinner />}
+                                {bot === null ? 'Pasang bot' : 'Ganti bot'}
+                            </Button>
+                        </>
+                    )}
+                </Form>
+            </div>
+        </Panel>
+    );
+}
+
 /**
  * Whether MariaDB answers from outside the server, for the hosts accounts
  * allow on their Databases page. Changing it restarts MariaDB.

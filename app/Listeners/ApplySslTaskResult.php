@@ -8,6 +8,8 @@ use App\Events\AgentTaskFinished;
 use App\Models\Domain;
 use App\Models\Task;
 use App\Services\DomainService;
+use App\Services\NotificationService;
+use App\Support\NotificationEvents;
 use Illuminate\Support\Arr;
 
 /**
@@ -17,7 +19,10 @@ use Illuminate\Support\Arr;
  */
 class ApplySslTaskResult
 {
-    public function __construct(private DomainService $domains) {}
+    public function __construct(
+        private DomainService $domains,
+        private NotificationService $notifications,
+    ) {}
 
     public function handle(AgentTaskFinished $event): void
     {
@@ -95,6 +100,14 @@ class ApplySslTaskResult
                 'ssl_status' => SslStatus::Failed,
                 'ssl_error' => $task->error,
             ])->save();
+
+            $this->notifications->aboutAccount(
+                $domain->account,
+                NotificationEvents::SSL_FAILED,
+                __('No certificate for :domain', ['domain' => $domain->display_name]),
+                __("Let's Encrypt did not issue a certificate for :domain: :error", ['domain' => $domain->display_name, 'error' => $task->error ?? '']),
+                "ssl:{$domain->id}",
+            );
         }
     }
 

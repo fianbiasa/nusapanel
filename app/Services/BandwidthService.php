@@ -12,6 +12,7 @@ use App\Models\DomainBandwidth;
 use App\Models\FtpAccount;
 use App\Models\Setting;
 use App\Models\User;
+use App\Support\NotificationEvents;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
@@ -45,6 +46,7 @@ class BandwidthService
     public function __construct(
         private AgentClient $agent,
         private AccountService $accounts,
+        private NotificationService $notifications,
     ) {}
 
     /**
@@ -169,6 +171,15 @@ class BandwidthService
                     $this->accounts->suspend($account, __('The bandwidth of the package for this month is used up.'), null);
                     $account->forceFill(['bandwidth_suspended_at' => now()])->save();
                 });
+
+                $this->notifications->aboutAccount(
+                    $account,
+                    NotificationEvents::QUOTA_EXCEEDED,
+                    __('Account :username is suspended: its bandwidth for this month is used up', ['username' => $account->username]),
+                    __('The account :username used the bandwidth of its package for this month and is suspended. It is unsuspended when the next month starts, or when its package allows more.', ['username' => $account->username]),
+                    "bandwidth:{$account->id}:".now()->format('Y-m'),
+                    24 * 31,
+                );
 
                 $suspended++;
             });

@@ -8,6 +8,7 @@ use App\Enums\DomainStatus;
 use App\Enums\SslSource;
 use App\Enums\SslStatus;
 use App\Models\Domain;
+use App\Support\NotificationEvents;
 use Carbon\CarbonImmutable;
 use Carbon\Exceptions\InvalidFormatException;
 use Illuminate\Database\Eloquent\Collection;
@@ -27,7 +28,16 @@ class CertificateExpiryService
      */
     private const BATCH_SIZE = 500;
 
-    public function __construct(private AgentClient $agent) {}
+    /**
+     * Certificates that end within these days get an alert: Let's Encrypt
+     * renews them a month before, so one this close is not being renewed.
+     */
+    public const WARN_DAYS = 7;
+
+    public function __construct(
+        private AgentClient $agent,
+        private NotificationService $notifications,
+    ) {}
 
     /**
      * Record the end date of every active Let's Encrypt certificate as the
@@ -73,7 +83,40 @@ class CertificateExpiryService
                 }
             });
 
+        $this->warnExpiring();
+
         return $updated;
+    }
+
+    /**
+     * Alert about active certificates that end within WARN_DAYS: a Let's
+     * Encrypt one that is not being renewed, or one the customer installed.
+     */
+    public function warnExpiring(): int
+    {
+        $warned = 0;
+
+        Domain::query()
+            ->with('account')
+            ->where('ssl_status', SslStatus::Active)
+            ->whereIn('ssl_source', [SslSource::LetsEncrypt, SslSource::Custom])
+            ->where('status', '!=', DomainStatus::Deleting)
+            ->whereNotNull('ssl_expires_at')
+            ->where('ssl_expires_at', '<', now()->addDays(self::WARN_DAYS))
+            ->each(function (Domain $domain) use (&$warned): void {
+                $warned += $this->notifications->aboutAccount(
+                    $domain->account,
+                    NotificationEvents::SSL_FAILED,
+                    __('The certificate of :domain ends :date', ['domain' => $domain->display_name, 'date' => $domain->ssl_expires_at?->toDateString()]),
+                    $domain->ssl_source === SslSource::LetsEncrypt
+                        ? __('It should have been renewed already. Check that :domain still points to this server, then request the certificate again on the Domains page.', ['domain' => $domain->display_name])
+                        : __('It is a certificate installed by hand: install a new one on the Domains page before it ends.'),
+                    "ssl-expiry:{$domain->id}:".$domain->ssl_expires_at?->toDateString(),
+                    72,
+                );
+            });
+
+        return $warned;
     }
 
     /**

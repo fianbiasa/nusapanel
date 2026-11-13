@@ -8,6 +8,7 @@ use App\Enums\DomainType;
 use App\Models\Domain;
 use App\Models\DomainBandwidth;
 use App\Models\User;
+use App\Support\NotificationEvents;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
@@ -30,6 +31,7 @@ class DomainLimitService
         private DomainService $domains,
         private FileManagerService $files,
         private AuditLogger $audit,
+        private NotificationService $notifications,
     ) {}
 
     /**
@@ -127,6 +129,21 @@ class DomainLimitService
                 'username' => $website->account->username,
             ], $actor);
         });
+
+        if ($reached !== null) {
+            $this->notifications->aboutAccount(
+                $website->account,
+                NotificationEvents::QUOTA_EXCEEDED,
+                $reached === self::REACHED_DISK
+                    ? __('The website :domain reached its disk limit', ['domain' => $website->display_name])
+                    : __('The website :domain reached its bandwidth limit', ['domain' => $website->display_name]),
+                __('The website :domain of :username is stopped and shows a page saying it is unavailable, until it is back under its limit or the limit is raised.', [
+                    'domain' => $website->display_name,
+                    'username' => $website->account->username,
+                ]),
+                "domain-limit:{$website->id}:{$reached}",
+            );
+        }
     }
 
     /**

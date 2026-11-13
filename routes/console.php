@@ -16,6 +16,7 @@ Schedule::command('rayxo:collect-usage')->everyFifteenMinutes()->withoutOverlapp
 Schedule::command('rayxo:collect-bandwidth')->everyFifteenMinutes()->withoutOverlapping();
 Schedule::command('rayxo:close-phpmyadmin-sessions')->everyFiveMinutes()->withoutOverlapping();
 Schedule::command('rayxo:sync-send-limits')->everyFiveMinutes()->withoutOverlapping();
+Schedule::command('rayxo:check-alerts')->everyFiveMinutes()->withoutOverlapping();
 Schedule::command('rayxo:clean-transfers')->hourly()->withoutOverlapping();
 Schedule::command('rayxo:measure-domain-disk')->hourly()->withoutOverlapping();
 Schedule::command('model:prune', ['--model' => [WebmailSession::class, BandwidthUsage::class, DomainBandwidth::class, UsageSnapshot::class]])->hourly()->withoutOverlapping();

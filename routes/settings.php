@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Settings\LoginKeyController;
+use App\Http\Controllers\Settings\NotificationController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\SecurityController;
 use Illuminate\Auth\Middleware\RequirePassword;
@@ -31,6 +32,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('user-password.update');
 
     Route::inertia('settings/appearance', 'settings/appearance')->name('appearance.edit');
+
+    Route::get('settings/notifications', [NotificationController::class, 'index'])->name('notifications.index');
+    Route::put('settings/notifications/{type}', [NotificationController::class, 'update'])->whereIn('type', ['email', 'telegram'])->name('notifications.update');
+    Route::delete('settings/notifications/{type}', [NotificationController::class, 'destroy'])->whereIn('type', ['email', 'telegram'])->name('notifications.destroy');
+    Route::post('settings/notifications/{type}/test', [NotificationController::class, 'test'])->whereIn('type', ['email', 'telegram'])->middleware('throttle:6,1,notification-test')->name('notifications.test');
 
     // A login key works without the password or 2FA, so making and
     // deleting keys asks for the password first, as the security page does.

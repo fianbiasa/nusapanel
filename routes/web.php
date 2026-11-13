@@ -271,6 +271,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('server-settings/hostname-certificate', [ServerSettingController::class, 'issueHostnameCertificate'])
             ->middleware('throttle:5,1,server-certificate')
             ->name('server-settings.hostname-certificate');
+        Route::put('server-settings/telegram', [ServerSettingController::class, 'updateTelegram'])
+            ->middleware('throttle:10,1,server-telegram')
+            ->name('server-settings.telegram');
+        Route::delete('server-settings/telegram', [ServerSettingController::class, 'destroyTelegram'])
+            ->name('server-settings.telegram.destroy');
         Route::put('server-settings/database-remote-access', [ServerSettingController::class, 'updateDatabaseRemoteAccess'])
             ->middleware('throttle:5,1,server-database-remote')
             ->name('server-settings.database-remote-access');

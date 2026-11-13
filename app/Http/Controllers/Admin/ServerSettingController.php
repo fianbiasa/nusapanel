@@ -17,6 +17,7 @@ use App\Services\DnsService;
 use App\Services\DomainService;
 use App\Services\MailSendLimitService;
 use App\Services\ServerSettingsService;
+use App\Services\TelegramBot;
 use App\Support\PhpSettings;
 use DateTimeZone;
 use Illuminate\Http\RedirectResponse;
@@ -40,6 +41,7 @@ class ServerSettingController extends Controller
         private BandwidthService $bandwidth,
         private DatabaseToolsService $databaseTools,
         private AuditLogger $audit,
+        private TelegramBot $telegram,
     ) {}
 
     public function index(): Response
@@ -70,6 +72,7 @@ class ServerSettingController extends Controller
                 'suspend_over_limit' => $this->bandwidth->suspendsOverLimit(),
             ],
             'database_remote_access' => $this->databaseTools->remoteAccessEnabled(),
+            'telegram_bot' => $this->telegram->username(),
             'mail_limits' => [
                 ...$this->settings->mailSendLimits(),
                 'default_account' => ServerSettingsService::DEFAULT_MAIL_SEND_LIMIT_ACCOUNT,
@@ -270,6 +273,32 @@ class ServerSettingController extends Controller
      * Let MariaDB answer from outside, for the hosts accounts allow, or only
      * on the server. MariaDB restarts.
      */
+    /**
+     * Use a Telegram bot for alerts; Telegram has to accept its token.
+     */
+    public function updateTelegram(Request $request): RedirectResponse
+    {
+        $validated = $request->validate(['token' => ['required', 'string', 'max:100']]);
+
+        $username = $this->telegram->setToken(trim($validated['token']), $request->user());
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Alerts are sent by @:bot.', ['bot' => (string) $username])]);
+
+        return back();
+    }
+
+    /**
+     * Stop sending alerts by Telegram.
+     */
+    public function destroyTelegram(Request $request): RedirectResponse
+    {
+        $this->telegram->setToken(null, $request->user());
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('The Telegram bot is removed; alerts go by email only.')]);
+
+        return back();
+    }
+
     public function updateDatabaseRemoteAccess(Request $request): RedirectResponse
     {
         $validated = $request->validate(['enabled' => ['required', 'boolean']]);

@@ -189,6 +189,16 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     }
 
     /**
+     * Where this account gets its alerts.
+     *
+     * @return HasMany<NotificationChannel, $this>
+     */
+    public function notificationChannels(): HasMany
+    {
+        return $this->hasMany(NotificationChannel::class);
+    }
+
+    /**
      * The keys this account uses the API with.
      *
      * @return HasMany<LoginKey, $this>
