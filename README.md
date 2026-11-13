@@ -12,7 +12,24 @@
 
 # RAYXO — Webhosting Manager
 
-Panel hosting self-hosted dengan fitur **minimal setara DirectAdmin**: tiga level akses (Admin, Reseller, User), web, DNS, email, database, FTP, SSL, backup, migrasi, dan keamanan, tanpa biaya lisensi.
+Panel hosting self-hosted untuk server Ubuntu, gratis dan open source, dengan tiga level akses (Admin, Reseller, User). Targetnya fitur **minimal setara DirectAdmin** tanpa biaya lisensi.
+
+**Status:** beta, versi terbaru [v0.7.0](https://github.com/fianbiasa/rayxo/releases/latest). Fase P0–P3 di [roadmap](docs/05-roadmap.md) sudah selesai; backup dan migrasi (P4) belum ada.
+
+## Yang sudah bisa dipakai
+
+- **Web:** domain, subdomain, alias, pointer, redirect; Nginx → Apache → PHP-FPM per akun dengan PHP 7.4–8.5 per domain; pengaturan per website (halaman error, folder berpassword, proteksi hotlink, tipe MIME, CGI, batas bandwidth dan disk); log dan laporan GoAccess.
+- **SSL:** Let's Encrypt otomatis termasuk wildcard dan `mail.<domain>`, sertifikat sendiri, CSR, dan self-signed.
+- **Database:** MariaDB dengan phpMyAdmin sekali klik, import/export, periksa dan perbaiki tabel, akses dari luar server per IP.
+- **Email:** Postfix, Dovecot, Rspamd, dan Roundcube; forwarder, catch-all, autoresponder, filter, filter spam, DKIM/SPF/DMARC otomatis, batas kirim, antrean email, dan konfigurasi otomatis aplikasi email.
+- **DNS:** PowerDNS dengan template zone, editor record, dan nameserver sendiri per reseller.
+- **File & akses:** file manager, FTP/FTPS, SFTP, SSH dalam jail dengan SSH key, cron job.
+- **Reseller:** paket reseller dengan overselling, akun dan paket sendiri, masuk sebagai pelanggan, pindah pemilik, branding (nama, warna, logo), dan domain login panel sendiri.
+- **Batas & statistik:** kuota disk dan inode, bandwidth dari log server dengan grafik harian, batas CPU/RAM/proses/IO per akun (cgroups), alamat IP sendiri per akun (shared atau dedicated).
+- **Operasional:** REST API dengan login key, notifikasi email dan Telegram, tiket bantuan, pesan massal, monitor layanan dengan watchdog, process monitor, editor file konfigurasi, riwayat login, task, dan audit log.
+- **Keamanan akun:** setiap akun hosting adalah user Linux sendiri; login panel dengan 2FA atau passkey.
+
+Daftar lengkap per level ada di [docs/01-fitur.md](docs/01-fitur.md), dan panduan pemakaian di [rayxopanel.com/docs](https://rayxopanel.com/docs/).
 
 ## Dokumen spesifikasi
 
@@ -42,15 +59,15 @@ Panel hosting self-hosted dengan fitur **minimal setara DirectAdmin**: tiga leve
 | Struktur folder    | Mengikuti DirectAdmin                                                            | Migrasi mudah, pelanggan familiar                                                    |
 | Port panel         | 2222                                                                             | Sama dengan DirectAdmin                                                              |
 
-## Asumsi yang dipakai (belum dikonfirmasi)
+## Berikutnya
 
-- Panel dipakai untuk **menjual shared hosting** (Admin → Reseller → User).
-- Dimulai dari **satu server**; desain agent sudah disiapkan untuk multi-server.
-- Ada akun di cPanel/DirectAdmin yang nanti perlu **dipindahkan**.
+| Fase | Isi                                                                                                                |
+| ---- | ------------------------------------------------------------------------------------------------------------------ |
+| P4   | Backup dan restore (lokal, FTP, SFTP, S3), impor backup cPanel dan DirectAdmin, transfer antar server, modul WHMCS |
+| P5   | Brute force monitor, firewall, ModSecurity, kebijakan 2FA dan password, update panel sekali klik, UI dua bahasa    |
+| P6   | App installer dan WordPress manager, Git deploy, Node.js/Python, DNSSEC, multi-server                              |
 
-## Ekspektasi yang realistis
-
-DirectAdmin dikembangkan lebih dari 20 tahun. Mengejar fitur selengkap itu bisa, tapi butuh waktu: perkiraan **5–8 bulan full-time** sampai siap produksi (fase P0–P5). Urutannya fondasi yang aman dulu, lalu fitur dibangun per fase. Fitur tambahan di luar DirectAdmin (P6) dikerjakan setelah panel stabil.
+Panel dirancang untuk menjual shared hosting (Admin → Reseller → User) di satu server; desain agent sudah disiapkan untuk multi-server. Rinciannya di [docs/05-roadmap.md](docs/05-roadmap.md).
 
 ## Menjalankan secara lokal (Herd)
 
@@ -96,7 +113,7 @@ wget https://github.com/fianbiasa/rayxo/releases/latest/download/setup.sh
 bash setup.sh --admin-email kamu@domainmu.com
 ```
 
-`setup.sh` dari sebuah rilis otomatis mengunduh paket rilis yang sama dari GitHub dan memverifikasi checksum-nya. Versi tertentu: `--version 0.2.0`. Versi PHP untuk website (default 7.4 sampai 8.5): `--php-versions "8.2 8.3 8.4"`; versi yang sudah terpasang tidak dihapus.
+`setup.sh` dari sebuah rilis otomatis mengunduh paket rilis yang sama dari GitHub dan memverifikasi checksum-nya. Versi tertentu: `--version 0.7.0`. Versi PHP untuk website (default 7.4 sampai 8.5): `--php-versions "8.2 8.3 8.4"`; versi yang sudah terpasang tidak dihapus.
 
 **Syarat sebelum instalasi** (dicek `setup.sh` lewat DNS publik; instalasi berhenti kalau belum terpenuhi):
 
@@ -104,7 +121,16 @@ bash setup.sh --admin-email kamu@domainmu.com
 - Hostname berupa FQDN, misalnya `server1.domainmu.com`.
 - **A record** hostname → IP publik server (kalau memakai Cloudflare: _DNS only_, bukan proxy). Tidak boleh ada AAAA record yang mengarah ke server lain.
 - **PTR (reverse DNS)** IP publik → hostname, diatur lewat provider VPS.
-- Port 80 dan 2222 terbuka dari internet. Untuk email dan DNS buka juga 25, 110, 143, 465, 587, 993, 995, dan 53 (TCP dan UDP).
+- Port terbuka dari internet (firewall / security group provider VPS):
+
+    | Port                             | Untuk                     |
+    | -------------------------------- | ------------------------- |
+    | 80, 443                          | Website dan Let's Encrypt |
+    | 2222                             | Panel                     |
+    | 22                               | SFTP dan SSH              |
+    | 21, 35000–35999                  | FTP (passive)             |
+    | 25, 110, 143, 465, 587, 993, 995 | Email (SMTP, POP3, IMAP)  |
+    | 53 TCP dan UDP                   | DNS                       |
 
 Dengan syarat itu terpenuhi, `setup.sh` otomatis memasang **SSL Let's Encrypt** untuk hostname (diperpanjang otomatis oleh `certbot.timer`), sehingga panel bisa dibuka normal di `https://<hostname>:2222`, dan `http://<hostname>` diarahkan ke sana.
 
@@ -133,12 +159,12 @@ Password baru ditampilkan sekali, dan semua session lama akun itu dikeluarkan.
 Rilis dibuat otomatis oleh GitHub Actions (`.github/workflows/release.yml`) setiap kali tag versi di-push:
 
 ```bash
-git tag v0.2.0 && git push origin v0.2.0
+git tag v0.8.0 && git push origin v0.8.0
 ```
 
 Workflow menjalankan `installer/build-release.sh`, lalu menerbitkan `setup.sh`, `rayxo-<versi>-linux-{amd64,arm64}.tar.gz`, dan file `.sha256`-nya di [Releases](https://github.com/fianbiasa/rayxo/releases). Server tidak butuh Composer, Node.js, atau Go.
 
-Untuk uji tanpa rilis: jalankan `installer/build-release.sh 0.2.0-dev` di Mac, salin isi `dist/` ke server, lalu `bash setup.sh --package rayxo-0.2.0-dev-linux-amd64.tar.gz`.
+Untuk uji tanpa rilis: jalankan `installer/build-release.sh 0.8.0-dev` di Mac, salin isi `dist/` ke server, lalu `bash setup.sh --package rayxo-0.8.0-dev-linux-amd64.tar.gz`.
 
 ## Lisensi
 

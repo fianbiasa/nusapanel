@@ -3351,7 +3351,7 @@ summary() {
 
     printf '\n'
     info "Catatan:"
-    info "- Pastikan port 80, 443, $PANEL_PORT, 21, ${FTP_PASSIVE_PORTS/ /-} (FTP passive), 53 TCP & UDP (DNS) dan 25, 465, 587, 993, 995 (email) terbuka di firewall / security group provider VPS."
+    info "- Pastikan port 80, 443, $PANEL_PORT, 22 (SFTP/SSH), 21, ${FTP_PASSIVE_PORTS/ /-} (FTP passive), 53 TCP & UDP (DNS) dan 25, 110, 143, 465, 587, 993, 995 (email) terbuka di firewall / security group provider VPS."
     info "- Cek agent: rayxo ping"
     info "- Lupa password admin: rayxo reset-password $admin_user (sebagai root)"
     info "- Log instalasi: $INSTALL_LOG"
