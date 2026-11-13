@@ -522,5 +522,10 @@
     "The :attribute must be an IP address websites can be served on.": ":attribute harus alamat IP yang bisa dipakai website.",
     "Branding saved.": "Branding disimpan.",
     "Your accounts use the panel's nameservers again.": "Akun-akun Anda kembali memakai nameserver panel.",
-    "Nameservers saved. The zones of your accounts are being updated.": "Nameserver disimpan. Zone DNS akun-akun Anda sedang diperbarui."
+    "Nameservers saved. The zones of your accounts are being updated.": "Nameserver disimpan. Zone DNS akun-akun Anda sedang diperbarui.",
+    "This name is a reseller's panel sign-in address.": "Nama ini dipakai reseller sebagai alamat masuk panel.",
+    "This domain is a website on this server.": "Domain ini adalah website di server ini.",
+    "Another reseller signs in at this domain.": "Reseller lain sudah memakai domain ini untuk masuk panel.",
+    "The panel no longer answers at your own domain.": "Panel tidak lagi melayani di domain Anda sendiri.",
+    "The panel is being set up at :domain.": "Panel sedang disiapkan di :domain."
 }

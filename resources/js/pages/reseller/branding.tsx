@@ -1,5 +1,5 @@
 import { Form, Head } from '@inertiajs/react';
-import { Check } from 'lucide-react';
+import { Check, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
@@ -8,9 +8,11 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { StatusBadge } from '@/components/status-badge';
 import { Spinner } from '@/components/ui/spinner';
 import type { Branding } from '@/lib/branding';
 import { update } from '@/routes/reseller/branding';
+import { update as updateLoginDomain } from '@/routes/reseller/branding/login-domain';
 import { update as updateNameservers } from '@/routes/reseller/branding/nameservers';
 
 const defaultColor = '#086cf0';
@@ -24,11 +26,18 @@ export default function ResellerBranding({
     nameservers,
     panelNameservers,
     serverIp,
+    loginDomain,
 }: {
     branding: Branding;
     nameservers: string[];
     panelNameservers: string[];
     serverIp: string | null;
+    /** The domain the panel answers at for the reseller, and how far it got. */
+    loginDomain: {
+        domain: string;
+        status: 'pending' | 'active' | 'failed';
+        error: string | null;
+    } | null;
 }) {
     const [color, setColor] = useState(branding.color ?? '');
     const [removeLogo, setRemoveLogo] = useState(false);
@@ -164,6 +173,104 @@ export default function ResellerBranding({
                         </>
                     )}
                 </Form>
+            </Panel>
+
+            <Panel
+                title="Domain login"
+                description="Anda dan pelanggan Anda bisa masuk ke panel lewat domain Anda sendiri, misalnya panel.domainanda.com, dengan sertifikat Let's Encrypt."
+            >
+                <div className="grid max-w-2xl gap-5">
+                    {loginDomain && (
+                        <div className="grid gap-2 rounded-xl border p-4">
+                            <div className="flex flex-wrap items-center gap-3">
+                                <a
+                                    href={`https://${loginDomain.domain}/`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="font-mono text-sm font-semibold underline-offset-4 hover:underline"
+                                >
+                                    https://{loginDomain.domain}/
+                                </a>
+                                <StatusBadge
+                                    status={
+                                        loginDomain.status === 'active'
+                                            ? 'active'
+                                            : loginDomain.status === 'failed'
+                                              ? 'failed'
+                                              : 'pending'
+                                    }
+                                    label={
+                                        loginDomain.status === 'active'
+                                            ? 'Aktif'
+                                            : loginDomain.status === 'failed'
+                                              ? 'Gagal'
+                                              : 'Disiapkan'
+                                    }
+                                />
+                            </div>
+                            {loginDomain.error && (
+                                <p className="text-sm text-destructive">
+                                    {loginDomain.error}
+                                </p>
+                            )}
+                        </div>
+                    )}
+                    <Form
+                        {...updateLoginDomain.form()}
+                        options={{ preserveScroll: true }}
+                        className="grid gap-4"
+                    >
+                        {({ processing, errors }) => (
+                            <>
+                                <div className="grid gap-2">
+                                    <Label htmlFor="login_domain">Domain</Label>
+                                    <Input
+                                        id="login_domain"
+                                        name="login_domain"
+                                        autoComplete="off"
+                                        defaultValue={loginDomain?.domain ?? ''}
+                                        placeholder="panel.domainanda.com"
+                                        className="font-mono"
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                        Arahkan record A domain ini ke{' '}
+                                        {serverIp ?? 'alamat server'} dulu,
+                                        tanpa proxy seperti Cloudflare, lalu
+                                        simpan. Passkey yang dibuat di alamat
+                                        panel lain tidak berlaku di domain ini;
+                                        kata sandi dan 2FA tetap berlaku.
+                                    </p>
+                                    <InputError message={errors.login_domain} />
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    <Button type="submit" disabled={processing}>
+                                        {processing ? <Spinner /> : <Check />}
+                                        {loginDomain?.status === 'failed'
+                                            ? 'Coba lagi'
+                                            : 'Simpan domain'}
+                                    </Button>
+                                </div>
+                            </>
+                        )}
+                    </Form>
+                    {loginDomain && (
+                        <Form
+                            {...updateLoginDomain.form()}
+                            options={{ preserveScroll: true }}
+                            transform={() => ({ login_domain: '' })}
+                        >
+                            {({ processing }) => (
+                                <Button
+                                    type="submit"
+                                    variant="outline"
+                                    disabled={processing}
+                                >
+                                    <Trash2 /> Berhenti memakai domain ini
+                                </Button>
+                            )}
+                        </Form>
+                    )}
+                </div>
             </Panel>
 
             <Panel

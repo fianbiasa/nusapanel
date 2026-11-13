@@ -127,8 +127,8 @@ Pembagian level sama seperti DirectAdmin:
 | Login as user           | ✅ Tercatat di audit log                                                           | P3   |
 | Statistik reseller      | ✅ Total pemakaian vs jatah                                                        | P3   |
 | IP                      | ✅ Berikan IP dari pool reseller ke akun (shared/dedicated)                        | P3   |
-| Nameserver kustom       | `ns1/ns2.domain-reseller.com`                                                      | P3   |
-| Branding                | Logo, nama, warna, domain login panel sendiri                                      | P3   |
+| Nameserver kustom       | ✅ `ns1/ns2.domain-reseller.com` di zone DNS semua akun reseller                   | P3   |
+| Branding                | ✅ Logo, nama, warna, domain login panel sendiri (Let's Encrypt)                   | P3   |
 | Overselling             | ✅ On/off (diatur admin)                                                           | P3   |
 | Pesan massal ke user    | ✅ Ke semua akun hosting milik reseller: tampil di dashboard, opsional lewat email | P3   |
 | Tiket dari user         | ✅ Kotak masuk tiket dari akun-akunnya, balas dan tutup                            | P3   |

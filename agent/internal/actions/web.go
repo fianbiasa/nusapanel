@@ -19,6 +19,7 @@ type webServer interface {
 	PHPInstalled(version string) bool
 	PHPVersions() ([]string, error)
 	IsHostname(domain string) bool
+	HasLoginDomain(domain string) bool
 	UsedByOtherAccount(domain, user string) (bool, error)
 	ApplyDomain(ctx context.Context, site webserver.Site) (documentRoot string, err error)
 	RemoveDomain(ctx context.Context, user, domain string) error
@@ -400,11 +401,15 @@ func (w webActions) phpVersions(_ context.Context, raw json.RawMessage) (any, er
 	return phpVersionsInfo{Versions: versions}, nil
 }
 
-// checkDomain refuses the server's own hostname and returns the rayxo
-// account username names.
+// checkDomain refuses the server's own hostname and resellers' sign-in
+// addresses, and returns the rayxo account username names.
 func (w webActions) checkDomain(ctx context.Context, username, domain string) (sysuser.User, error) {
 	if w.web.IsHostname(domain) {
 		return sysuser.User{}, rpc.Errorf(rpc.CodeActionFailed, "domain %s is the hostname of this server", domain)
+	}
+
+	if w.web.HasLoginDomain(domain) {
+		return sysuser.User{}, rpc.Errorf(rpc.CodeActionFailed, "domain %s is a reseller's sign-in address", domain)
 	}
 
 	return w.existingAccount(ctx, username)

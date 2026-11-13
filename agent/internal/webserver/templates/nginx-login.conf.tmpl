@@ -1,0 +1,33 @@
+# The panel at {{.Domain}}, a reseller's own sign-in address. Written by rayxod; changes are overwritten.
+server {
+{{- range .Listen}}
+    listen {{.}}80;
+{{- end}}
+    server_name {{.Domain}};
+    server_tokens off;
+
+    # Let's Encrypt renews the certificate over HTTP.
+    location ^~ /.well-known/acme-challenge/ {
+        root {{.AcmeDir}};
+        default_type text/plain;
+        try_files $uri =404;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+{{- range .Listen}}
+    listen {{.}}443 ssl http2;
+{{- end}}
+    server_name {{.Domain}};
+
+    ssl_certificate {{.Certificate}};
+    ssl_certificate_key {{.CertificateKey}};
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+
+    include {{.PanelSnippet}};
+}

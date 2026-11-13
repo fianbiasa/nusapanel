@@ -13,6 +13,7 @@ use App\Enums\WwwMode;
 use App\Listeners\ApplyDomainTaskResult;
 use App\Listeners\ApplySslTaskResult;
 use App\Models\Domain;
+use App\Models\ResellerSetting;
 use App\Models\UrlRedirect;
 use App\Models\User;
 use App\Rules\DocumentRoot;
@@ -1230,6 +1231,10 @@ class DomainService
      */
     private function findConflict(User $account, string $name, bool $lock = false): ?string
     {
+        if (ResellerSetting::query()->where('login_domain', $name)->exists()) {
+            return __('This name is a reseller\'s panel sign-in address.');
+        }
+
         $parents = $this->parentNames($name);
 
         $existing = Domain::query()

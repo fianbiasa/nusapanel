@@ -202,7 +202,7 @@ for arch in $ARCHES; do
     cp "$SRC/agent/bin/linux-$arch/rayxod" "$SRC/agent/bin/linux-$arch/rayxo" "$stage/bin/"
     cp "$SRC/agent/packaging/rayxod.service" "$stage/systemd/"
     cp "$SRC"/installer/files/*.service "$SRC"/installer/files/*.timer "$stage/systemd/"
-    cp "$SRC/installer/files/nginx-panel.conf" "$SRC/installer/files/nginx-hostname.conf" \
+    cp "$SRC/installer/files/nginx-panel.conf" "$SRC/installer/files/nginx-panel-app.conf" "$SRC/installer/files/nginx-hostname.conf" \
         "$SRC/installer/files/nginx-default.conf" "$SRC/installer/files/apache-rayxo.conf" \
         "$SRC/installer/files/php-fpm-panel.conf" "$SRC/installer/files/php-fpm-phpmyadmin.conf" \
         "$SRC/installer/files/nginx-phpmyadmin.conf" "$SRC/installer/files/phpmyadmin-config.inc.php" \

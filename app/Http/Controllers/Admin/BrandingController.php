@@ -40,6 +40,11 @@ class BrandingController extends Controller
             'nameservers' => $settings->nameservers ?? [],
             'panelNameservers' => $this->dns->nameservers(),
             'serverIp' => config('hosting.public_ip'),
+            'loginDomain' => $settings->login_domain === null ? null : [
+                'domain' => $settings->login_domain,
+                'status' => $settings->login_domain_status,
+                'error' => $settings->login_domain_error,
+            ],
         ]);
     }
 
@@ -93,6 +98,29 @@ class BrandingController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => $nameservers === []
             ? __('Your accounts use the panel\'s nameservers again.')
             : __('Nameservers saved. The zones of your accounts are being updated.')]);
+
+        return back();
+    }
+
+    /**
+     * Have the panel answer at a domain of the reseller's, or no longer
+     * (empty).
+     */
+    public function updateLoginDomain(Request $request): RedirectResponse
+    {
+        $request->merge(['login_domain' => ValidDomain::normalize($request->input('login_domain'))]);
+
+        $validated = $request->validate([
+            'login_domain' => ['nullable', 'string', new ValidDomain],
+        ]);
+
+        $domain = $validated['login_domain'] ?? null;
+
+        $this->branding->setLoginDomain($request->user(), $domain, $request->user());
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => $domain === null
+            ? __('The panel no longer answers at your own domain.')
+            : __('The panel is being set up at :domain.', ['domain' => $domain])]);
 
         return back();
     }

@@ -90,14 +90,18 @@ Untuk grafik. Unique `(user_id, date)`.
 | added                  | Ditambahkan agent ke interface (jadi dilepas lagi saat dihapus); false = sudah ada di server |
 | note                   | Catatan                                                                                      |
 
-### `nameservers`
+### `reseller_settings`
 
-| Kolom                  | Keterangan                                                |
-| ---------------------- | --------------------------------------------------------- |
-| owner_id → users, null | `null` = default server; isi = nameserver kustom reseller |
-| hostname               | `ns1.contoh.com`                                          |
-| ip_address             |                                                           |
-| sort                   | Urutan                                                    |
+Satu baris per reseller yang mengubah tampilan atau nameserver-nya; kolom kosong = bawaan panel.
+
+| Kolom                                   | Keterangan                                                          |
+| --------------------------------------- | ------------------------------------------------------------------- |
+| user_id → users, unique                 | Reseller                                                            |
+| brand_name, brand_color                 | Nama (maks 40) dan warna `#rrggbb` pengganti RAYXO                  |
+| logo_path                               | Logo di disk lokal (`branding/<id>.<ext>`, PNG/JPEG/WebP)           |
+| nameservers                             | json, null = nameserver panel; dipakai zone DNS semua akun reseller |
+| login_domain                            | unique, null; domain tempat reseller dan pelanggannya masuk panel   |
+| login_domain_status, login_domain_error | `pending`, `active`, `failed` dan alasannya                         |
 
 ---
 
@@ -119,7 +123,6 @@ Untuk grafik. Unique `(user_id, date)`.
 | cgi_enabled                       |                                                  |
 | ssl_enabled, force_https          |                                                  |
 | www_mode                          | `both`, `redirect_to_www`, `redirect_to_bare`    |
-| ip_address_id → ip_addresses      |                                                  |
 | bandwidth_limit_mb, disk_limit_mb | null                                             |
 | mail_mode                         | `local` atau `remote`                            |
 | status                            | `pending`, `active`, `suspended`, `failed`       |

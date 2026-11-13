@@ -218,6 +218,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('branding', [BrandingController::class, 'edit'])->name('branding.edit');
         Route::post('branding', [BrandingController::class, 'update'])->middleware('throttle:30,1,branding')->name('branding.update');
         Route::put('branding/nameservers', [BrandingController::class, 'updateNameservers'])->middleware('throttle:30,1,branding')->name('branding.nameservers.update');
+        Route::put('branding/login-domain', [BrandingController::class, 'updateLoginDomain'])->middleware('throttle:10,1,branding-login-domain')->name('branding.login-domain.update');
         Route::get('packages', [PackageController::class, 'index'])->name('packages.index');
         Route::get('packages/create', [PackageController::class, 'create'])->name('packages.create');
         Route::post('packages', [PackageController::class, 'store'])->name('packages.store');

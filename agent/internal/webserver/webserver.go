@@ -102,6 +102,11 @@ type Config struct {
 	// from; FTPUnit is its service, restarted when that file changes.
 	FTPCertificate string
 	FTPUnit        string
+	// SitesDir is Nginx's sites-enabled, which gets one site per reseller
+	// login domain, rayxo-login-<domain>.conf. PanelSnippet is the panel's
+	// own configuration those sites include, written by setup.sh.
+	SitesDir     string
+	PanelSnippet string
 	// CertificateRoots are the roots a custom certificate must chain up to
 	// to count as trusted; nil means the system's.
 	CertificateRoots *x509.CertPool
@@ -155,6 +160,8 @@ func DefaultConfig() Config {
 		PanelCertificateDir:  "/etc/rayxo/ssl",
 		FTPCertificate:       "/etc/ssl/private/pure-ftpd.pem",
 		FTPUnit:              "pure-ftpd-mysql.service",
+		SitesDir:             "/etc/nginx/sites-enabled",
+		PanelSnippet:         "/etc/nginx/snippets/rayxo-panel.conf",
 		Hostnames:            systemHostnames,
 		Run:                  runner.Run,
 		PrepareSite:          sysuser.System{}.PrepareSite,

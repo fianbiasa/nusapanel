@@ -1735,6 +1735,10 @@ configure_nginx() {
     step "Mengatur Nginx untuk panel (port $PANEL_PORT)"
 
     local site=/etc/nginx/sites-available/rayxo.conf
+    # The panel itself, also included by the sites of resellers' sign-in
+    # domains that rayxod writes.
+    mkdir -p /etc/nginx/snippets
+    render "$release_dir/config/nginx-panel-app.conf" /etc/nginx/snippets/rayxo-panel.conf
     render "$release_dir/config/nginx-panel.conf" "$site"
 
     # procfs files always report size 0, so check for content instead.

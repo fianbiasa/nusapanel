@@ -62,6 +62,8 @@ func newEnv(t *testing.T) *testEnv {
 		// Set before the other locations below, which stay as they were.
 		CustomCertificateDir: filepath.Join(base, "etc/rayxo/ssl"),
 		IPv6File:             filepath.Join(base, "if_inet6"),
+		SitesDir:             filepath.Join(base, "etc/nginx/sites-enabled"),
+		PanelSnippet:         filepath.Join(base, "etc/nginx/snippets/rayxo-panel.conf"),
 		Backend:              "127.0.0.1:8080",
 		AcmeDir:              filepath.Join(base, "var/www/rayxo-acme"),
 		// The same layout as /etc/letsencrypt.

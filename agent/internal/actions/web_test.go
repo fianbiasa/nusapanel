@@ -66,6 +66,8 @@ func newWebEnv(t *testing.T) *webEnv {
 		HomeRoot:             "/home",
 		PHPFPMDir:            filepath.Join(base, "sbin"),
 		IPv6File:             filepath.Join(base, "if_inet6"),
+		SitesDir:             filepath.Join(base, "sites-enabled"),
+		PanelSnippet:         filepath.Join(base, "snippets/rayxo-panel.conf"),
 		Backend:              "127.0.0.1:8080",
 		AcmeDir:              filepath.Join(base, "acme"),
 		LetsEncryptDir:       filepath.Join(base, "letsencrypt"),

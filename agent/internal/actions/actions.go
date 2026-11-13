@@ -120,6 +120,10 @@ func Register(registry *rpc.Registry, config Config) {
 		registry.Register(name, method)
 	}
 
+	for name, method := range loginMethods(web) {
+		registry.Register(name, method)
+	}
+
 	for name, method := range networkMethods(defaultServerAddresses()) {
 		registry.Register(name, method)
 	}
