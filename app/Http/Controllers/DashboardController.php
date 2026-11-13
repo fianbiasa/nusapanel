@@ -10,6 +10,7 @@ use App\Models\AuditLog;
 use App\Models\Domain;
 use App\Models\Task;
 use App\Models\User;
+use App\Services\ProcessService;
 use App\Services\UsageStatisticsService;
 use App\Support\AccountLimits;
 use App\Support\ResellerLimits;
@@ -27,7 +28,7 @@ class DashboardController extends Controller
      * what they use and give out against their reseller package; hosting
      * accounts get their own domains and what their package allows.
      */
-    public function __invoke(Request $request, AgentClient $agent, UsageStatisticsService $statistics): Response
+    public function __invoke(Request $request, AgentClient $agent, UsageStatisticsService $statistics, ProcessService $processes): Response
     {
         $user = $request->user();
         $props = [];
@@ -59,6 +60,7 @@ class DashboardController extends Controller
                 ]);
             $props['limits'] = AccountLimits::for($user)->toArray();
             $props['usageHistory'] = $statistics->history([$user->id]);
+            $props['resourceUsage'] = Inertia::defer(fn (): ?array => $processes->accountUsage($user));
         }
 
         return Inertia::render('dashboard', $props);

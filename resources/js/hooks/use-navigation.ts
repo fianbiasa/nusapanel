@@ -4,6 +4,7 @@ import {
     ChartColumn,
     Boxes,
     Clock,
+    Cpu,
     Database,
     FolderOpen,
     FolderUp,
@@ -30,6 +31,7 @@ import { index as auditLogsIndex } from '@/routes/admin/audit-logs';
 import { index as adminDnsIndex } from '@/routes/admin/dns';
 import { index as mailQueueIndex } from '@/routes/admin/mail-queue';
 import { index as packagesIndex } from '@/routes/admin/packages';
+import { index as processesIndex } from '@/routes/admin/processes';
 import { index as resellerPackagesIndex } from '@/routes/admin/reseller-packages';
 import { index as serverSettingsIndex } from '@/routes/admin/server-settings';
 import { index as servicesIndex } from '@/routes/admin/services';
@@ -120,6 +122,11 @@ export function useNavigation(): {
             href: servicesIndex(),
             icon: Activity,
         };
+        const processes: NavItem = {
+            title: 'Proses',
+            href: processesIndex(),
+            icon: Cpu,
+        };
         const mailQueue: NavItem = {
             title: 'Antrean Email',
             href: mailQueueIndex(),
@@ -145,7 +152,14 @@ export function useNavigation(): {
             },
             {
                 label: 'Server',
-                items: [services, mailQueue, serverSettings, tasks, auditLog],
+                items: [
+                    services,
+                    processes,
+                    mailQueue,
+                    serverSettings,
+                    tasks,
+                    auditLog,
+                ],
             },
         );
     } else if (role === 'user') {

@@ -449,5 +449,12 @@
     "This is not a public key this server accepts (ssh-ed25519, ecdsa-sha2-*, ssh-rsa or a security key), or it has options in front of it.": "Ini bukan key publik yang diterima server ini (ssh-ed25519, ecdsa-sha2-*, ssh-rsa, atau security key), atau ada opsi di depannya.",
     "The key is damaged: copy the whole line of the .pub file.": "Key-nya rusak: salin seluruh baris file .pub.",
     "RSA keys need at least :bits bits. Make an ed25519 key instead: ssh-keygen -t ed25519": "Key RSA minimal :bits bit. Buat key ed25519 saja: ssh-keygen -t ed25519",
-    "The comment of the key may have at most :max printable characters.": "Komentar key paling banyak :max karakter yang bisa dicetak."
+    "The comment of the key may have at most :max printable characters.": "Komentar key paling banyak :max karakter yang bisa dicetak.",
+    "The logs can be read once the website is set up on the server.": "Log bisa dibaca setelah website-nya selesai disiapkan di server.",
+    "The website has no visits in its logs yet.": "Belum ada kunjungan di log website ini.",
+    "The logs could not be read. Try again in a moment.": "Log tidak bisa dibaca. Coba lagi sebentar lagi.",
+    "Process :pid has ended already.": "Proses :pid sudah berhenti.",
+    "Process :pid may not be stopped.": "Proses :pid tidak boleh dihentikan.",
+    "Process :pid could not be stopped. Try again in a moment.": "Proses :pid tidak bisa dihentikan. Coba lagi sebentar lagi.",
+    "Process :pid was sent :signal.": "Sinyal :signal dikirim ke proses :pid."
 }

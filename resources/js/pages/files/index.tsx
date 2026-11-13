@@ -84,6 +84,7 @@ import {
     rename,
     search,
     size,
+    sizes as sizesRoute,
     transfer,
     trash,
     upload,
@@ -351,12 +352,26 @@ export default function FilesIndex({
                 title="File Manager"
                 description="Kelola file website kamu langsung dari browser: unggah, edit, salin, pindah, atur izin, dan pulihkan yang terhapus."
                 actions={
-                    <Button variant="secondary" asChild>
-                        <Link href={trash()}>
-                            <Trash2 />
-                            Trash
-                        </Link>
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                        <Button variant="secondary" asChild>
+                            <Link
+                                href={
+                                    path === ''
+                                        ? sizesRoute()
+                                        : sizesRoute({ query: { path } })
+                                }
+                            >
+                                <HardDrive />
+                                Pemakaian disk
+                            </Link>
+                        </Button>
+                        <Button variant="secondary" asChild>
+                            <Link href={trash()}>
+                                <Trash2 />
+                                Trash
+                            </Link>
+                        </Button>
+                    </div>
                 }
             />
 

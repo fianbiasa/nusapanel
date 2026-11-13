@@ -12,6 +12,7 @@ import {
     LockOpen,
     MoreHorizontal,
     RotateCw,
+    ScrollText,
     ShieldAlert,
     SlidersHorizontal,
     Trash2,
@@ -66,6 +67,7 @@ import { store as storeCertificate } from '@/routes/domains/certificate';
 import { update as updateForceHttps } from '@/routes/domains/force-https';
 import { update as updateDocumentRoot } from '@/routes/domains/document-root';
 import { update as updatePhpEnabled } from '@/routes/domains/php-enabled';
+import { show as showLogs } from '@/routes/domains/logs';
 import { show as showWebSettings } from '@/routes/domains/web';
 import { update as updateWww } from '@/routes/domains/www';
 import { update as updatePhpVersion } from '@/routes/domains/php';
@@ -846,6 +848,13 @@ function RowActions({
                         <DropdownMenuItem asChild>
                             <Link href={showWebSettings(domain.id)}>
                                 <SlidersHorizontal /> Pengaturan web…
+                            </Link>
+                        </DropdownMenuItem>
+                    )}
+                    {canEditWeb && (
+                        <DropdownMenuItem asChild>
+                            <Link href={showLogs(domain.id)}>
+                                <ScrollText /> Log & statistik…
                             </Link>
                         </DropdownMenuItem>
                     )}

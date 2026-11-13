@@ -282,6 +282,39 @@ class FileManagerService
     }
 
     /**
+     * What folder path holds, entry by entry, biggest first, and its 50
+     * largest files.
+     *
+     * @return array{path: string, size: int, files: int, folders: int, truncated: bool, entries: list<array{name: string, type: string, size: int, files: int, folders: int}>, largest: list<array{path: string, size: int, modified: int}>}
+     *
+     * @throws ValidationException
+     */
+    public function sizes(User $account, string $path): array
+    {
+        $result = $this->call($account, 'fs.sizes', ['path' => $path], 'path', self::LONG_TIMEOUT);
+
+        /** @var list<array{name: string, type: string, size: int, files: int, folders: int}> $entries */
+        $entries = $result['entries'] ?? [];
+
+        /** @var list<array{path: string, size: int, modified: int}> $largest */
+        $largest = array_map(fn (array $hit): array => [
+            'path' => (string) $hit['path'],
+            'size' => (int) $hit['size'],
+            'modified' => (int) $hit['modified'],
+        ], $result['largest'] ?? []);
+
+        return [
+            'path' => $path,
+            'size' => (int) ($result['size'] ?? 0),
+            'files' => (int) ($result['files'] ?? 0),
+            'folders' => (int) ($result['folders'] ?? 0),
+            'truncated' => (bool) ($result['truncated'] ?? false),
+            'entries' => $entries,
+            'largest' => $largest,
+        ];
+    }
+
+    /**
      * How much each file or folder holds.
      *
      * @param  list<string>  $paths

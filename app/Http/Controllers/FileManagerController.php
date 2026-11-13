@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Rules\FilePath;
 use App\Services\FileManagerService;
+use App\Support\AccountLimits;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -66,6 +67,33 @@ class FileManagerController extends Controller
             'home' => '/home/'.$account->username,
             'chunk_bytes' => FileManagerService::chunkBytes(),
             'max_upload_bytes' => FileManagerService::chunkBytes() * FileManagerService::MAX_CHUNKS,
+        ]);
+    }
+
+    /**
+     * What a folder holds, biggest first, and its largest files. Counting a
+     * large home takes a while, so the page shows first.
+     */
+    public function sizes(Request $request): Response|RedirectResponse
+    {
+        $path = $request->string('path')->toString();
+
+        if (! FilePath::isValidPath($path)) {
+            return to_route('files.sizes');
+        }
+
+        $account = $request->user();
+
+        return Inertia::render('files/sizes', [
+            'path' => $path,
+            'sizes' => Inertia::defer(function () use ($account, $path): array {
+                try {
+                    return ['result' => $this->files->sizes($account, $path), 'error' => null];
+                } catch (ValidationException $exception) {
+                    return ['result' => null, 'error' => collect($exception->errors())->flatten()->first()];
+                }
+            }),
+            'limits' => AccountLimits::for($account)->toArray(),
         ]);
     }
 

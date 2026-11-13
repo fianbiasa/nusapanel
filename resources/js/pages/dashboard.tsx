@@ -109,6 +109,16 @@ type Props = {
         disk_kb: number | null;
     }[];
     systemInfo?: SystemInfoResult;
+    resourceUsage?: ResourceUsage | null;
+};
+
+/** What the account's processes use right now. */
+type ResourceUsage = {
+    processes: number;
+    cpu: number;
+    memory: number;
+    cpus: number;
+    memory_total: number;
 };
 
 export default function Dashboard({
@@ -119,6 +129,7 @@ export default function Dashboard({
     resellerLimits,
     usageHistory,
     systemInfo,
+    resourceUsage,
 }: Props) {
     const { auth } = usePage().props;
     const firstName = auth.user.name.split(' ')[0];
@@ -291,6 +302,14 @@ export default function Dashboard({
                         {limits && (
                             <Panel title="Paket kamu">
                                 <PackageUsage limits={limits} />
+                                <Deferred
+                                    data="resourceUsage"
+                                    fallback={
+                                        <Skeleton className="mt-5 h-20 w-full rounded-xl" />
+                                    }
+                                >
+                                    <ResourceUsageNow usage={resourceUsage} />
+                                </Deferred>
                             </Panel>
                         )}
                     </section>
@@ -671,6 +690,32 @@ function ResourceRing({
                 </p>
             </div>
         </div>
+    );
+}
+
+/** CPU and RAM the account's processes use right now: PHP, cron jobs and SSH. */
+function ResourceUsageNow({ usage }: { usage?: ResourceUsage | null }) {
+    if (!usage) {
+        return null;
+    }
+
+    return (
+        <dl className="mt-5 grid grid-cols-[1fr_auto] gap-x-4 gap-y-1.5 border-t pt-4 text-sm">
+            <dt className="col-span-2 font-semibold">Saat ini</dt>
+            <dt className="text-muted-foreground">CPU</dt>
+            <dd className="text-right font-mono">
+                {usage.cpu.toLocaleString('id-ID')}%{' '}
+                <span className="text-xs text-muted-foreground">
+                    dari {usage.cpus} CPU
+                </span>
+            </dd>
+            <dt className="text-muted-foreground">RAM</dt>
+            <dd className="text-right font-mono">
+                {formatBytes(usage.memory)}
+            </dd>
+            <dt className="text-muted-foreground">Proses</dt>
+            <dd className="text-right">{usage.processes}</dd>
+        </dl>
     );
 }
 

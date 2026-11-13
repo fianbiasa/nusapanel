@@ -1121,6 +1121,9 @@ DEBCONF
 
     quietly "${apt[@]}" install postfix-mysql redis-server rspamd
 
+    # GoAccess makes the visitor reports of websites (the agent's stats.report).
+    quietly "${apt[@]}" install --no-install-recommends goaccess
+
     # cron runs the cron jobs of hosting accounts (the agent writes their crontabs).
     quietly systemctl enable --now mariadb nginx cron "php$PHP_VERSION-fpm"
     info "Nginx, Apache, MariaDB, Postfix, Dovecot, Rspamd, Pure-FTPd, PowerDNS dan PHP $PHP_VERSION terpasang"

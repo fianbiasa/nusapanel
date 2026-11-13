@@ -106,6 +106,8 @@ export const auditActionLabels: Record<string, string> = {
     'database.remote_host_added': 'Host database luar diizinkan',
     'database.remote_host_removed': 'Host database luar dihapus',
     'database.exported': 'Database diexport',
+    'domain.log_downloaded': 'Log website diunduh',
+    'server.process_killed': 'Proses dihentikan',
     'database.imported': 'Import database dimulai',
     'database.maintained': 'Tabel database diperiksa',
     'server.database_remote_access_changed': 'Akses database dari luar diubah',

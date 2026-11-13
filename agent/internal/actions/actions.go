@@ -15,10 +15,12 @@ import (
 	"rayxo/agent/internal/mail"
 	"rayxo/agent/internal/mailqueue"
 	"rayxo/agent/internal/panelport"
+	"rayxo/agent/internal/procmon"
 	"rayxo/agent/internal/quota"
 	"rayxo/agent/internal/reconfigure"
 	"rayxo/agent/internal/rpc"
 	"rayxo/agent/internal/services"
+	"rayxo/agent/internal/sitelogs"
 	"rayxo/agent/internal/sysinfo"
 	"rayxo/agent/internal/sysuser"
 	"rayxo/agent/internal/version"
@@ -108,6 +110,14 @@ func Register(registry *rpc.Registry, config Config) {
 	}
 
 	for name, method := range sshMethods(sysuser.System{}, jails, helper) {
+		registry.Register(name, method)
+	}
+
+	for name, method := range logMethods(sysuser.System{}, sitelogs.New(sitelogs.DefaultConfig()), transfers) {
+		registry.Register(name, method)
+	}
+
+	for name, method := range processMethods(sysuser.System{}, procmon.New(procmon.DefaultConfig())) {
 		registry.Register(name, method)
 	}
 

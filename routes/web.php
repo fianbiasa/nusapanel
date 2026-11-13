@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\DnsController as AdminDnsController;
 use App\Http\Controllers\Admin\MailQueueController;
 use App\Http\Controllers\Admin\PackageController;
+use App\Http\Controllers\Admin\ProcessController;
 use App\Http\Controllers\Admin\ResellerPackageController;
 use App\Http\Controllers\Admin\ServerSettingController;
 use App\Http\Controllers\Admin\ServiceController;
@@ -19,6 +20,7 @@ use App\Http\Controllers\DatabaseToolsController;
 use App\Http\Controllers\DatabaseUserController;
 use App\Http\Controllers\DnsController;
 use App\Http\Controllers\DomainController;
+use App\Http\Controllers\DomainLogController;
 use App\Http\Controllers\DomainWebSettingsController;
 use App\Http\Controllers\EmailController;
 use App\Http\Controllers\FileManagerController;
@@ -77,6 +79,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('domains/{domain}/php', [DomainController::class, 'updatePhpVersion'])->name('domains.php.update');
         Route::put('domains/{domain}/php-settings', [DomainController::class, 'updatePhpSettings'])->name('domains.php-settings.update');
         Route::get('domains/{domain}/web', [DomainWebSettingsController::class, 'show'])->name('domains.web.show');
+        Route::get('domains/{domain}/logs', [DomainLogController::class, 'show'])->middleware('throttle:60,1,domain-logs')->name('domains.logs.show');
+        Route::get('domains/{domain}/logs/download', [DomainLogController::class, 'download'])->middleware('throttle:10,1,domain-log-download')->name('domains.logs.download');
+        Route::get('domains/{domain}/statistics', [DomainLogController::class, 'statistics'])->middleware('throttle:10,1,domain-statistics')->name('domains.statistics');
         Route::put('domains/{domain}/error-pages/{status}', [DomainWebSettingsController::class, 'saveErrorPage'])->whereIn('status', ['400', '401', '403', '404', '500', '503'])->name('domains.error-pages.update');
         Route::delete('domains/{domain}/error-pages/{status}', [DomainWebSettingsController::class, 'removeErrorPage'])->whereIn('status', ['400', '401', '403', '404', '500', '503'])->name('domains.error-pages.destroy');
         Route::post('domains/{domain}/protected-directories', [DomainWebSettingsController::class, 'protectDirectory'])->name('domains.protected-directories.store');
@@ -145,6 +150,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::prefix('files')->name('files.')->controller(FileManagerController::class)->group(function () {
             Route::get('/', 'index')->name('index');
+            Route::get('sizes', 'sizes')->middleware('throttle:20,1,file-sizes')->name('sizes');
             Route::get('edit', 'edit')->name('edit');
             Route::put('content', 'save')->name('save');
             Route::post('create', 'create')->name('create');
@@ -227,6 +233,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('tasks', [TaskController::class, 'index'])->name('tasks.index');
         Route::get('audit-logs', [AuditLogController::class, 'index'])->name('audit-logs.index');
         Route::get('services', [ServiceController::class, 'index'])->name('services.index');
+        Route::get('processes', [ProcessController::class, 'index'])->middleware('throttle:60,1,admin-processes')->name('processes.index');
+        Route::post('processes/kill', [ProcessController::class, 'kill'])->middleware('throttle:30,1,admin-process-kill')->name('processes.kill');
         Route::get('dns', [AdminDnsController::class, 'index'])->name('dns.index');
         Route::get('dns/zones/{dnsZone}', [AdminDnsController::class, 'show'])->name('dns.zones.show');
         Route::post('dns/zones/{dnsZone}/records', [DnsController::class, 'store'])->name('dns.records.store');

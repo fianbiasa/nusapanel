@@ -42,6 +42,7 @@ const (
 	OpExtract    = "extract"
 	OpSearch     = "search"
 	OpDiskUsage  = "disk_usage"
+	OpSizes      = "sizes"
 )
 
 // Request is what the agent sends the helper on stdin.
@@ -325,6 +326,8 @@ func Execute(home, op string, raw json.RawMessage, data *os.File) (any, error) {
 		return run(raw, func(p SearchParams) (any, error) { return h.Search(p.Path, p.Query) })
 	case OpDiskUsage:
 		return run(raw, func(p PathsParams) (any, error) { return h.DiskUsage(p.Paths), nil })
+	case OpSizes:
+		return run(raw, func(p PathParams) (any, error) { return h.Sizes(p.Path) })
 	}
 
 	return nil, errorf(ReasonInvalid, "unknown operation %q", op)

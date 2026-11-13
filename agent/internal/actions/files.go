@@ -221,6 +221,7 @@ func fileMethods(accounts accountSystem, helper fileHelper, transfers fileTransf
 		"fs.extract":       fsMethod[fsExtract](f, files.OpExtract),
 		"fs.search":        fsMethod[fsSearch](f, files.OpSearch),
 		"fs.disk_usage":    fsMethod[fsPaths](f, files.OpDiskUsage),
+		"fs.sizes":         fsMethod[fsPath](f, files.OpSizes),
 		"fs.upload":        {Handler: f.upload},
 		"fs.download":      {Handler: f.download},
 	}
