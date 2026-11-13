@@ -59,15 +59,18 @@ export function ttlLabel(ttl: number): string {
     return ttlLabels[ttl] ?? `${ttl} detik`;
 }
 
-/** The records of a zone (or the template), with edit and delete buttons. */
+/**
+ * The records of a zone (or the template), with edit and delete buttons
+ * when the handlers are given.
+ */
 export function DnsRecordsTable({
     records,
     onEdit,
     onDelete,
 }: {
     records: DnsRecordRow[];
-    onEdit: (record: DnsRecordRow) => void;
-    onDelete: (record: DnsRecordRow) => void;
+    onEdit?: (record: DnsRecordRow) => void;
+    onDelete?: (record: DnsRecordRow) => void;
 }) {
     return (
         <div className="overflow-x-auto">
@@ -111,22 +114,26 @@ export function DnsRecordsTable({
                             </td>
                             <td className={tableStyles.td}>
                                 <div className="flex justify-end gap-1">
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        aria-label={`Ubah record ${record.type} ${record.name}`}
-                                        onClick={() => onEdit(record)}
-                                    >
-                                        <Pencil />
-                                    </Button>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        aria-label={`Hapus record ${record.type} ${record.name}`}
-                                        onClick={() => onDelete(record)}
-                                    >
-                                        <Trash2 />
-                                    </Button>
+                                    {onEdit && (
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            aria-label={`Ubah record ${record.type} ${record.name}`}
+                                            onClick={() => onEdit(record)}
+                                        >
+                                            <Pencil />
+                                        </Button>
+                                    )}
+                                    {onDelete && (
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            aria-label={`Hapus record ${record.type} ${record.name}`}
+                                            onClick={() => onDelete(record)}
+                                        >
+                                            <Trash2 />
+                                        </Button>
+                                    )}
                                 </div>
                             </td>
                         </tr>

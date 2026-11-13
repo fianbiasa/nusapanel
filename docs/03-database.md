@@ -66,17 +66,16 @@ Satu baris per akun, diperbarui berkala.
 | emails_sent_today       |                       |
 | measured_at             |                       |
 
-### `usage_daily`
+### Pemakaian harian
 
-Untuk grafik. Unique `(user_id, date)`.
+Untuk grafik, satu tabel per sumber. Semuanya unique `(user_id, date)` dan dihapus setelah 400 hari.
 
-| Kolom                            | Keterangan   |
-| -------------------------------- | ------------ |
-| user_id → users                  |              |
-| date                             |              |
-| web_bytes, mail_bytes, ftp_bytes |              |
-| disk_mb                          |              |
-| cpu_seconds, memory_peak_mb      | Dari cgroups |
+| Tabel               | Kolom                            | Keterangan                                                                                          |
+| ------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `bandwidth_usages`  | web_bytes, mail_bytes, ftp_bytes | Dari log server, tiap 15 menit                                                                      |
+| `usage_snapshots`   | disk_kb, inodes                  | Pengukuran disk terakhir hari itu                                                                   |
+| `resource_usages`   | cpu_ms, memory_peak_mb           | Dari cgroups akun (PHP-FPM dan sesi SSH, bukan cron), tiap 5 menit; RAM tanpa cache file            |
+| `resource_counters` | user_id, cgroup_id, cpu_usec     | Penghitung CPU tiap cgroup saat terakhir dibaca, supaya bacaan berikutnya hanya menambah selisihnya |
 
 ### `ip_addresses`
 
@@ -164,11 +163,11 @@ Private key **tidak** disimpan di database, hanya di `/etc/rayxo/ssl/` dengan mo
 
 Record disimpan di panel lalu disinkronkan ke PowerDNS oleh agent (sesuai prinsip "database panel = sumber kebenaran").
 
-| Tabel                  | Kolom penting                                                                                                                                                                                                                                                                                                                   |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `dns_zones`            | user_id, domain_id (domain atau pointer-nya; null kalau domainnya terhapus), name (unique). Serial dikelola PowerDNS; DNSSEC menyusul (P6)                                                                                                                                                                                      |
-| `dns_records`          | dns_zone_id, name (absolut tanpa titik di akhir), type, content (bentuk biasa, TXT tanpa kutip), ttl, priority (MX/SRV)                                                                                                                                                                                                         |
-| `dns_template_records` | name (relatif terhadap zone, `@` = zone itu sendiri), type, content (placeholder `{domain}` dan `{ip}`), ttl, priority: record yang dimiliki zone baru dan zone yang di-reset; admin mengubahnya di halaman DNS. Template sendiri per reseller belum ada: zone akun reseller memakai template admin, dengan nameserver reseller |
+| Tabel                  | Kolom penting                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dns_zones`            | user_id, domain_id (domain atau pointer-nya; null kalau domainnya terhapus), name (unique). Serial dikelola PowerDNS; DNSSEC menyusul (P6)                                                                                                                                                                                                                                                                                                   |
+| `dns_records`          | dns_zone_id, name (absolut tanpa titik di akhir), type, content (bentuk biasa, TXT tanpa kutip), ttl, priority (MX/SRV)                                                                                                                                                                                                                                                                                                                      |
+| `dns_template_records` | owner_id (null = template admin, atau reseller pemilik template sendiri), name (relatif terhadap zone, `@` = zone itu sendiri), type, content (placeholder `{domain}` dan `{ip}`), ttl, priority: record yang dimiliki zone baru dan zone yang di-reset; admin mengubahnya di halaman DNS, reseller di menu Template DNS. Zone akun reseller memakai template reseller itu kalau ada, kalau tidak template admin, dengan nameserver reseller |
 
 ---
 

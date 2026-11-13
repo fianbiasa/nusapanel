@@ -71,7 +71,9 @@ func (l Limits) None() bool {
 type Config struct {
 	// UnitDir is /etc/systemd/system.
 	UnitDir string
-	Run     func(ctx context.Context, program string, args ...string) ([]byte, error)
+	// Root is where cgroups are mounted, /sys/fs/cgroup.
+	Root string
+	Run  func(ctx context.Context, program string, args ...string) ([]byte, error)
 }
 
 // Manager writes the slices of accounts. Callers make sure only one call

@@ -34,6 +34,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
     auditActionLabels,
     formatBytes,
+    formatCpuTime,
     formatMegabytes,
     formatQuota,
     formatRelative,
@@ -108,6 +109,8 @@ type Props = {
         date: string;
         bandwidth_bytes: number;
         disk_kb: number | null;
+        cpu_ms: number;
+        memory_peak_mb: number | null;
     }[];
     systemInfo?: SystemInfoResult;
     resourceUsage?: ResourceUsage | null;
@@ -359,7 +362,7 @@ export default function Dashboard({
                     {usageHistory && (
                         <Panel
                             title="Pemakaian 30 hari terakhir"
-                            description="Bandwidth dari log website, email, dan FTP kamu; disk dari pengukuran terakhir tiap hari."
+                            description="Bandwidth dari log website, email, dan FTP kamu; disk dari pengukuran terakhir tiap hari; CPU dan RAM dari PHP dan sesi SSH kamu, diukur tiap 5 menit."
                         >
                             <div className="grid gap-8 lg:grid-cols-2">
                                 <DailyBars
@@ -379,6 +382,22 @@ export default function Dashboard({
                                     format={(kilobytes) =>
                                         formatBytes(kilobytes * 1024)
                                     }
+                                />
+                                <DailyBars
+                                    title="CPU per hari"
+                                    points={usageHistory.map((point) => ({
+                                        date: point.date,
+                                        value: point.cpu_ms,
+                                    }))}
+                                    format={formatCpuTime}
+                                />
+                                <DailyBars
+                                    title="RAM puncak"
+                                    points={usageHistory.map((point) => ({
+                                        date: point.date,
+                                        value: point.memory_peak_mb,
+                                    }))}
+                                    format={formatMegabytes}
                                 />
                             </div>
                         </Panel>

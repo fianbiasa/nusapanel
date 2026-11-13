@@ -301,6 +301,19 @@ export function formatUptime(seconds: number): string {
     return hours > 0 ? `${hours} jam ${minutes} menit` : `${minutes} menit`;
 }
 
+/** CPU time from milliseconds: "45 detik", "12,5 menit", "3,2 jam". */
+export function formatCpuTime(milliseconds: number): string {
+    const seconds = milliseconds / 1000;
+    const [value, unit] =
+        seconds >= 3_600
+            ? [seconds / 3_600, 'jam']
+            : seconds >= 60
+              ? [seconds / 60, 'menit']
+              : [seconds, 'detik'];
+
+    return `${value.toLocaleString('id-ID', { maximumFractionDigits: 1 })} ${unit}`;
+}
+
 export function percentage(used: number, total: number): number {
     return total > 0 ? Math.round((used / total) * 100) : 0;
 }

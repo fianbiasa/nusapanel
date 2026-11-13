@@ -47,6 +47,7 @@ import { index as systemFilesIndex } from '@/routes/admin/system-files';
 import { index as tasksIndex } from '@/routes/admin/tasks';
 import { index as resellerAccountsIndex } from '@/routes/reseller/accounts';
 import { edit as resellerBrandingEdit } from '@/routes/reseller/branding';
+import { index as resellerDnsTemplateIndex } from '@/routes/reseller/dns-template';
 import { index as resellerIpAddressesIndex } from '@/routes/reseller/ip-addresses';
 import { index as resellerLoginHistoryIndex } from '@/routes/reseller/login-history';
 import { index as resellerOwnPackagesIndex } from '@/routes/reseller/packages';
@@ -300,6 +301,11 @@ export function useNavigation(): {
                     title: 'Branding',
                     href: resellerBrandingEdit(),
                     icon: Palette,
+                },
+                {
+                    title: 'Template DNS',
+                    href: resellerDnsTemplateIndex(),
+                    icon: Network,
                 },
                 {
                     title: 'Riwayat Login',

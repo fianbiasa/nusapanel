@@ -50,9 +50,13 @@ func Register(registry *rpc.Registry, config Config) {
 	quotas := quota.New(quota.DefaultConfig())
 	databases := database.New(database.DefaultConfig())
 	jails := jail.New(jail.DefaultConfig())
-	limits := cgroup.New(cgroup.Config{UnitDir: "/etc/systemd/system", Run: runner.Run})
+	limits := cgroup.New(cgroup.Config{UnitDir: "/etc/systemd/system", Root: "/sys/fs/cgroup", Run: runner.Run})
 
 	for name, method := range accountMethods(sysuser.System{}, web, quotas, databases, jails, limits) {
+		registry.Register(name, method)
+	}
+
+	for name, method := range resourceMethods(sysuser.System{}, limits) {
 		registry.Register(name, method)
 	}
 

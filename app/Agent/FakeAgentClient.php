@@ -44,6 +44,7 @@ final class FakeAgentClient implements AgentClient
             'service.status' => $this->serviceReport(),
             'mail.usage' => ['mailboxes' => [], 'simulated' => true],
             'usage.bandwidth' => ['web' => [], 'mail' => [], 'ftp' => [], 'cursor' => [], 'complete' => true, 'simulated' => true],
+            'usage.resources' => $this->resourceReport(),
             'mail.queue_list' => $this->mailQueue(),
             'mail.queue_retry' => ['id' => $params['id'] ?? '', 'simulated' => true],
             'mail.queue_delete' => ['done' => $params['ids'] ?? [], 'failed' => [], 'simulated' => true],
@@ -305,6 +306,33 @@ final class FakeAgentClient implements AgentClient
             ->all();
 
         return ['databases' => $databases, 'simulated' => true];
+    }
+
+    /**
+     * The CPU time and memory of every active or suspended account: each
+     * uses its own steady share of a CPU (0.2 to 2 percent) in one cgroup,
+     * and holds from 32 MB to a few hundred, a little more as the day goes on.
+     *
+     * @return array<string, mixed>
+     */
+    private function resourceReport(): array
+    {
+        $accounts = User::query()
+            ->where('role', Role::User)
+            ->whereIn('status', [AccountStatus::Active, AccountStatus::Suspended])
+            ->orderBy('id')
+            ->pluck('username')
+            ->map(function (string $username): array {
+                $seed = crc32($username);
+
+                return [
+                    'username' => $username,
+                    'memory_bytes' => (32 + $seed % 200 + now()->hour) * 1_048_576,
+                    'cpu' => [['id' => $seed, 'usec' => now()->getTimestamp() * (2_000 + $seed % 18_000)]],
+                ];
+            });
+
+        return ['accounts' => $accounts->values()->all(), 'simulated' => true];
     }
 
     /**

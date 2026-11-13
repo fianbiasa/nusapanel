@@ -2,13 +2,15 @@ import { Head } from '@inertiajs/react';
 import { DailyBars } from '@/components/daily-bars';
 import { PageHeader } from '@/components/page-header';
 import { Panel, tableStyles } from '@/components/panel';
-import { formatBytes, formatMegabytes } from '@/lib/format';
+import { formatBytes, formatCpuTime, formatMegabytes } from '@/lib/format';
 import type { AccountScope } from '@/lib/scoped-routes';
 
 type HistoryPoint = {
     date: string;
     bandwidth_bytes: number;
     disk_kb: number | null;
+    cpu_ms: number;
+    memory_peak_mb: number | null;
 };
 
 type Props = {
@@ -46,8 +48,8 @@ export default function Statistics({
                 title="Statistik"
                 description={
                     scope === 'admin'
-                        ? 'Pemakaian bandwidth dan disk semua akun hosting di server ini.'
-                        : 'Pemakaian bandwidth dan disk akun-akun hosting milik Anda.'
+                        ? 'Pemakaian bandwidth, disk, CPU, dan RAM semua akun hosting di server ini.'
+                        : 'Pemakaian bandwidth, disk, CPU, dan RAM akun-akun hosting milik Anda.'
                 }
             />
 
@@ -68,7 +70,7 @@ export default function Statistics({
 
             <Panel
                 title="30 hari terakhir"
-                description="Bandwidth dari log website, email, dan FTP; disk dari pengukuran terakhir tiap hari."
+                description="Bandwidth dari log website, email, dan FTP; disk dari pengukuran terakhir tiap hari; CPU dan RAM dari PHP dan sesi SSH, diukur tiap 5 menit. RAM puncak adalah puncak tiap akun, dijumlahkan."
             >
                 <div className="grid gap-8 lg:grid-cols-2">
                     <DailyBars
@@ -86,6 +88,22 @@ export default function Statistics({
                             value: point.disk_kb,
                         }))}
                         format={formatKilobytes}
+                    />
+                    <DailyBars
+                        title="CPU per hari"
+                        points={history.map((point) => ({
+                            date: point.date,
+                            value: point.cpu_ms,
+                        }))}
+                        format={formatCpuTime}
+                    />
+                    <DailyBars
+                        title="RAM puncak"
+                        points={history.map((point) => ({
+                            date: point.date,
+                            value: point.memory_peak_mb,
+                        }))}
+                        format={formatMegabytes}
                     />
                 </div>
             </Panel>

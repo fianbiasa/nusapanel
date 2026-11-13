@@ -1,18 +1,12 @@
 import { Form, Head, Link } from '@inertiajs/react';
-import { Network, Plus, RotateCcw, Search } from 'lucide-react';
-import { useState } from 'react';
+import { Network, Search } from 'lucide-react';
 import type { DnsRecordRow } from '@/components/dns-records';
-import {
-    DnsConfirmForm,
-    DnsRecordForm,
-    DnsRecordsTable,
-} from '@/components/dns-records';
+import { DnsTemplatePanel } from '@/components/dns-template-panel';
 import { PageHeader } from '@/components/page-header';
 import { Pagination } from '@/components/pagination';
 import { Panel, tableStyles } from '@/components/panel';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { index } from '@/routes/admin/dns';
 import {
@@ -40,12 +34,6 @@ type Props = {
     types: string[];
 };
 
-type Action =
-    | { type: 'create' }
-    | { type: 'edit'; record: DnsRecordRow }
-    | { type: 'delete'; record: DnsRecordRow }
-    | { type: 'reset' };
-
 export default function AdminDnsIndex({
     zones,
     filters,
@@ -53,16 +41,6 @@ export default function AdminDnsIndex({
     nameservers,
     types,
 }: Props) {
-    const [action, setAction] = useState<Action | null>(null);
-    const [dialogOpen, setDialogOpen] = useState(false);
-
-    const openDialog = (next: Action) => {
-        setAction(next);
-        setDialogOpen(true);
-    };
-
-    const closeDialog = () => setDialogOpen(false);
-
     return (
         <>
             <Head title="DNS" />
@@ -169,96 +147,24 @@ export default function AdminDnsIndex({
                 )}
             </Panel>
 
-            <Panel
-                flush
+            <DnsTemplatePanel
                 title="Template zone baru"
-                description="Record yang dimiliki setiap zone baru dan zone yang di-reset. {domain} diganti nama domain, {ip} alamat IP server. Zone yang sudah ada tidak berubah."
-                action={
-                    <div className="flex flex-wrap gap-2">
-                        <Button
-                            variant="outline"
-                            onClick={() => openDialog({ type: 'reset' })}
-                        >
-                            <RotateCcw /> Kembalikan bawaan
-                        </Button>
-                        <Button onClick={() => openDialog({ type: 'create' })}>
-                            <Plus /> Tambah record
-                        </Button>
-                    </div>
-                }
-            >
-                {template.length === 0 ? (
-                    <p className="px-6 pt-2 pb-8 text-sm text-muted-foreground">
-                        Template kosong: zone baru tidak punya record selain
-                        nameserver.
-                    </p>
-                ) : (
-                    <DnsRecordsTable
-                        records={template}
-                        onEdit={(record) =>
-                            openDialog({ type: 'edit', record })
-                        }
-                        onDelete={(record) =>
-                            openDialog({ type: 'delete', record })
-                        }
-                    />
-                )}
-            </Panel>
-
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                <DialogContent className="rounded-2xl sm:max-w-xl">
-                    {(action?.type === 'create' || action?.type === 'edit') && (
-                        <DnsRecordForm
-                            key={
-                                action.type === 'edit'
-                                    ? `edit-${action.record.id}`
-                                    : 'create'
-                            }
-                            form={
-                                action.type === 'edit'
-                                    ? updateTemplate.form(action.record.id)
-                                    : storeTemplate.form()
-                            }
-                            title={
-                                action.type === 'edit'
-                                    ? 'Ubah record template'
-                                    : 'Tambah record template'
-                            }
-                            description="Berlaku untuk zone baru dan zone yang di-reset."
-                            suffix=".{domain}"
-                            nameHelp="Kosongkan atau isi @ untuk domain itu sendiri."
-                            contentHelp="Pakai {domain} untuk nama domain dan {ip} untuk alamat IP server."
-                            types={types}
-                            record={
-                                action.type === 'edit'
-                                    ? action.record
-                                    : undefined
-                            }
-                            onSuccess={closeDialog}
-                        />
-                    )}
-                    {action?.type === 'delete' && (
-                        <DnsConfirmForm
-                            key={`delete-${action.record.id}`}
-                            form={destroyTemplate.form(action.record.id)}
-                            title={`Hapus ${action.record.type} ${action.record.name} dari template?`}
-                            description="Zone baru tidak lagi mendapat record ini. Zone yang sudah ada tidak berubah."
-                            confirm="Hapus dari template"
-                            onSuccess={closeDialog}
-                        />
-                    )}
-                    {action?.type === 'reset' && (
-                        <DnsConfirmForm
-                            key="reset"
-                            form={resetTemplate.form()}
-                            title="Kembalikan template bawaan?"
-                            description="Template kembali ke bawaan RAYXO: A untuk @, www, mail dan ftp, MX ke mail, dan SPF. Perubahan template hilang; zone yang sudah ada tidak berubah."
-                            confirm="Kembalikan bawaan"
-                            onSuccess={closeDialog}
-                        />
-                    )}
-                </DialogContent>
-            </Dialog>
+                description="Record yang dimiliki setiap zone baru dan zone yang di-reset. {domain} diganti nama domain, {ip} alamat IP server. Zone yang sudah ada tidak berubah. Reseller bisa memakai template sendiri untuk akun-akunnya."
+                template={template}
+                types={types}
+                routes={{
+                    store: storeTemplate,
+                    update: updateTemplate,
+                    destroy: destroyTemplate,
+                    reset: resetTemplate,
+                }}
+                reset={{
+                    label: 'Kembalikan bawaan',
+                    title: 'Kembalikan template bawaan?',
+                    description:
+                        'Template kembali ke bawaan RAYXO: A untuk @, www, mail dan ftp, MX ke mail, dan SPF. Perubahan template hilang; zone yang sudah ada tidak berubah.',
+                }}
+            />
         </>
     );
 }

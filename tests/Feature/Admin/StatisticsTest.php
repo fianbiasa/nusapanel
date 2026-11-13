@@ -6,6 +6,7 @@ use App\Agent\AgentClient;
 use App\Models\AccountUsage;
 use App\Models\BandwidthUsage;
 use App\Models\Package;
+use App\Models\ResourceUsage;
 use App\Models\Setting;
 use App\Models\UsageSnapshot;
 use App\Models\User;
@@ -39,6 +40,8 @@ class StatisticsTest extends TestCase
         BandwidthUsage::factory()->for($small, 'account')->create(['date' => '2026-10-30', 'web_bytes' => 77]);
         AccountUsage::factory()->for($small, 'account')->create(['disk_kb' => 4096]);
         UsageSnapshot::factory()->for($small, 'account')->create(['date' => '2026-11-11', 'disk_kb' => 2048]);
+        ResourceUsage::factory()->for($big, 'account')->create(['date' => '2026-11-12', 'cpu_ms' => 500, 'memory_peak_mb' => 100]);
+        ResourceUsage::factory()->for($small, 'account')->create(['date' => '2026-11-12', 'cpu_ms' => 1500, 'memory_peak_mb' => 200]);
 
         $this->actingAs($admin)
             ->get(route('admin.statistics.index'))
@@ -48,8 +51,8 @@ class StatisticsTest extends TestCase
                 ->where('scope', 'admin')
                 ->where('totals', ['bandwidth_bytes' => 3 * 1048576 + 1024, 'disk_kb' => 4096, 'accounts' => 2])
                 ->has('history', 30)
-                ->where('history.29', ['date' => '2026-11-12', 'bandwidth_bytes' => 1024, 'disk_kb' => null])
-                ->where('history.28', ['date' => '2026-11-11', 'bandwidth_bytes' => 0, 'disk_kb' => 2048])
+                ->where('history.29', ['date' => '2026-11-12', 'bandwidth_bytes' => 1024, 'disk_kb' => null, 'cpu_ms' => 2000, 'memory_peak_mb' => 300])
+                ->where('history.28', ['date' => '2026-11-11', 'bandwidth_bytes' => 0, 'disk_kb' => 2048, 'cpu_ms' => 0, 'memory_peak_mb' => null])
                 ->where('topBandwidth.0', ['id' => $big->id, 'username' => 'big', 'bytes' => 3 * 1048576, 'limit_mb' => 1])
                 ->where('topBandwidth.1.username', 'small')
                 ->where('topDisk.0.username', 'small'));
@@ -63,11 +66,15 @@ class StatisticsTest extends TestCase
         BandwidthUsage::factory()->for($own, 'account')->create(['web_bytes' => 10]);
         BandwidthUsage::factory()->for($other, 'account')->create(['web_bytes' => 99]);
         AccountUsage::factory()->for($other, 'account')->create(['disk_kb' => 99]);
+        ResourceUsage::factory()->for($own, 'account')->create(['date' => '2026-11-12', 'cpu_ms' => 60_000, 'memory_peak_mb' => 64]);
+        ResourceUsage::factory()->for($other, 'account')->create(['date' => '2026-11-12', 'cpu_ms' => 99, 'memory_peak_mb' => 99]);
 
         $this->actingAs($reseller)
             ->get(route('reseller.statistics.index'))
             ->assertInertia(fn (Assert $page) => $page
                 ->where('scope', 'reseller')
+                ->where('history.29.cpu_ms', 60_000)
+                ->where('history.29.memory_peak_mb', 64)
                 ->where('totals', ['bandwidth_bytes' => 10, 'disk_kb' => 0, 'accounts' => 1])
                 ->has('topBandwidth', 1)
                 ->where('topBandwidth.0.username', 'own')

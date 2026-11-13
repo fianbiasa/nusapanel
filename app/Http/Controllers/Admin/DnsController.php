@@ -12,6 +12,7 @@ use App\Support\DnsRecordInput;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -56,7 +57,7 @@ class DnsController extends Controller
         return Inertia::render('admin/dns/index', [
             'zones' => $zones,
             'filters' => ['search' => $search],
-            'template' => DnsTemplateRecord::query()
+            'template' => DnsTemplateRecord::ofTemplate(null)
                 ->orderBy('id')
                 ->get()
                 ->map(fn (DnsTemplateRecord $record): array => [
@@ -125,6 +126,8 @@ class DnsController extends Controller
      */
     public function updateTemplate(DnsTemplateRecordRequest $request, DnsTemplateRecord $dnsTemplateRecord): RedirectResponse
     {
+        Gate::authorize('manage', $dnsTemplateRecord);
+
         $this->dns->updateTemplateRecord($dnsTemplateRecord, $request->record(), $request->user());
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('The template is saved; new zones start with it.')]);
@@ -137,6 +140,8 @@ class DnsController extends Controller
      */
     public function destroyTemplate(Request $request, DnsTemplateRecord $dnsTemplateRecord): RedirectResponse
     {
+        Gate::authorize('manage', $dnsTemplateRecord);
+
         $this->dns->deleteTemplateRecord($dnsTemplateRecord, $request->user());
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('The template is saved; new zones start with it.')]);

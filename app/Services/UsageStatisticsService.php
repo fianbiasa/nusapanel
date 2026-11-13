@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\Role;
 use App\Models\AccountUsage;
 use App\Models\BandwidthUsage;
+use App\Models\ResourceUsage;
 use App\Models\UsageSnapshot;
 use App\Models\User;
 use Carbon\CarbonImmutable;
@@ -13,8 +14,9 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Usage over time and rankings for the statistics pages and the
- * dashboard: daily bandwidth (from the agent's counts) and disk space
- * (from the daily snapshots) of one account or a group of accounts.
+ * dashboard: daily bandwidth (from the agent's counts), disk space (from
+ * the daily snapshots), and CPU time and memory peaks (from the accounts'
+ * cgroups) of one account or a group of accounts.
  */
 class UsageStatisticsService
 {
@@ -32,11 +34,13 @@ class UsageStatisticsService
     }
 
     /**
-     * Bandwidth and disk space per day for the last days, oldest first,
-     * summed over the accounts. A day without a disk snapshot has none.
+     * Bandwidth, disk space, CPU time and memory peaks per day for the last
+     * days, oldest first, summed over the accounts. A day without a disk
+     * snapshot has none, and one without a resource reading has no memory
+     * peak.
      *
      * @param  Builder|list<int>  $accounts  Account ids, or a subquery of them.
-     * @return list<array{date: string, bandwidth_bytes: int, disk_kb: int|null}>
+     * @return list<array{date: string, bandwidth_bytes: int, disk_kb: int|null, cpu_ms: int, memory_peak_mb: int|null}>
      */
     public function history(Builder|array $accounts, int $days = 30): array
     {
@@ -60,15 +64,27 @@ class UsageStatisticsService
             ->selectRaw('date, sum(disk_kb) as total')
             ->pluck('total', 'date');
 
+        $resources = ResourceUsage::query()
+            ->toBase()
+            ->whereIn('user_id', $accounts)
+            ->whereBetween('date', $range)
+            ->groupBy('date')
+            ->selectRaw('date, sum(cpu_ms) as cpu_ms, sum(memory_peak_mb) as memory_peak_mb')
+            ->get()
+            ->keyBy('date');
+
         $history = [];
 
         for ($day = $start; $day->lte($end); $day = $day->addDay()) {
             $date = $day->toDateString();
+            $resource = $resources->get($date);
 
             $history[] = [
                 'date' => $date,
                 'bandwidth_bytes' => (int) ($bandwidth[$date] ?? 0),
                 'disk_kb' => isset($disk[$date]) ? (int) $disk[$date] : null,
+                'cpu_ms' => (int) ($resource->cpu_ms ?? 0),
+                'memory_peak_mb' => $resource === null ? null : (int) $resource->memory_peak_mb,
             ];
         }
 

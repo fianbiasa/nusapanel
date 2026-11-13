@@ -102,7 +102,7 @@ Pembagian level sama seperti DirectAdmin:
 | SSH keys                    | ✅ Tambah/hapus public key, untuk SSH dan SFTP                                                                               | P3   |
 | Site statistics             | ✅ Laporan GoAccess per domain dari log 14 hari, dibuka di tab terpisah yang terisolasi dari panel                           | P3   |
 | Log viewer                  | ✅ Log akses, error Nginx, dan error PHP/Apache per domain: baris terakhir dengan saringan, unduh 14 hari                    | P3   |
-| Pemakaian resource          | ✅ Disk & bandwidth (grafik 30 hari), inode (kuota); CPU & RAM saat ini ★                                                    | P3   |
+| Pemakaian resource          | ✅ Disk, bandwidth, CPU & RAM (grafik 30 hari), inode (kuota); CPU & RAM saat ini ★                                          | P3   |
 | Disk usage explorer         | ✅ Folder & file terbesar, telusuri per folder                                                                               | P3   |
 | Login keys (API key)        | ✅ Izin per area (baca/tulis), batasi alamat IP, masa berlaku; key ditampilkan sekali dan hanya disimpan sebagai hash        | P3   |
 | Pesan/tiket                 | ✅ Tiket ke reseller-nya, atau ke admin kalau dibuat admin; balasan dan statusnya, notifikasi email/Telegram; lampiran belum | P3   |
@@ -128,6 +128,7 @@ Pembagian level sama seperti DirectAdmin:
 | Statistik reseller      | ✅ Total pemakaian vs jatah                                                        | P3   |
 | IP                      | ✅ Berikan IP dari pool reseller ke akun (shared/dedicated)                        | P3   |
 | Nameserver kustom       | ✅ `ns1/ns2.domain-reseller.com` di zone DNS semua akun reseller                   | P3   |
+| Template DNS            | ✅ Template zone sendiri untuk akun-akunnya, disalin dari template admin           | P3   |
 | Branding                | ✅ Logo, nama, warna, domain login panel sendiri (Let's Encrypt)                   | P3   |
 | Overselling             | ✅ On/off (diatur admin)                                                           | P3   |
 | Pesan massal ke user    | ✅ Ke semua akun hosting milik reseller: tampil di dashboard, opsional lewat email | P3   |

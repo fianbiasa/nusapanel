@@ -237,7 +237,7 @@ class DnsService
 
         DB::transaction(function () use ($zone, $actor): void {
             $zone->records()->delete();
-            $zone->records()->createMany($this->withAccountAddresses($this->defaultRecords($zone->name, $zone->domain), $zone->account));
+            $zone->records()->createMany($this->withAccountAddresses($this->defaultRecords($zone->name, $zone->domain, $zone->account), $zone->account));
 
             $this->audit->record('dns.zone_reset', $zone, ['zone' => $zone->name], $actor);
             $this->sync($zone, $actor);
@@ -419,22 +419,53 @@ class DnsService
     }
 
     /**
-     * Add a record to the template new zones start with. Zones that exist
-     * keep their records.
+     * Add a record to the template new zones start with: the
+     * administrators' (no owner) or a reseller's own. Zones that exist keep
+     * their records.
      *
      * @param  array{name: string, type: string, content: string, ttl: int, priority: int|null}  $record  Already validated, name relative.
      *
      * @throws ValidationException
      */
-    public function addTemplateRecord(array $record, User $actor): DnsTemplateRecord
+    public function addTemplateRecord(array $record, User $actor, ?User $owner = null): DnsTemplateRecord
     {
-        $this->ensureNotInTemplate($record, null);
+        $this->ensureNotInTemplate($record, null, $owner);
 
-        $created = DnsTemplateRecord::query()->create($record);
+        $created = new DnsTemplateRecord($record);
+        $created->forceFill(['owner_id' => $owner?->id])->save();
 
-        $this->audit->record('dns.template_changed', null, ['added' => $this->describe($record)], $actor);
+        $this->audit->record('dns.template_changed', $owner, ['added' => $this->describe($record)], $actor);
 
         return $created;
+    }
+
+    /**
+     * The template the zones of a reseller's accounts start with: the
+     * reseller's own records, or the administrators' while it has none.
+     *
+     * @return list<DnsTemplateRecord>
+     */
+    public function templateOf(?User $reseller): array
+    {
+        return array_values(DnsTemplateRecord::ofTemplate($this->templateOwner($reseller, asOwner: true))->orderBy('id')->get()->all());
+    }
+
+    /**
+     * Start a reseller's own template as a copy of the administrators'.
+     * Whatever own records it had are replaced.
+     */
+    public function copyTemplate(User $reseller, User $actor): void
+    {
+        DB::transaction(function () use ($reseller, $actor): void {
+            DnsTemplateRecord::ofTemplate($reseller)->delete();
+
+            foreach (DnsTemplateRecord::ofTemplate(null)->orderBy('id')->get() as $record) {
+                $copy = new DnsTemplateRecord($record->only(['name', 'type', 'content', 'ttl', 'priority']));
+                $copy->forceFill(['owner_id' => $reseller->id])->save();
+            }
+
+            $this->audit->record('dns.template_copied', $reseller, [], $actor);
+        });
     }
 
     /**
@@ -446,12 +477,12 @@ class DnsService
      */
     public function updateTemplateRecord(DnsTemplateRecord $templateRecord, array $record, User $actor): void
     {
-        $this->ensureNotInTemplate($record, $templateRecord->id);
+        $this->ensureNotInTemplate($record, $templateRecord->id, $templateRecord->owner);
 
         $before = $this->describe($templateRecord->only(['name', 'type', 'content', 'ttl', 'priority']));
         $templateRecord->forceFill($record)->save();
 
-        $this->audit->record('dns.template_changed', null, ['from' => $before, 'to' => $this->describe($record)], $actor);
+        $this->audit->record('dns.template_changed', $templateRecord->owner, ['from' => $before, 'to' => $this->describe($record)], $actor);
     }
 
     /**
@@ -461,22 +492,25 @@ class DnsService
     {
         $templateRecord->delete();
 
-        $this->audit->record('dns.template_changed', null, ['removed' => $this->describe($templateRecord->only(['name', 'type', 'content', 'ttl', 'priority']))], $actor);
+        $this->audit->record('dns.template_changed', $templateRecord->owner, ['removed' => $this->describe($templateRecord->only(['name', 'type', 'content', 'ttl', 'priority']))], $actor);
     }
 
     /**
-     * Put the template back to the one RAYXO ships.
+     * Put the administrators' template back to the one RAYXO ships, or
+     * drop a reseller's own so its accounts use the administrators' again.
      */
-    public function resetTemplate(User $actor): void
+    public function resetTemplate(User $actor, ?User $owner = null): void
     {
-        DB::transaction(function () use ($actor): void {
-            DnsTemplateRecord::query()->delete();
+        DB::transaction(function () use ($actor, $owner): void {
+            DnsTemplateRecord::ofTemplate($owner)->delete();
 
-            foreach (self::DEFAULT_TEMPLATE as $record) {
-                DnsTemplateRecord::query()->create($record);
+            if ($owner === null) {
+                foreach (self::DEFAULT_TEMPLATE as $record) {
+                    DnsTemplateRecord::query()->create($record);
+                }
             }
 
-            $this->audit->record('dns.template_reset', null, [], $actor);
+            $this->audit->record('dns.template_reset', $owner, [], $actor);
         });
     }
 
@@ -769,7 +803,7 @@ class DnsService
             $zone = new DnsZone(['name' => $domain->name]);
             $zone->forceFill(['user_id' => $domain->user_id, 'domain_id' => $domain->id])->save();
 
-            $zone->records()->createMany($this->withAccountAddresses($this->defaultRecords($domain->name, $domain), $domain->account));
+            $zone->records()->createMany($this->withAccountAddresses($this->defaultRecords($domain->name, $domain, $domain->account), $domain->account));
 
             return $zone;
         });
@@ -781,9 +815,9 @@ class DnsService
      *
      * @return list<array{name: string, type: string, content: string, ttl: int, priority: int|null}>
      */
-    private function defaultRecords(string $zone, ?Domain $domain): array
+    private function defaultRecords(string $zone, ?Domain $domain, ?User $account): array
     {
-        $records = $this->templateRecords($zone);
+        $records = $this->templateRecords($zone, $account);
 
         if ($domain === null) {
             return $records;
@@ -838,9 +872,9 @@ class DnsService
      *
      * @throws ValidationException
      */
-    private function ensureNotInTemplate(array $record, ?int $ignoreId): void
+    private function ensureNotInTemplate(array $record, ?int $ignoreId, ?User $owner): void
     {
-        $exists = DnsTemplateRecord::query()
+        $exists = DnsTemplateRecord::ofTemplate($owner)
             ->where('name', $record['name'])
             ->where('type', $record['type'])
             ->get()
@@ -921,12 +955,12 @@ class DnsService
      *
      * @return list<array{name: string, type: string, content: string, ttl: int, priority: int|null}>
      */
-    private function templateRecords(string $zone): array
+    private function templateRecords(string $zone, ?User $account): array
     {
         $ip = $this->publicIp();
         $records = [];
 
-        foreach (DnsTemplateRecord::query()->orderBy('id')->get() as $template) {
+        foreach (DnsTemplateRecord::ofTemplate($this->templateOwner($account))->orderBy('id')->get() as $template) {
             // Without a known address, records that need it are left out.
             if ($ip === null && str_contains($template->content, '{ip}')) {
                 continue;
@@ -1034,6 +1068,22 @@ class DnsService
         }
 
         return $names;
+    }
+
+    /**
+     * Whose template the zones of an account (or, with asOwner, of the
+     * reseller itself) start from: its reseller's while that has records
+     * of its own, else the administrators' (null).
+     */
+    private function templateOwner(?User $user, bool $asOwner = false): ?User
+    {
+        $reseller = $asOwner ? $user : $user?->owner;
+
+        if ($reseller === null || ! $reseller->isReseller()) {
+            return null;
+        }
+
+        return DnsTemplateRecord::ofTemplate($reseller)->exists() ? $reseller : null;
     }
 
     /**
