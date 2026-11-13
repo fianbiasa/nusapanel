@@ -905,7 +905,7 @@ class DomainService
         $queued = 0;
 
         Domain::query()
-            ->with(['account', 'parent.protectedDirectories.logins', 'urlRedirects', 'protectedDirectories.logins'])
+            ->with(['account.ipv4Address', 'account.ipv6Address', 'parent.protectedDirectories.logins', 'urlRedirects', 'protectedDirectories.logins'])
             ->where('status', DomainStatus::Active)
             ->whereHas('account', fn (Builder $query) => $query->whereIn('status', [
                 AccountStatus::Active,
@@ -918,6 +918,26 @@ class DomainService
             });
 
         return $queued;
+    }
+
+    /**
+     * Queue the configuration of every website of the account again, e.g.
+     * after its addresses changed. Each is pending until the agent applied
+     * it; websites that are being deleted are left alone. Callers hold a
+     * transaction.
+     */
+    public function reapplyAccountWebsites(User $account, ?User $actor): void
+    {
+        Domain::query()
+            ->with(['parent.protectedDirectories.logins', 'urlRedirects', 'protectedDirectories.logins'])
+            ->where('user_id', $account->id)
+            ->whereIn('status', [DomainStatus::Active, DomainStatus::Pending, DomainStatus::Failed])
+            ->orderBy('id')
+            ->each(function (Domain $domain) use ($account, $actor): void {
+                $domain->forceFill(['status' => DomainStatus::Pending])->save();
+                $domain->setRelation('account', $account);
+                $this->dispatchApply($domain, $account, $actor);
+            });
     }
 
     /**
@@ -1054,6 +1074,15 @@ class DomainService
             if ($website !== null) {
                 $params += WebSettings::forAgent($website);
             }
+        }
+
+        // An account with addresses of its own is served there only.
+        if ($account->ipv4Address !== null) {
+            $params['ipv4'] = $account->ipv4Address->address;
+        }
+
+        if ($account->ipv6Address !== null) {
+            $params['ipv6'] = $account->ipv6Address->address;
         }
 
         $this->tasks->dispatch('web.apply_domain', $params, $account, $actor);

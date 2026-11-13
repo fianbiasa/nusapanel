@@ -108,6 +108,11 @@ func run(logger *slog.Logger, cfg config) error {
 		logger.Error("could not restore every SSH jail", "error", err)
 	}
 
+	// Neither do the IP addresses rayxod added to the network interface.
+	if err := actions.RestoreAddresses(context.Background()); err != nil {
+		logger.Error("could not add every IP address again", "error", err)
+	}
+
 	manager := services.New(services.DefaultConfig())
 	changer := reconfigure.New(reconfigure.DefaultConfig())
 	ports := panelport.New(panelport.DefaultConfig())

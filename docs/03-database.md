@@ -17,30 +17,30 @@ Konvensi:
 
 Satu tabel untuk admin, reseller, dan user (sama seperti DirectAdmin: setiap level juga user Linux). Memakai tabel `users` bawaan Laravel/Fortify; kolom yang baru dibutuhkan di fase berikutnya ditambahkan saat fase itu dikerjakan.
 
-| Kolom                        | Tipe                                                        | Keterangan                                                                                                          |
-| ---------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| username                     | varchar(16), unique                                         | Juga nama user Linux. Pola `^[a-z][a-z0-9]{2,15}$`, bukan nama tercadang                                            |
-| name                         | varchar                                                     | Nama tampilan                                                                                                       |
-| email                        | varchar                                                     |                                                                                                                     |
-| password                     | varchar                                                     | bcrypt, untuk login panel                                                                                           |
-| role                         | enum `admin`, `reseller`, `user`                            |                                                                                                                     |
-| owner_id                     | → users, null                                               | Pembuat akun (admin/reseller). Admin pertama `null`                                                                 |
-| package_id                   | → packages, null                                            |                                                                                                                     |
-| custom_limits                | json, null                                                  | Override limit paket khusus akun ini                                                                                |
-| status                       | enum `pending`, `active`, `suspended`, `deleting`, `failed` |                                                                                                                     |
-| suspend_reason               | varchar, null                                               |                                                                                                                     |
-| phpmyadmin_expires_at        | timestamp, null                                             | kapan sesi phpMyAdmin yang terbuka berakhir; scheduler lalu memberi user pemilik MariaDB password acak              |
-| sftp_password_set_at         | timestamp, null                                             | kapan password SFTP terakhir diatur; null kalau belum ada. Password-nya hanya ada di server (hash di `/etc/shadow`) |
-| uid                          | int, unique                                                 | UID Linux                                                                                                           |
-| gid                          | int, null                                                   | GID grup milik akun (dari agent, seperti uid); login FTP berjalan sebagai uid:gid ini                               |
-| ip_address_id                | → ip_addresses                                              | IP utama                                                                                                            |
-| language, timezone, theme    | varchar                                                     |                                                                                                                     |
-| cron_email                   | varchar, null                                               | Tujuan email output cron                                                                                            |
-| two_factor_secret 🔒         | text, null                                                  |                                                                                                                     |
-| two_factor_recovery_codes 🔒 | text, null                                                  |                                                                                                                     |
-| two_factor_confirmed_at      | timestamp, null                                             |                                                                                                                     |
-| branding                     | json, null                                                  | Khusus reseller: logo, nama, warna, domain panel                                                                    |
-| last_login_at                | timestamp, null                                             |                                                                                                                     |
+| Kolom                            | Tipe                                                        | Keterangan                                                                                                          |
+| -------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| username                         | varchar(16), unique                                         | Juga nama user Linux. Pola `^[a-z][a-z0-9]{2,15}$`, bukan nama tercadang                                            |
+| name                             | varchar                                                     | Nama tampilan                                                                                                       |
+| email                            | varchar                                                     |                                                                                                                     |
+| password                         | varchar                                                     | bcrypt, untuk login panel                                                                                           |
+| role                             | enum `admin`, `reseller`, `user`                            |                                                                                                                     |
+| owner_id                         | → users, null                                               | Pembuat akun (admin/reseller). Admin pertama `null`                                                                 |
+| package_id                       | → packages, null                                            |                                                                                                                     |
+| custom_limits                    | json, null                                                  | Override limit paket khusus akun ini                                                                                |
+| status                           | enum `pending`, `active`, `suspended`, `deleting`, `failed` |                                                                                                                     |
+| suspend_reason                   | varchar, null                                               |                                                                                                                     |
+| phpmyadmin_expires_at            | timestamp, null                                             | kapan sesi phpMyAdmin yang terbuka berakhir; scheduler lalu memberi user pemilik MariaDB password acak              |
+| sftp_password_set_at             | timestamp, null                                             | kapan password SFTP terakhir diatur; null kalau belum ada. Password-nya hanya ada di server (hash di `/etc/shadow`) |
+| uid                              | int, unique                                                 | UID Linux                                                                                                           |
+| gid                              | int, null                                                   | GID grup milik akun (dari agent, seperti uid); login FTP berjalan sebagai uid:gid ini                               |
+| ipv4_address_id, ipv6_address_id | → ip_addresses, null                                        | Alamat sendiri website akun hosting; null = alamat server                                                           |
+| language, timezone, theme        | varchar                                                     |                                                                                                                     |
+| cron_email                       | varchar, null                                               | Tujuan email output cron                                                                                            |
+| two_factor_secret 🔒             | text, null                                                  |                                                                                                                     |
+| two_factor_recovery_codes 🔒     | text, null                                                  |                                                                                                                     |
+| two_factor_confirmed_at          | timestamp, null                                             |                                                                                                                     |
+| branding                         | json, null                                                  | Khusus reseller: logo, nama, warna, domain panel                                                                    |
+| last_login_at                    | timestamp, null                                             |                                                                                                                     |
 
 ### `packages`
 
@@ -80,16 +80,15 @@ Untuk grafik. Unique `(user_id, date)`.
 
 ### `ip_addresses`
 
-| Kolom                     | Keterangan                      |
-| ------------------------- | ------------------------------- |
-| address                   | unique, IPv4/IPv6               |
-| version                   | 4 atau 6                        |
-| netmask                   |                                 |
-| is_server_ip              | IP utama server                 |
-| status                    | `free`, `shared`, `dedicated`   |
-| reseller_id → users, null | Pool milik reseller             |
-| user_id → users, null     | Kalau dedicated untuk satu user |
-| ptr                       | Reverse DNS (info)              |
+| Kolom                  | Keterangan                                                                                   |
+| ---------------------- | -------------------------------------------------------------------------------------------- |
+| address                | unique, IPv4/IPv6 seperti ditulis agent (IPv6 dipendekkan, huruf kecil)                      |
+| version                | 4 atau 6                                                                                     |
+| prefix                 | Panjang prefix di interface (bawaan 32/128)                                                  |
+| owner_id → users, null | Reseller yang boleh memberikannya ke akunnya; null = milik admin                             |
+| dedicated              | Hanya untuk satu akun                                                                        |
+| added                  | Ditambahkan agent ke interface (jadi dilepas lagi saat dihapus); false = sudah ada di server |
+| note                   | Catatan                                                                                      |
 
 ### `nameservers`
 

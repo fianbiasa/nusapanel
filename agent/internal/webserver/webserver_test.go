@@ -398,6 +398,48 @@ func TestRenderedNginxVhost(t *testing.T) {
 		"    listen 80;\n    listen [::]:80;\n    server_name example.com www.example.com;\n")
 }
 
+func TestSitesWithAddressesOfTheirOwnListenOnlyThere(t *testing.T) {
+	env := newEnv(t)
+	env.write(env.cfg.IPv6File, "00000000000000000000000000000001 01 80 10 80       lo\n")
+	env.writeCertificate("example.com", "example.com", "www.example.com")
+
+	site := budiSite
+	site.SSL = true
+	site.IPv4Address = "192.0.2.10"
+	env.mustApply(site)
+
+	nginx := env.read(env.nginxVhost("budi", "example.com"))
+	assertContains(t, "nginx vhost on its own IPv4 address", nginx,
+		"    listen 192.0.2.10:80;\n    listen [::]:80;\n    server_name",
+		"    listen 192.0.2.10:443 ssl http2;\n    listen [::]:443 ssl http2;\n    server_name",
+	)
+	assertNotContains(t, "nginx vhost on its own IPv4 address", nginx, "listen 80;", "listen 443 ssl")
+
+	site.IPv6Address = "2001:db8::10"
+	env.mustApply(site)
+
+	nginx = env.read(env.nginxVhost("budi", "example.com"))
+	assertContains(t, "nginx vhost on its own addresses", nginx,
+		"    listen 192.0.2.10:80;\n    listen [2001:db8::10]:80;\n    server_name",
+		"    listen 192.0.2.10:443 ssl http2;\n    listen [2001:db8::10]:443 ssl http2;\n    server_name",
+	)
+	assertNotContains(t, "nginx vhost on its own addresses", nginx, "[::]")
+}
+
+func TestSiteAddressesMustBeOfTheirVersion(t *testing.T) {
+	for _, site := range []Site{
+		{User: "budi", Domain: "example.com", PHPVersion: "8.4", IPv4Address: "2001:db8::10"},
+		{User: "budi", Domain: "example.com", PHPVersion: "8.4", IPv6Address: "192.0.2.10"},
+		{User: "budi", Domain: "example.com", PHPVersion: "8.4", IPv4Address: "192.0.2.10; include /etc/passwd"},
+		{User: "budi", Domain: "example.com", PHPVersion: "8.4", IPv4Address: "127.0.0.1"},
+		{User: "budi", Domain: "example.com", PHPVersion: "8.4", IPv6Address: "::"},
+	} {
+		if err := site.Validate(); err == nil {
+			t.Errorf("site with %q and %q is valid", site.IPv4Address, site.IPv6Address)
+		}
+	}
+}
+
 func TestRenderedApacheVhost(t *testing.T) {
 	env := newEnv(t)
 	env.mustApply(budiSite)

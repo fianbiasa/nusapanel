@@ -67,3 +67,22 @@ func TestPHPVersion(t *testing.T) {
 		}
 	}
 }
+
+func TestIPAddress(t *testing.T) {
+	for _, address := range []string{"203.0.113.10", "10.0.0.5", "2001:db8::10", "2a06:9f44:e000::36d7:b4d4"} {
+		if ip, err := IPAddress(address); err != nil || ip.String() != address {
+			t.Errorf("IPAddress(%q) = %v, %v, want the address", address, ip, err)
+		}
+	}
+
+	invalid := []string{
+		"", "203.0.113", "203.0.113.010", "203.0.113.10/32", " 203.0.113.10", "2001:DB8::10", "2001:db8:0::10",
+		"::ffff:203.0.113.10", "fe80::1%eth0", "127.0.0.1", "::1", "0.0.0.0", "::", "169.254.1.1", "fe80::1",
+		"224.0.0.1", "ff02::1", "example.com", "203.0.113.10;",
+	}
+	for _, address := range invalid {
+		if _, err := IPAddress(address); err == nil {
+			t.Errorf("IPAddress(%q) = nil, want an error", address)
+		}
+	}
+}

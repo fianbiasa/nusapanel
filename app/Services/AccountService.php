@@ -35,6 +35,7 @@ class AccountService
         private DnsService $dns,
         private MailService $mail,
         private SshService $ssh,
+        private IpAddressService $ipAddresses,
     ) {}
 
     /**
@@ -193,6 +194,11 @@ class AccountService
 
             $this->domains->reapplyCgiWebsites(User::query()->whereKey($account->id), $actor);
             $this->ssh->reapply(User::query()->whereKey($account->id), $actor);
+
+            // Its addresses belong to the previous owner.
+            if ($account->ipv4_address_id !== null || $account->ipv6_address_id !== null) {
+                $this->ipAddresses->setAccountAddresses($account, null, null, $actor);
+            }
 
             $this->audit->record('account.transferred', $account, [
                 'username' => $account->username,

@@ -6,6 +6,7 @@ package validate
 import (
 	"errors"
 	"fmt"
+	"net/netip"
 	"regexp"
 	"strings"
 )
@@ -92,4 +93,20 @@ func PHPVersion(version string) error {
 	}
 
 	return nil
+}
+
+// IPAddress parses address, an IPv4 or IPv6 address the server can serve
+// on, in its canonical form: not loopback, link-local, multicast or
+// unspecified, without a zone, and no IPv4 address written as IPv6.
+func IPAddress(address string) (netip.Addr, error) {
+	ip, err := netip.ParseAddr(address)
+	if err != nil || ip.String() != address || ip.Zone() != "" || ip.Is4In6() {
+		return netip.Addr{}, fmt.Errorf("%q is not an IP address in its usual form", address)
+	}
+
+	if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsMulticast() || ip.IsUnspecified() || ip.IsLinkLocalMulticast() || ip.IsInterfaceLocalMulticast() {
+		return netip.Addr{}, fmt.Errorf("%s is not an address a server can serve on", address)
+	}
+
+	return ip, nil
 }

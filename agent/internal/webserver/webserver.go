@@ -272,6 +272,11 @@ type Site struct {
 	// inside domains/ (see checkRoot); empty means domains/<domain>/
 	// public_html, or the parent's for an alias. A forward has none.
 	Root string
+	// IPv4Address and IPv6Address are the addresses of its own the site
+	// is served on, instead of every address of the server; empty means
+	// every address of that version.
+	IPv4Address string
+	IPv6Address string
 	// Kind is what the domain serves; empty means KindDomain.
 	Kind Kind
 	// Parent is the domain of the same account an alias shows or a
@@ -360,6 +365,10 @@ func (s Site) Validate() error {
 		return err
 	}
 
+	if err := checkListenAddresses(s.IPv4Address, s.IPv6Address); err != nil {
+		return err
+	}
+
 	site := s
 	site.Kind = s.kind()
 
@@ -376,6 +385,27 @@ func (s Site) Validate() error {
 	}
 
 	return validateRedirects(s.Redirects)
+}
+
+// checkListenAddresses checks the addresses of its own a site is served on.
+func checkListenAddresses(ipv4, ipv6 string) error {
+	if ipv4 != "" {
+		if ip, err := validate.IPAddress(ipv4); err != nil {
+			return err
+		} else if !ip.Is4() {
+			return fmt.Errorf("%s is not an IPv4 address", ipv4)
+		}
+	}
+
+	if ipv6 != "" {
+		if ip, err := validate.IPAddress(ipv6); err != nil {
+			return err
+		} else if !ip.Is6() {
+			return fmt.Errorf("%s is not an IPv6 address", ipv6)
+		}
+	}
+
+	return nil
 }
 
 // PHPInstalled reports whether PHP-FPM of version is installed.

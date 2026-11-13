@@ -30,7 +30,10 @@ type siteData struct {
 	LogDir          string
 	NginxAccountDir string
 	Backend         string
-	IPv6            bool
+	// Listen are the addresses the site's servers listen on, each followed
+	// by the port: "" (every IPv4 address), "[::]:" (every IPv6 address),
+	// or "192.0.2.10:" and "[2001:db8::10]:" for its own.
+	Listen []string
 	// PHP is set when the website runs PHP, in the PHP-FPM pool Socket and
 	// PoolName identify.
 	PHP      bool
@@ -178,7 +181,7 @@ func (m *Manager) siteData(site Site) siteData {
 		LogDir:            m.cfg.LogDir,
 		NginxAccountDir:   m.nginxAccountDir(site.User),
 		Backend:           m.cfg.Backend,
-		IPv6:              m.hasIPv6(),
+		Listen:            m.listenAddresses(site),
 		PHP:               !site.NoPHP,
 		Socket:            pool.Socket,
 		PoolName:          pool.PoolName,
@@ -283,6 +286,25 @@ func (m *Manager) unitData(version string) unitData {
 
 func (m *Manager) accountData(user string) accountData {
 	return accountData{User: user}
+}
+
+// listenAddresses returns where the site's servers listen (siteData.Listen):
+// its own addresses, or every address of a version it has none of. IPv6
+// is left out on a server without it.
+func (m *Manager) listenAddresses(site Site) []string {
+	listen := []string{""}
+	if site.IPv4Address != "" {
+		listen[0] = site.IPv4Address + ":"
+	}
+
+	switch {
+	case site.IPv6Address != "":
+		listen = append(listen, "["+site.IPv6Address+"]:")
+	case m.hasIPv6():
+		listen = append(listen, "[::]:")
+	}
+
+	return listen
 }
 
 // hasIPv6 reports whether the server has IPv6. procfs files report size 0,

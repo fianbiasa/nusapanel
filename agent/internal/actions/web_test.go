@@ -263,6 +263,10 @@ func TestWebMethodsRejectInvalidParams(t *testing.T) {
 			{"username": "budi", "domain": "example.com", "php_version": "8.4", "hotlink": map[string]any{"extensions": []string{"jpg"}, "redirect_to": "https://example.com/x.png"}},
 			{"username": "budi", "domain": "example.com", "php_version": "8.4", "mime_types": []map[string]any{{"extension": "foo", "type": "text/plain; x"}}},
 			{"username": "budi", "domain": "example.com", "php_version": "8.4", "php_extensions": []string{"js"}},
+			{"username": "budi", "domain": "example.com", "php_version": "8.4", "ipv4": "2001:db8::10"},
+			{"username": "budi", "domain": "example.com", "php_version": "8.4", "ipv4": "192.0.2.10:8080"},
+			{"username": "budi", "domain": "example.com", "php_version": "8.4", "ipv6": "192.0.2.10"},
+			{"username": "budi", "domain": "example.com", "php_version": "8.4", "ipv6": "[2001:db8::10]"},
 		},
 		"web.remove_domain": {
 			{"username": "budi"},
@@ -340,6 +344,29 @@ func TestApplyDomainSetsUpTheWebsite(t *testing.T) {
 	again, err := env.call("web.apply_domain", applyParams("example.com", "8.4"))
 	if err != nil || string(again) != string(result) {
 		t.Fatalf("second apply: %s, %v", again, err)
+	}
+}
+
+func TestApplyDomainServesTheWebsiteOnTheAccountsAddresses(t *testing.T) {
+	env := newWebEnv(t)
+
+	params := applyParams("example.com", "8.4")
+	params["ipv4"] = "192.0.2.10"
+	params["ipv6"] = "2001:db8::10"
+
+	if _, err := env.call("web.apply_domain", params); err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+
+	vhost, err := os.ReadFile(env.cfg.NginxDir + "/budi/example.com.conf")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, listen := range []string{"listen 192.0.2.10:80;", "listen [2001:db8::10]:80;"} {
+		if !strings.Contains(string(vhost), listen) {
+			t.Errorf("the vhost has no %q:\n%s", listen, vhost)
+		}
 	}
 }
 

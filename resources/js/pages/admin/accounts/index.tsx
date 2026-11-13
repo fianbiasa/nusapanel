@@ -4,6 +4,7 @@ import {
     Boxes,
     LogIn,
     MoreHorizontal,
+    Network,
     Package,
     Plus,
     Search,
@@ -74,6 +75,11 @@ type AccountRow = {
     /** For a reseller, how many accounts it owns. */
     owned_accounts: number | null;
     domain: string | null;
+    /** The account's own addresses; null is the server's. */
+    ipv4_address_id: number | null;
+    ipv6_address_id: number | null;
+    ipv4: string | null;
+    ipv6: string | null;
     /** Megabytes; `used_mb` is null until the server measured the account. */
     disk: { used_mb: number | null; limit_mb: number | null };
     created_at: string | null;
@@ -86,11 +92,26 @@ type ActionType =
     | 'package'
     | 'login-as'
     | 'transfer'
-    | 'reseller-package';
+    | 'reseller-package'
+    | 'addresses';
 
 type Routes = ReturnType<typeof accountRoutes>;
 
 type OwnerOption = { id: number; username: string; role: Role };
+
+/**
+ * An extra IP address of the server: `of` says whose accounts may have it
+ * (like `packages_of`), `used_by` which accounts have it; a dedicated one
+ * only goes to one account.
+ */
+type IpOption = {
+    id: number;
+    address: string;
+    version: 4 | 6;
+    of: string;
+    dedicated: boolean;
+    used_by: number[];
+};
 
 type BulkActionType = 'suspend' | 'unsuspend' | 'delete' | 'package';
 
@@ -107,6 +128,7 @@ type Props = {
     packageGroups: Record<string, PackageOption[]> | null;
     resellerPackages: PackageOption[] | null;
     owners: OwnerOption[] | null;
+    ipAddresses: IpOption[];
     filters: {
         search: string;
         status: AccountStatus | '';
@@ -149,6 +171,7 @@ export default function AccountsIndex({
     packageGroups,
     resellerPackages,
     owners,
+    ipAddresses,
     filters,
 }: Props) {
     const { auth } = usePage().props;
@@ -159,6 +182,13 @@ export default function AccountsIndex({
     const [sort, setSort] = useState<AccountSort>(filters.sort);
     const packagesFor = (account: AccountRow): PackageOption[] =>
         isAdmin ? (packageGroups?.[account.packages_of] ?? []) : packages;
+    const addressesFor = (account: AccountRow): IpOption[] =>
+        ipAddresses.filter(
+            (option) =>
+                option.of === account.packages_of &&
+                (!option.dedicated ||
+                    option.used_by.every((id) => id === account.id)),
+        );
     const getInitials = useInitials();
     const [action, setAction] = useState<AccountAction | null>(null);
     const [dialogOpen, setDialogOpen] = useState(false);
@@ -539,6 +569,16 @@ export default function AccountsIndex({
                                                     —
                                                 </span>
                                             )}
+                                            {(account.ipv4 ?? account.ipv6) && (
+                                                <p className="font-mono text-xs text-muted-foreground">
+                                                    {[
+                                                        account.ipv4,
+                                                        account.ipv6,
+                                                    ]
+                                                        .filter(Boolean)
+                                                        .join(' · ')}
+                                                </p>
+                                            )}
                                         </td>
                                         <td className={tableStyles.td}>
                                             {account.role === 'reseller' ? (
@@ -661,6 +701,17 @@ export default function AccountsIndex({
                         )}
                     {action &&
                         'account' in action &&
+                        action.type === 'addresses' && (
+                            <ChangeAddressesForm
+                                key={`addresses-${action.account.id}`}
+                                routes={routes}
+                                account={action.account}
+                                addresses={addressesFor(action.account)}
+                                onSuccess={() => setDialogOpen(false)}
+                            />
+                        )}
+                    {action &&
+                        'account' in action &&
                         action.type === 'login-as' && (
                             <LoginAsForm
                                 key={`login-as-${action.account.id}`}
@@ -765,6 +816,141 @@ function ChangePackageForm({
                         <Button type="submit" disabled={processing}>
                             {processing && <Spinner />}
                             Simpan paket
+                        </Button>
+                    </DialogFooter>
+                </>
+            )}
+        </Form>
+    );
+}
+
+/** The select's value for "the server's address"; Radix items cannot be empty. */
+const serverAddress = 'server';
+
+/**
+ * Gives a hosting account its own IPv4 and IPv6 address, or the server's.
+ */
+function ChangeAddressesForm({
+    routes,
+    account,
+    addresses,
+    onSuccess,
+}: {
+    routes: Routes;
+    account: AccountRow;
+    addresses: IpOption[];
+    onSuccess: () => void;
+}) {
+    const [ipv4, setIpv4] = useState(
+        account.ipv4_address_id === null
+            ? serverAddress
+            : String(account.ipv4_address_id),
+    );
+    const [ipv6, setIpv6] = useState(
+        account.ipv6_address_id === null
+            ? serverAddress
+            : String(account.ipv6_address_id),
+    );
+    const fields = [
+        {
+            name: 'ipv4_address_id',
+            label: 'IPv4',
+            none: 'Alamat server',
+            value: ipv4,
+            onChange: setIpv4,
+            options: addresses.filter((option) => option.version === 4),
+        },
+        {
+            name: 'ipv6_address_id',
+            label: 'IPv6',
+            none: 'Semua alamat IPv6 server',
+            value: ipv6,
+            onChange: setIpv6,
+            options: addresses.filter((option) => option.version === 6),
+        },
+    ] as const;
+
+    return (
+        <Form
+            {...routes.updateAddresses.form(account.id)}
+            options={{ preserveScroll: true }}
+            onSuccess={onSuccess}
+            className="grid gap-4"
+        >
+            {({ processing, errors }) => (
+                <>
+                    <DialogHeader>
+                        <DialogTitle>Alamat IP {account.username}</DialogTitle>
+                        <DialogDescription>
+                            Website akun ini dilayani di alamat yang dipilih
+                            saja, dan record DNS website-nya (domain, www,
+                            subdomain) ikut pindah. Email tetap di alamat
+                            server.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {fields.map((field) => (
+                        <div key={field.name} className="grid gap-2">
+                            <Label htmlFor={field.name}>{field.label}</Label>
+                            <input
+                                type="hidden"
+                                name={field.name}
+                                value={
+                                    field.value === serverAddress
+                                        ? ''
+                                        : field.value
+                                }
+                            />
+                            <Select
+                                value={field.value}
+                                onValueChange={field.onChange}
+                            >
+                                <SelectTrigger
+                                    id={field.name}
+                                    aria-invalid={
+                                        errors[field.name] ? true : undefined
+                                    }
+                                    className="w-full rounded-xl bg-card px-3.5 data-[size=default]:h-11 md:max-w-sm"
+                                >
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent className="rounded-xl">
+                                    <SelectItem value={serverAddress}>
+                                        {field.none}
+                                    </SelectItem>
+                                    {field.options.map((option) => (
+                                        <SelectItem
+                                            key={option.id}
+                                            value={String(option.id)}
+                                        >
+                                            {option.address}
+                                            {option.dedicated
+                                                ? ' (dedicated)'
+                                                : ' (shared)'}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <InputError message={errors[field.name]} />
+                        </div>
+                    ))}
+
+                    {addresses.length === 0 && (
+                        <p className="text-sm text-muted-foreground">
+                            Belum ada alamat IP yang bisa diberikan ke akun ini.
+                            Tambahkan dulu di menu Alamat IP.
+                        </p>
+                    )}
+
+                    <DialogFooter className="gap-2">
+                        <DialogClose asChild>
+                            <Button type="button" variant="secondary">
+                                Batal
+                            </Button>
+                        </DialogClose>
+                        <Button type="submit" disabled={processing}>
+                            {processing && <Spinner />}
+                            Simpan alamat
                         </Button>
                     </DialogFooter>
                 </>
@@ -942,6 +1128,13 @@ function RowActions({
                             }
                         >
                             <Boxes /> Ganti paket reseller
+                        </DropdownMenuItem>
+                    )}
+                    {canChangePackage && (
+                        <DropdownMenuItem
+                            onSelect={() => onAction('addresses', account)}
+                        >
+                            <Network /> Alamat IP
                         </DropdownMenuItem>
                     )}
                     {canTransfer && (

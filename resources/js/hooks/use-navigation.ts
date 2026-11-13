@@ -31,6 +31,7 @@ import { index as databasesIndex } from '@/routes/databases';
 import { index as dnsIndex } from '@/routes/dns';
 import { index as accountsIndex } from '@/routes/admin/accounts';
 import { index as auditLogsIndex } from '@/routes/admin/audit-logs';
+import { index as ipAddressesIndex } from '@/routes/admin/ip-addresses';
 import { index as loginHistoryIndex } from '@/routes/admin/login-history';
 import { index as adminDnsIndex } from '@/routes/admin/dns';
 import { index as mailQueueIndex } from '@/routes/admin/mail-queue';
@@ -42,6 +43,7 @@ import { index as servicesIndex } from '@/routes/admin/services';
 import { index as statisticsIndex } from '@/routes/admin/statistics';
 import { index as tasksIndex } from '@/routes/admin/tasks';
 import { index as resellerAccountsIndex } from '@/routes/reseller/accounts';
+import { index as resellerIpAddressesIndex } from '@/routes/reseller/ip-addresses';
 import { index as resellerLoginHistoryIndex } from '@/routes/reseller/login-history';
 import { index as resellerOwnPackagesIndex } from '@/routes/reseller/packages';
 import { index as resellerStatisticsIndex } from '@/routes/reseller/statistics';
@@ -156,6 +158,11 @@ export function useNavigation(): {
             href: mailQueueIndex(),
             icon: MailWarning,
         };
+        const ipAddresses: NavItem = {
+            title: 'Alamat IP',
+            href: ipAddressesIndex(),
+            icon: Network,
+        };
         const serverSettings: NavItem = {
             title: 'Pengaturan Server',
             href: serverSettingsIndex(),
@@ -182,6 +189,7 @@ export function useNavigation(): {
                     services,
                     processes,
                     mailQueue,
+                    ipAddresses,
                     serverSettings,
                     tasks,
                     auditLog,
@@ -272,6 +280,11 @@ export function useNavigation(): {
                     title: 'Statistik',
                     href: resellerStatisticsIndex(),
                     icon: ChartColumn,
+                },
+                {
+                    title: 'Alamat IP',
+                    href: resellerIpAddressesIndex(),
+                    icon: Network,
                 },
                 {
                     title: 'Riwayat Login',

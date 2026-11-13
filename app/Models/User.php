@@ -47,6 +47,8 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property Carbon|null $phpmyadmin_expires_at When the open phpMyAdmin session ends; null while none is open.
  * @property Carbon|null $sftp_password_set_at When the SFTP password was last set; null while the account has none.
  * @property bool $ssh_enabled Whether the account turned SSH on; it only works while its package allows SSH.
+ * @property int|null $ipv4_address_id The IPv4 address of its own a hosting account's websites are served on; null is the server's.
+ * @property int|null $ipv6_address_id The same for IPv6.
  * @property string|null $cron_email Where cron mails the output of the account's jobs; null mails nothing.
  * @property Carbon|null $last_login_at
  * @property string|null $two_factor_secret
@@ -125,6 +127,28 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     public function package(): BelongsTo
     {
         return $this->belongsTo(Package::class);
+    }
+
+    /**
+     * The IPv4 address of its own a hosting account's websites are served
+     * on; null for the server's main address.
+     *
+     * @return BelongsTo<IpAddress, $this>
+     */
+    public function ipv4Address(): BelongsTo
+    {
+        return $this->belongsTo(IpAddress::class, 'ipv4_address_id');
+    }
+
+    /**
+     * The IPv6 address of its own a hosting account's websites are served
+     * on; null for every IPv6 address of the server.
+     *
+     * @return BelongsTo<IpAddress, $this>
+     */
+    public function ipv6Address(): BelongsTo
+    {
+        return $this->belongsTo(IpAddress::class, 'ipv6_address_id');
     }
 
     /**

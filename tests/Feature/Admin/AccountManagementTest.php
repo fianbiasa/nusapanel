@@ -68,6 +68,10 @@ class AccountManagementTest extends TestCase
                     ->where('reseller_package', null)
                     ->where('owned_accounts', null)
                     ->where('domain', 'bücher.de')
+                    ->where('ipv4_address_id', null)
+                    ->where('ipv6_address_id', null)
+                    ->where('ipv4', null)
+                    ->where('ipv6', null)
                     ->where('disk', ['used_mb' => 121, 'limit_mb' => 1024])
                     ->has('created_at'))
                 ->where('accounts.data.1.disk', ['used_mb' => null, 'limit_mb' => null]));

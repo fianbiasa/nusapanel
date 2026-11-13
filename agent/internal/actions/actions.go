@@ -120,6 +120,10 @@ func Register(registry *rpc.Registry, config Config) {
 		registry.Register(name, method)
 	}
 
+	for name, method := range networkMethods(defaultServerAddresses()) {
+		registry.Register(name, method)
+	}
+
 	for name, method := range processMethods(sysuser.System{}, procmon.New(procmon.DefaultConfig())) {
 		registry.Register(name, method)
 	}

@@ -77,6 +77,10 @@ type applyDomainParams struct {
 	// Suspended shows the unavailable page instead of the website, which
 	// reached a limit of its own.
 	Suspended bool `json:"suspended"`
+	// IPv4 and IPv6 are the account's own addresses the website is served
+	// on; empty means every address of the server.
+	IPv4 string `json:"ipv4"`
+	IPv6 string `json:"ipv6"`
 }
 
 // protectedDirectoryParams are one protected directory of
@@ -191,6 +195,8 @@ func (p applyDomainParams) site(user sysuser.User) webserver.Site {
 		PHPExtensions:        p.PHPExtensions,
 		CGI:                  p.CGI,
 		Suspended:            p.Suspended,
+		IPv4Address:          p.IPv4,
+		IPv6Address:          p.IPv6,
 	}
 }
 

@@ -137,7 +137,7 @@ class DnsService
 
             $zone = $this->ensureZone($parent);
 
-            foreach ($this->subdomainRecords($domain->name) as $record) {
+            foreach ($this->withAccountAddresses($this->subdomainRecords($domain->name), $domain->account) as $record) {
                 $zone->records()->firstOrCreate($record);
             }
         } else {
@@ -237,7 +237,7 @@ class DnsService
 
         DB::transaction(function () use ($zone, $actor): void {
             $zone->records()->delete();
-            $zone->records()->createMany($this->defaultRecords($zone->name, $zone->domain));
+            $zone->records()->createMany($this->withAccountAddresses($this->defaultRecords($zone->name, $zone->domain), $zone->account));
 
             $this->audit->record('dns.zone_reset', $zone, ['zone' => $zone->name], $actor);
             $this->sync($zone, $actor);
@@ -502,6 +502,50 @@ class DnsService
     }
 
     /**
+     * Point the website names of the account's zones (its domains,
+     * subdomains and pointers, and their www) from its old addresses to its
+     * new ones; null is the server's main IPv4 address, or no IPv6 address.
+     * IPv4 records are moved; IPv6 records are moved, removed with the
+     * address, or added next to the website names' IPv4 records. Other
+     * names, such as mail, stay with the server. Changed zones are queued.
+     */
+    public function moveAccountAddresses(User $account, ?string $fromIpv4, ?string $toIpv4, ?string $fromIpv6, ?string $toIpv6, ?User $actor): void
+    {
+        $fromIpv4 ??= $this->publicIp();
+        $toIpv4 ??= $this->publicIp();
+        $names = $this->websiteNames($account);
+
+        $account->dnsZones()->orderBy('id')->each(function (DnsZone $zone) use ($account, $actor, $names, $fromIpv4, $toIpv4, $fromIpv6, $toIpv6): void {
+            $changed = false;
+
+            if ($fromIpv4 !== null && $toIpv4 !== null && $fromIpv4 !== $toIpv4) {
+                $changed = $zone->records()->where('type', 'A')->where('content', $fromIpv4)->whereIn('name', $names)->update(['content' => $toIpv4]) > 0;
+            }
+
+            if ($fromIpv6 !== $toIpv6) {
+                if ($fromIpv6 !== null) {
+                    $records = $zone->records()->where('type', 'AAAA')->where('content', $fromIpv6)->whereIn('name', $names);
+                    $changed = ($toIpv6 === null ? $records->delete() : $records->update(['content' => $toIpv6])) > 0 || $changed;
+                }
+
+                if ($toIpv6 !== null) {
+                    $hasIpv6 = $zone->records()->where('type', 'AAAA')->pluck('name')->all();
+
+                    foreach ($zone->records()->where('type', 'A')->whereIn('name', $names)->whereNotIn('name', $hasIpv6)->pluck('name')->unique() as $name) {
+                        $zone->records()->create($this->record($name, 'AAAA', $toIpv6));
+                        $changed = true;
+                    }
+                }
+            }
+
+            if ($changed && $account->status !== AccountStatus::Pending) {
+                $zone->setRelation('account', $account);
+                $this->sync($zone, $actor);
+            }
+        });
+    }
+
+    /**
      * Send every zone of an account that has just been created on the
      * server, made while it was still pending.
      */
@@ -684,7 +728,7 @@ class DnsService
             $zone = new DnsZone(['name' => $domain->name]);
             $zone->forceFill(['user_id' => $domain->user_id, 'domain_id' => $domain->id])->save();
 
-            $zone->records()->createMany($this->defaultRecords($domain->name, $domain));
+            $zone->records()->createMany($this->withAccountAddresses($this->defaultRecords($domain->name, $domain), $domain->account));
 
             return $zone;
         });
@@ -884,6 +928,71 @@ class DnsService
     private function record(string $name, string $type, string $content, ?int $priority = null): array
     {
         return ['name' => $name, 'type' => $type, 'content' => $content, 'ttl' => self::DEFAULT_TTL, 'priority' => $priority];
+    }
+
+    /**
+     * The records with the website names of an account that has addresses
+     * of its own pointing there: its IPv4 address instead of the server's,
+     * and an IPv6 record next to each of them.
+     *
+     * @param  list<array{name: string, type: string, content: string, ttl: int, priority: int|null}>  $records
+     * @return list<array{name: string, type: string, content: string, ttl: int, priority: int|null}>
+     */
+    private function withAccountAddresses(array $records, ?User $account): array
+    {
+        $ipv4 = $account?->ipv4Address?->address;
+        $ipv6 = $account?->ipv6Address?->address;
+
+        if ($account === null || ($ipv4 === null && $ipv6 === null)) {
+            return $records;
+        }
+
+        $names = $this->websiteNames($account);
+        $serverIp = $this->publicIp();
+        $withIpv6 = [];
+
+        foreach ($records as $index => $record) {
+            if ($record['type'] === 'AAAA') {
+                $withIpv6[$record['name']] = true;
+            }
+
+            if ($record['type'] !== 'A' || ! in_array($record['name'], $names, true)) {
+                continue;
+            }
+
+            if ($ipv4 !== null && $record['content'] === $serverIp) {
+                $records[$index]['content'] = $ipv4;
+            }
+        }
+
+        if ($ipv6 !== null) {
+            foreach ($records as $record) {
+                if ($record['type'] === 'A' && in_array($record['name'], $names, true) && ! isset($withIpv6[$record['name']])) {
+                    $records[] = $this->record($record['name'], 'AAAA', $ipv6);
+                    $withIpv6[$record['name']] = true;
+                }
+            }
+        }
+
+        return $records;
+    }
+
+    /**
+     * The names the account's websites answer to: its domains, subdomains
+     * and pointers, and their www.
+     *
+     * @return list<string>
+     */
+    private function websiteNames(User $account): array
+    {
+        $names = [];
+
+        foreach (Domain::query()->where('user_id', $account->id)->where('status', '!=', DomainStatus::Deleting)->pluck('name') as $name) {
+            $names[] = $name;
+            $names[] = 'www.'.$name;
+        }
+
+        return $names;
     }
 
     /**

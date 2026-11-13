@@ -126,7 +126,7 @@ Pembagian level sama seperti DirectAdmin:
 | Daftar user + pemakaian | ✅ Cari, filter, urutkan, aksi massal                                              | P3   |
 | Login as user           | ✅ Tercatat di audit log                                                           | P3   |
 | Statistik reseller      | ✅ Total pemakaian vs jatah                                                        | P3   |
-| IP                      | Berikan IP dari pool reseller (shared/dedicated)                                   | P3   |
+| IP                      | ✅ Berikan IP dari pool reseller ke akun (shared/dedicated)                        | P3   |
 | Nameserver kustom       | `ns1/ns2.domain-reseller.com`                                                      | P3   |
 | Branding                | Logo, nama, warna, domain login panel sendiri                                      | P3   |
 | Overselling             | ✅ On/off (diatur admin)                                                           | P3   |
@@ -166,7 +166,7 @@ Pembagian level sama seperti DirectAdmin:
 | Batas kirim email                     | ✅ Per akun (bawaan 300) dan seluruh server per 24 jam, diatur di Pengaturan Server     | P2   |
 | Process monitor                       | ✅ Lihat proses (CPU, RAM, pemakaian per user) & hentikan (TERM/KILL)                   | P3   |
 | Statistik pemakaian                   | ✅ Ranking akun per disk & bandwidth                                                    | P3   |
-| Manajemen IP                          | Tambah/hapus IPv4/IPv6, berikan ke reseller                                             | P3   |
+| Manajemen IP                          | ✅ Tambah/hapus IPv4/IPv6, berikan ke reseller, IP sendiri per akun (website & DNS-nya) | P3   |
 | File editor sistem                    | Hanya file config yang diizinkan                                                        | P3   |
 | Template config kustom                | Override template vhost, PHP-FPM, DNS                                                   | P3   |
 | Update panel                          | Satu klik, kanal stable/beta                                                            | P5   |

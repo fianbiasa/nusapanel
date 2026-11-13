@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\AccountController;
 use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\DnsController as AdminDnsController;
+use App\Http\Controllers\Admin\IpAddressController;
 use App\Http\Controllers\Admin\LoginHistoryController;
 use App\Http\Controllers\Admin\MailQueueController;
 use App\Http\Controllers\Admin\PackageController;
@@ -201,10 +202,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('accounts/{account}/suspend', [AccountController::class, 'suspend'])->name('accounts.suspend');
         Route::post('accounts/{account}/unsuspend', [AccountController::class, 'unsuspend'])->name('accounts.unsuspend');
         Route::put('accounts/{account}/package', [AccountController::class, 'updatePackage'])->name('accounts.package.update');
+        Route::put('accounts/{account}/addresses', [AccountController::class, 'updateAddresses'])->name('accounts.addresses.update');
         Route::delete('accounts/{account}', [AccountController::class, 'destroy'])->name('accounts.destroy');
         Route::post('accounts/{account}/login-as', [ImpersonationController::class, 'store'])
             ->middleware('throttle:30,1,login-as')
             ->name('accounts.login-as');
+        Route::get('ip-addresses', [IpAddressController::class, 'index'])->name('ip-addresses.index');
+        Route::put('ip-addresses/{ipAddress}', [IpAddressController::class, 'update'])->name('ip-addresses.update');
         Route::get('packages', [PackageController::class, 'index'])->name('packages.index');
         Route::get('packages/create', [PackageController::class, 'create'])->name('packages.create');
         Route::post('packages', [PackageController::class, 'store'])->name('packages.store');
@@ -226,6 +230,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('accounts/{account}/suspend', [AccountController::class, 'suspend'])->name('accounts.suspend');
         Route::post('accounts/{account}/unsuspend', [AccountController::class, 'unsuspend'])->name('accounts.unsuspend');
         Route::put('accounts/{account}/package', [AccountController::class, 'updatePackage'])->name('accounts.package.update');
+        Route::put('accounts/{account}/addresses', [AccountController::class, 'updateAddresses'])->name('accounts.addresses.update');
         Route::delete('accounts/{account}', [AccountController::class, 'destroy'])->name('accounts.destroy');
         Route::put('accounts/{account}/reseller-package', [AccountController::class, 'updateResellerPackage'])->name('accounts.reseller-package.update');
         Route::put('accounts/{account}/owner', [AccountController::class, 'transfer'])->name('accounts.owner.update');
@@ -248,6 +253,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('tasks', [TaskController::class, 'index'])->name('tasks.index');
         Route::get('audit-logs', [AuditLogController::class, 'index'])->name('audit-logs.index');
         Route::get('login-history', [LoginHistoryController::class, 'index'])->name('login-history.index');
+        Route::get('ip-addresses', [IpAddressController::class, 'index'])->name('ip-addresses.index');
+        Route::post('ip-addresses', [IpAddressController::class, 'store'])->middleware('throttle:30,1,ip-addresses')->name('ip-addresses.store');
+        Route::put('ip-addresses/{ipAddress}', [IpAddressController::class, 'update'])->name('ip-addresses.update');
+        Route::delete('ip-addresses/{ipAddress}', [IpAddressController::class, 'destroy'])->middleware('throttle:30,1,ip-addresses')->name('ip-addresses.destroy');
         Route::get('services', [ServiceController::class, 'index'])->name('services.index');
         Route::get('processes', [ProcessController::class, 'index'])->middleware('throttle:60,1,admin-processes')->name('processes.index');
         Route::post('processes/kill', [ProcessController::class, 'kill'])->middleware('throttle:30,1,admin-process-kill')->name('processes.kill');

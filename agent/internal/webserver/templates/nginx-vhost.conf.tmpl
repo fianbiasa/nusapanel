@@ -1,8 +1,7 @@
 # {{.Domain}} of account {{.User}}. Written by rayxod; changes are overwritten.
 server {
-    listen 80;
-{{- if .IPv6}}
-    listen [::]:80;
+{{- range .Listen}}
+    listen {{.}}80;
 {{- end}}
 {{- template "identity" .}}
 
@@ -25,9 +24,8 @@ server {
 {{- if .SSL}}
 
 server {
-    listen 443 ssl http2;
-{{- if .IPv6}}
-    listen [::]:443 ssl http2;
+{{- range .Listen}}
+    listen {{.}}443 ssl http2;
 {{- end}}
 {{- template "identity" .}}
 

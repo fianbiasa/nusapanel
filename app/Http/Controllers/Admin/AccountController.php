@@ -9,11 +9,13 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\BulkAccountActionRequest;
 use App\Http\Requests\Admin\StoreAccountRequest;
 use App\Models\AccountUsage;
+use App\Models\IpAddress;
 use App\Models\Package;
 use App\Models\ResellerPackage;
 use App\Models\User;
 use App\Policies\UserPolicy;
 use App\Services\AccountService;
+use App\Services\IpAddressService;
 use App\Support\AccountLimits;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -67,7 +69,7 @@ class AccountController extends Controller
         $sort = $validated['sort'] ?? 'newest';
 
         $accounts = User::query()
-            ->with(['owner:id,username,role', 'package:id,name,disk_mb', 'resellerPackage:id,name', 'primaryDomain:id,user_id,name', 'diskUsage'])
+            ->with(['owner:id,username,role', 'package:id,name,disk_mb', 'resellerPackage:id,name', 'primaryDomain:id,user_id,name', 'diskUsage', 'ipv4Address:id,address', 'ipv6Address:id,address'])
             ->withCount('ownedAccounts')
             ->when(! $isAdmin, fn (Builder $query) => $query->where('owner_id', $actor->id)->where('role', Role::User))
             ->when($search !== '', fn (Builder $query) => $query->where(fn (Builder $query) => $query
@@ -105,6 +107,10 @@ class AccountController extends Controller
                 'reseller_package' => $account->resellerPackage?->name,
                 'owned_accounts' => $account->isReseller() ? (int) $account->getAttribute('owned_accounts_count') : null,
                 'domain' => $account->primaryDomain?->display_name,
+                'ipv4_address_id' => $account->ipv4_address_id,
+                'ipv6_address_id' => $account->ipv6_address_id,
+                'ipv4' => $account->ipv4Address?->address,
+                'ipv6' => $account->ipv6Address?->address,
                 'disk' => $this->diskUsage($account),
                 'created_at' => $account->created_at?->toIso8601String(),
             ]);
@@ -116,6 +122,7 @@ class AccountController extends Controller
             'packageGroups' => $isAdmin ? $this->packageGroups() : null,
             'resellerPackages' => $isAdmin ? $this->resellerPackageOptions() : null,
             'owners' => $isAdmin ? $this->ownerOptions() : null,
+            'ipAddresses' => $this->ipAddressOptions($actor),
             'filters' => [
                 'search' => $search,
                 'status' => $status ?? '',
@@ -235,6 +242,32 @@ class AccountController extends Controller
             'message' => $package === null
                 ? __('Account :username no longer has a package.', ['username' => $account->username])
                 : __('Account :username is now on the :package package.', ['username' => $account->username, 'package' => $package->name]),
+        ]);
+
+        return back();
+    }
+
+    /**
+     * Give a hosting account its own IPv4 and IPv6 address, or the
+     * server's (null).
+     */
+    public function updateAddresses(Request $request, User $account, IpAddressService $ipAddresses): RedirectResponse
+    {
+        Gate::authorize('manage', $account);
+
+        $validated = $request->validate([
+            'ipv4_address_id' => ['present', 'nullable', 'integer', Rule::exists(IpAddress::class, 'id')->where('version', 4)],
+            'ipv6_address_id' => ['present', 'nullable', 'integer', Rule::exists(IpAddress::class, 'id')->where('version', 6)],
+        ]);
+
+        $ipv4 = $validated['ipv4_address_id'] === null ? null : IpAddress::query()->findOrFail((int) $validated['ipv4_address_id']);
+        $ipv6 = $validated['ipv6_address_id'] === null ? null : IpAddress::query()->findOrFail((int) $validated['ipv6_address_id']);
+
+        $ipAddresses->setAccountAddresses($account, $ipv4, $ipv6, $request->user());
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => __('The websites of :username are being moved to their addresses.', ['username' => $account->username]),
         ]);
 
         return back();
@@ -417,6 +450,43 @@ class AccountController extends Controller
     /**
      * Whose packages an account of owner goes on: "admin", or the reseller's id.
      */
+    /**
+     * The addresses the actor's accounts may be given, by whose accounts
+     * may have them ({@see self::packageOwnerKey()}), with the accounts
+     * that have them: a dedicated one only goes to one of those.
+     *
+     * @return list<array{id: int, address: string, version: int, of: string, dedicated: bool, used_by: list<int>}>
+     */
+    private function ipAddressOptions(User $actor): array
+    {
+        $addresses = $actor->isAdmin()
+            ? IpAddress::query()->with('owner:id,role')->orderBy('version')->orderBy('address')->get()
+            : IpAddress::handedOutBy($actor)->with('owner:id,role')->orderBy('version')->orderBy('address')->get();
+
+        $users = User::query()
+            ->where(fn (Builder $query) => $query
+                ->whereIn('ipv4_address_id', $addresses->modelKeys())
+                ->orWhereIn('ipv6_address_id', $addresses->modelKeys()))
+            ->get(['id', 'ipv4_address_id', 'ipv6_address_id']);
+
+        $options = [];
+
+        foreach ($addresses as $ipAddress) {
+            $column = $ipAddress->version === 6 ? 'ipv6_address_id' : 'ipv4_address_id';
+
+            $options[] = [
+                'id' => $ipAddress->id,
+                'address' => $ipAddress->address,
+                'version' => $ipAddress->version,
+                'of' => $this->packageOwnerKey($ipAddress->owner),
+                'dedicated' => $ipAddress->dedicated,
+                'used_by' => array_values(array_map(intval(...), $users->where($column, $ipAddress->id)->modelKeys())),
+            ];
+        }
+
+        return $options;
+    }
+
     private function packageOwnerKey(?User $owner): string
     {
         return $owner !== null && $owner->isReseller() ? (string) $owner->id : 'admin';

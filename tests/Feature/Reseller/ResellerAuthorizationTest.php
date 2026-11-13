@@ -3,6 +3,7 @@
 namespace Tests\Feature\Reseller;
 
 use App\Enums\AccountStatus;
+use App\Models\IpAddress;
 use App\Models\Package;
 use App\Models\User;
 use App\Services\ImpersonationService;
@@ -41,11 +42,15 @@ class ResellerAuthorizationTest extends TestCase
         $adminPackage = Package::factory()->for($admin, 'owner')->create();
         $otherAccount = User::factory()->for($otherReseller, 'owner')->create(['package_id' => $otherPackage->id]);
         $adminAccount = User::factory()->for($admin, 'owner')->create(['package_id' => $adminPackage->id]);
+        $otherAddress = IpAddress::factory()->create();
+        $otherAddress->forceFill(['owner_id' => $otherReseller->id])->save();
+        $adminAddress = IpAddress::factory()->create();
 
         /** @var array<string, list<Model>> $foreign */
         $foreign = [
             'account' => [$otherAccount, $adminAccount, $otherReseller, $admin],
             'package' => [$otherPackage, $adminPackage],
+            'ipAddress' => [$otherAddress, $adminAddress],
         ];
 
         $checked = 0;
@@ -69,9 +74,9 @@ class ResellerAuthorizationTest extends TestCase
             }
         }
 
-        // Five account routes against four accounts, three package routes
-        // against two packages.
-        $this->assertSame(26, $checked);
+        // Six account routes against four accounts, three package routes
+        // against two packages, one address route against two addresses.
+        $this->assertSame(32, $checked);
 
         // Nothing changed hands, was queued, removed, or signed in as.
         $this->assertSame(AccountStatus::Active, $otherAccount->fresh()->status);
@@ -80,6 +85,8 @@ class ResellerAuthorizationTest extends TestCase
         $this->assertModelExists($otherPackage);
         $this->assertModelExists($adminPackage);
         $this->assertSame($otherPackage->name, $otherPackage->fresh()->name);
+        $this->assertFalse($otherAddress->fresh()->dedicated);
+        $this->assertFalse($adminAddress->fresh()->dedicated);
         $this->assertDatabaseCount('tasks', 0);
         $this->assertAuthenticatedAs($reseller);
         $this->assertFalse(session()->has(ImpersonationService::SESSION_KEY));
@@ -108,7 +115,9 @@ class ResellerAuthorizationTest extends TestCase
         $reseller = User::factory()->reseller()->create();
         $package = Package::factory()->for($reseller, 'owner')->create();
         $account = User::factory()->for($reseller, 'owner')->create(['package_id' => $package->id]);
-        $models = ['account' => $account, 'package' => $package];
+        $address = IpAddress::factory()->create();
+        $address->forceFill(['owner_id' => $reseller->id])->save();
+        $models = ['account' => $account, 'package' => $package, 'ipAddress' => $address];
 
         foreach ([User::factory()->create(), User::factory()->admin()->create()] as $outsider) {
             foreach ($this->routesNamed('reseller.') as $route) {
@@ -193,6 +202,9 @@ class ResellerAuthorizationTest extends TestCase
             'ssl' => true,
             'package_id' => $package->id,
             'reason' => 'Testing',
+            'dedicated' => true,
+            'ipv4_address_id' => null,
+            'ipv6_address_id' => null,
         ];
     }
 }
