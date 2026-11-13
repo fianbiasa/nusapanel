@@ -124,14 +124,14 @@ Semua fitur P1 sudah ada. Yang dipindah ke fase lain: CGI dan batas disk & bandw
 
 **Cakupan:**
 
-- Akun user & paket user, buat/suspend/hapus akun, quota disk & inode.
-- Domain, subdomain, pointer, redirect, www/HTTPS.
-- Nginx → Apache → PHP-FPM per user, banyak versi PHP, PHP settings.
-- SSL Let's Encrypt + sertifikat kustom, SSL hostname/panel.
-- MariaDB: database, user, hak akses, phpMyAdmin SSO.
-- FTP + SFTP, file manager lengkap, cron jobs.
-- Info sistem, service monitor + watchdog, pengaturan server.
-- 2FA, riwayat login, `rayxo`, `rayxo rebuild`.
+- Akun user & paket user, buat/suspend/hapus akun, quota disk & inode ✅
+- Domain, subdomain, pointer, redirect, www/HTTPS ✅
+- Nginx → Apache → PHP-FPM per user, banyak versi PHP, PHP settings ✅
+- SSL Let's Encrypt + sertifikat kustom, SSL hostname/panel ✅
+- MariaDB: database, user, hak akses, phpMyAdmin SSO ✅
+- FTP + SFTP, file manager lengkap, cron jobs ✅
+- Info sistem, service monitor + watchdog, pengaturan server ✅
+- 2FA, riwayat login, `rayxo`, `rayxo rebuild` ✅
 
 **Selesai kalau:**
 
@@ -164,10 +164,10 @@ Semua fitur P1 sudah ada. Yang dipindah ke fase lain: CGI dan batas disk & bandw
 
 **Cakupan:**
 
-- PowerDNS, template DNS, DNS management, nameserver default, SSL wildcard.
-- Postfix + Dovecot + Rspamd + Roundcube.
-- Akun email, forwarder, catch-all, autoresponder, vacation, filter, spam filter.
-- DKIM/SPF/DMARC otomatis, batas kirim, mail queue, SSL untuk mail & FTP.
+- PowerDNS, template DNS, DNS management, nameserver default, SSL wildcard ✅
+- Postfix + Dovecot + Rspamd + Roundcube ✅
+- Akun email, forwarder, catch-all, autoresponder, vacation, filter, spam filter ✅
+- DKIM/SPF/DMARC otomatis, batas kirim, mail queue, SSL untuk mail & FTP ✅
 
 Semua fitur P2 sudah ada, terpasang di server produksi dan dirilis sebagai v0.6.0 (12 November 2026). SSL FTP sengaja tetap memakai sertifikat hostname (sejak P1): setiap login FTP sudah terikat ke foldernya sendiri, jadi sertifikat per domain tidak dibutuhkan; SNI per domain hanya untuk email.
 
@@ -197,15 +197,15 @@ Semua fitur P2 sudah ada, terpasang di server produksi dan dirilis sebagai v0.6.
 - Branding, nameserver, dan domain login reseller (tahap 8c) ✅: menu Branding untuk reseller: nama, warna (dipakai tombol, tautan, dan menu aktif, terang dan gelap), dan logo (PNG/JPEG/WebP, maks 512 KB; SVG ditolak karena bisa membawa skrip) menggantikan RAYXO di panel untuk reseller itu dan semua akunnya, termasuk judul tab. Nameserver sendiri (ns1 wajib, ns2 opsional) dipakai di NS dan SOA zone DNS semua akunnya, ditampilkan di halaman DNS pelanggan, dan zone-zone itu langsung ditulis ulang; dikosongkan berarti kembali ke nameserver panel. Domain login: reseller mengisi misalnya panel.domainanda.com, agent menerbitkan sertifikat Let's Encrypt-nya dan melayani panel di port 443 domain itu dengan konfigurasi panel yang sama (snippet Nginx bersama, langsung ke PHP-FPM, jadi IP pengunjung dan rate limit login tetap per pengunjung); halaman login di domain itu sudah memakai brand reseller. Status dan alasan gagal tampil di halaman Branding, domain website dan domain reseller lain ditolak, dan website tidak bisa memakai domain login. Passkey terikat ke domain tempat dibuat, jadi di domain login yang berlaku kata sandi dan 2FA. Teruji di VPS (21 cek): snippet terpasang dan panel tetap jalan di portnya, logo tersaji tanpa login, NS dan SOA zone pelanggan memakai nameserver reseller, sertifikat Let's Encrypt terbit untuk domain login, halaman login di sana menampilkan brand sementara port panel tidak, HTTP dialihkan ke HTTPS, website dengan nama itu ditolak, percobaan port panel tetap jalan, dan melepas domain menghapus site serta sertifikatnya.
 - File konfigurasi dan template (tahap 8d) ✅: menu File Konfigurasi untuk admin, berisi file tambahan RAYXO yang tidak pernah ditimpa setup.sh: blok `http` Nginx, tambahan untuk vhost Nginx dan Apache semua website (di-include setiap vhost), php.ini tambahan per versi PHP untuk pool semua website (bukan PHP panel, jadi panel tidak ikut rusak karena salah setel), opsi MariaDB, dan template pool PHP-FPM (pm, pm.max_children, dan pengaturan proses lain; semua website diterapkan ulang). File dipilih lewat ID dari daftar tetap di agent, bukan path. Setiap simpan dicek sintaksnya, ditolak kalau file berubah sejak dibuka, diuji oleh programnya, dan dikembalikan otomatis kalau ditolak (MariaDB yang gagal menyala dipulihkan dengan file lama); 10 versi sebelumnya disimpan dan bisa dipulihkan. Template DNS sudah ada sejak P2. Teruji di VPS (34 cek): tambahan Nginx dipakai `nginx -T` dan yang salah ditolak lalu dikembalikan, location tambahan berlaku di website, `SetEnv` Apache sampai ke PHP website dan direktif Apache salah ditolak, php.ini tambahan dibaca PHP website tetapi tidak oleh PHP panel, MariaDB memakai `max_connections` baru, opsi yang membuatnya gagal menyala dikembalikan sehingga MariaDB tetap jalan dengan file lama, `!includedir` ditolak, template pool `static` dengan 3 proses berlaku di pool website dan `user = root` ditolak, cadangan dipulihkan, dan semuanya kembali ke bawaan setelah dikosongkan.
 
-- Level reseller lengkap, paket reseller, overselling, branding, nameserver kustom, login as.
-- Manajemen IP, pindah pemilik, pesan massal, tiket.
-- Bandwidth, statistik harian & grafik, GoAccess, log viewer, batas resource (cgroups).
-- REST API + login keys, notifikasi email & Telegram.
-- SSH jail & SSH keys, error page, protected directory, hotlink, MIME, CGI per domain.
-- Batas disk & bandwidth per domain.
-- Process monitor, file editor sistem, template config kustom.
+- Level reseller lengkap, paket reseller, overselling, branding, nameserver kustom, login as ✅
+- Manajemen IP, pindah pemilik, pesan massal, tiket ✅
+- Bandwidth, statistik harian & grafik, GoAccess, log viewer, batas resource (cgroups) ✅
+- REST API + login keys, notifikasi email & Telegram ✅
+- SSH jail & SSH keys, error page, protected directory, hotlink, MIME, CGI per domain ✅
+- Batas disk & bandwidth per domain ✅
+- Process monitor, file editor sistem, template config kustom ✅
 
-**Selesai kalau:** reseller bisa membuat dan mengelola user dalam batasnya, dan terbukti tidak bisa menyentuh akun di luar miliknya (test otorisasi otomatis untuk setiap endpoint).
+**Selesai kalau:** reseller bisa membuat dan mengelola user dalam batasnya, dan terbukti tidak bisa menyentuh akun di luar miliknya (test otorisasi otomatis untuk setiap endpoint). ✅ `ResellerAuthorizationTest` menelusuri setiap route yang terdaftar, jadi route baru ikut teruji tanpa mengubah test-nya: setiap route reseller yang memakai akun, paket, atau alamat IP menjawab 404 untuk milik reseller lain dan admin (32 kombinasi, tanpa ada yang berubah), lebih dari 100 route admin dan akun hosting menolak reseller, dan route reseller menolak admin serta akun hosting; untuk API, `tests/Feature/Api` menguji peran dan izin setiap login key. Di VPS, reseller membuat paket dan akun dalam jatahnya, masuk sebagai pelanggan, serta memakai branding, nameserver, dan domain login sendiri (tahap 1 dan 8c).
 
 ## P4 — Backup, migrasi, WHMCS
 

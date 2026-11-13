@@ -164,11 +164,11 @@ Private key **tidak** disimpan di database, hanya di `/etc/rayxo/ssl/` dengan mo
 
 Record disimpan di panel lalu disinkronkan ke PowerDNS oleh agent (sesuai prinsip "database panel = sumber kebenaran").
 
-| Tabel                  | Kolom penting                                                                                                                                                                                                                                             |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `dns_zones`            | user_id, domain_id (domain atau pointer-nya; null kalau domainnya terhapus), name (unique). Serial dikelola PowerDNS; DNSSEC menyusul (P6)                                                                                                                |
-| `dns_records`          | dns_zone_id, name (absolut tanpa titik di akhir), type, content (bentuk biasa, TXT tanpa kutip), ttl, priority (MX/SRV)                                                                                                                                   |
-| `dns_template_records` | name (relatif terhadap zone, `@` = zone itu sendiri), type, content (placeholder `{domain}` dan `{ip}`), ttl, priority: record yang dimiliki zone baru dan zone yang di-reset; admin mengubahnya di halaman DNS. Template reseller (owner) menyusul di P3 |
+| Tabel                  | Kolom penting                                                                                                                                                                                                                                                                                                                   |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dns_zones`            | user_id, domain_id (domain atau pointer-nya; null kalau domainnya terhapus), name (unique). Serial dikelola PowerDNS; DNSSEC menyusul (P6)                                                                                                                                                                                      |
+| `dns_records`          | dns_zone_id, name (absolut tanpa titik di akhir), type, content (bentuk biasa, TXT tanpa kutip), ttl, priority (MX/SRV)                                                                                                                                                                                                         |
+| `dns_template_records` | name (relatif terhadap zone, `@` = zone itu sendiri), type, content (placeholder `{domain}` dan `{ip}`), ttl, priority: record yang dimiliki zone baru dan zone yang di-reset; admin mengubahnya di halaman DNS. Template sendiri per reseller belum ada: zone akun reseller memakai template admin, dengan nameserver reseller |
 
 ---
 
