@@ -91,28 +91,28 @@ Pembagian level sama seperti DirectAdmin:
 
 ### Fitur lanjutan
 
-| Fitur                       | Keterangan                                                                                                | Fase |
-| --------------------------- | --------------------------------------------------------------------------------------------------------- | ---- |
-| Cron jobs                   | ✅ Preset jadwal, email hasil output                                                                      | P1   |
-| 2FA                         | ✅ TOTP + kode cadangan                                                                                   | P1   |
-| Riwayat login               | ✅ IP, waktu, berhasil/gagal                                                                              | P1   |
-| Tema                        | ✅ Mode terang/gelap                                                                                      | P1   |
-| Bahasa                      | Indonesia & English, pilihan per user                                                                     | PB   |
-| SSH access                  | ✅ Shell di jail sendiri (hanya program server & home akun), diizinkan per paket, on/off per akun         | P3   |
-| SSH keys                    | ✅ Tambah/hapus public key, untuk SSH dan SFTP                                                            | P3   |
-| Site statistics             | ✅ Laporan GoAccess per domain dari log 14 hari, dibuka di tab terpisah yang terisolasi dari panel        | P3   |
-| Log viewer                  | ✅ Log akses, error Nginx, dan error PHP/Apache per domain: baris terakhir dengan saringan, unduh 14 hari | P3   |
-| Pemakaian resource          | ✅ Disk & bandwidth (grafik 30 hari), inode (kuota); CPU & RAM saat ini ★                                 | P3   |
-| Disk usage explorer         | ✅ Folder & file terbesar, telusuri per folder                                                            | P3   |
-| Login keys (API key)        | Izin per aksi, batasi IP, masa berlaku                                                                    | P3   |
-| Pesan/tiket                 | Ke reseller atau admin                                                                                    | P3   |
-| Backup & restore            | Pilih item, download, restore sebagian                                                                    | P4   |
-| App installer ★             | WordPress satu klik                                                                                       | P6   |
-| WordPress manager ★         | Update core/plugin/tema, reset password admin, mode maintenance, staging                                  | P6   |
-| Git deploy                  | Clone repo, deploy otomatis via webhook                                                                   | P6   |
-| Aplikasi Node.js / Python ★ | Proses dikelola systemd + reverse proxy                                                                   | P6   |
-| Redis per user ★            |                                                                                                           | P6   |
-| Web terminal ★              |                                                                                                           | P6   |
+| Fitur                       | Keterangan                                                                                                            | Fase |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------- | ---- |
+| Cron jobs                   | ✅ Preset jadwal, email hasil output                                                                                  | P1   |
+| 2FA                         | ✅ TOTP + kode cadangan                                                                                               | P1   |
+| Riwayat login               | ✅ IP, waktu, berhasil/gagal                                                                                          | P1   |
+| Tema                        | ✅ Mode terang/gelap                                                                                                  | P1   |
+| Bahasa                      | Indonesia & English, pilihan per user                                                                                 | PB   |
+| SSH access                  | ✅ Shell di jail sendiri (hanya program server & home akun), diizinkan per paket, on/off per akun                     | P3   |
+| SSH keys                    | ✅ Tambah/hapus public key, untuk SSH dan SFTP                                                                        | P3   |
+| Site statistics             | ✅ Laporan GoAccess per domain dari log 14 hari, dibuka di tab terpisah yang terisolasi dari panel                    | P3   |
+| Log viewer                  | ✅ Log akses, error Nginx, dan error PHP/Apache per domain: baris terakhir dengan saringan, unduh 14 hari             | P3   |
+| Pemakaian resource          | ✅ Disk & bandwidth (grafik 30 hari), inode (kuota); CPU & RAM saat ini ★                                             | P3   |
+| Disk usage explorer         | ✅ Folder & file terbesar, telusuri per folder                                                                        | P3   |
+| Login keys (API key)        | ✅ Izin per area (baca/tulis), batasi alamat IP, masa berlaku; key ditampilkan sekali dan hanya disimpan sebagai hash | P3   |
+| Pesan/tiket                 | Ke reseller atau admin                                                                                                | P3   |
+| Backup & restore            | Pilih item, download, restore sebagian                                                                                | P4   |
+| App installer ★             | WordPress satu klik                                                                                                   | P6   |
+| WordPress manager ★         | Update core/plugin/tema, reset password admin, mode maintenance, staging                                              | P6   |
+| Git deploy                  | Clone repo, deploy otomatis via webhook                                                                               | P6   |
+| Aplikasi Node.js / Python ★ | Proses dikelola systemd + reverse proxy                                                                               | P6   |
+| Redis per user ★            |                                                                                                                       | P6   |
+| Web terminal ★              |                                                                                                                       | P6   |
 
 ---
 
@@ -203,12 +203,12 @@ Pembagian level sama seperti DirectAdmin:
 
 ### Notifikasi & integrasi
 
-| Fitur       | Keterangan                                                                                 | Fase |
-| ----------- | ------------------------------------------------------------------------------------------ | ---- |
-| CLI `rayxo` | ✅ Operasi lewat terminal                                                                  | P1   |
-| Notifikasi  | Email & Telegram ★: service mati, disk penuh, user lewat quota, backup gagal, SSL gagal    | P3   |
-| REST API    | Semua aksi panel tersedia lewat API                                                        | P3   |
-| Modul WHMCS | Create, suspend, unsuspend, terminate, ganti paket, ganti password, SSO, sinkron pemakaian | P4   |
+| Fitur       | Keterangan                                                                                                                                                          | Fase |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| CLI `rayxo` | ✅ Operasi lewat terminal                                                                                                                                           | P1   |
+| Notifikasi  | Email & Telegram ★: service mati, disk penuh, user lewat quota, backup gagal, SSL gagal                                                                             | P3   |
+| REST API    | ✅ `/api/v1`: akun hosting (daftar, buat, suspend, ubah paket, hapus), paket, domain, database & user database, akun email, record DNS; aksi panel lainnya menyusul | P3   |
+| Modul WHMCS | Create, suspend, unsuspend, terminate, ganti paket, ganti password, SSO, sinkron pemakaian                                                                          | P4   |
 
 ---
 

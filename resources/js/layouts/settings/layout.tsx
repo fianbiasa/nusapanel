@@ -1,10 +1,11 @@
 import { Link } from '@inertiajs/react';
-import { Palette, ShieldCheck, UserRound } from 'lucide-react';
+import { KeyRound, Palette, ShieldCheck, UserRound } from 'lucide-react';
 import type { PropsWithChildren } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { useCurrentUrl } from '@/hooks/use-current-url';
 import { cn, toUrl } from '@/lib/utils';
 import { edit as editAppearance } from '@/routes/appearance';
+import { index as loginKeysIndex } from '@/routes/login-keys';
 import { edit } from '@/routes/profile';
 import { edit as editSecurity } from '@/routes/security';
 import type { NavItem } from '@/types';
@@ -19,6 +20,11 @@ const sidebarNavItems: NavItem[] = [
         title: 'Keamanan',
         href: editSecurity(),
         icon: ShieldCheck,
+    },
+    {
+        title: 'Login key',
+        href: loginKeysIndex(),
+        icon: KeyRound,
     },
     {
         title: 'Tampilan',

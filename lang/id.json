@@ -456,5 +456,10 @@
     "Process :pid has ended already.": "Proses :pid sudah berhenti.",
     "Process :pid may not be stopped.": "Proses :pid tidak boleh dihentikan.",
     "Process :pid could not be stopped. Try again in a moment.": "Proses :pid tidak bisa dihentikan. Coba lagi sebentar lagi.",
-    "Process :pid was sent :signal.": "Sinyal :signal dikirim ke proses :pid."
+    "Process :pid was sent :signal.": "Sinyal :signal dikirim ke proses :pid.",
+    "An account may have at most :max login keys.": "Satu akun paling banyak boleh punya :max login key.",
+    "This login key may not be used from :ip.": "Login key ini tidak boleh dipakai dari :ip.",
+    "This login key does not have the :permission permission.": "Login key ini tidak punya izin :permission.",
+    ":value is not an IP address or network.": ":value bukan alamat IP atau jaringan.",
+    "Login key :name is deleted; requests with it fail from now on.": "Login key :name dihapus; permintaan dengan key itu ditolak mulai sekarang."
 }

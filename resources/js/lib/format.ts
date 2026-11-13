@@ -108,6 +108,8 @@ export const auditActionLabels: Record<string, string> = {
     'database.exported': 'Database diexport',
     'domain.log_downloaded': 'Log website diunduh',
     'server.process_killed': 'Proses dihentikan',
+    'login_key.created': 'Login key dibuat',
+    'login_key.deleted': 'Login key dihapus',
     'database.imported': 'Import database dimulai',
     'database.maintained': 'Tabel database diperiksa',
     'server.database_remote_access_changed': 'Akses database dari luar diubah',

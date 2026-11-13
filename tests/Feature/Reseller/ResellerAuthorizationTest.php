@@ -153,9 +153,12 @@ class ResellerAuthorizationTest extends TestCase
      */
     private function hostingRoutes(): array
     {
+        // The panel's routes: the API's answer a session with 401 whatever
+        // the role, and its role checks for keys are in tests/Feature/Api.
         return array_values(array_filter(
             RouteFacade::getRoutes()->getRoutes(),
-            fn (Route $route): bool => in_array('role:user', $route->gatherMiddleware(), true),
+            fn (Route $route): bool => in_array('role:user', $route->gatherMiddleware(), true)
+                && ! str_starts_with((string) $route->getName(), 'api.'),
         ));
     }
 

@@ -5,9 +5,15 @@ namespace App\Providers;
 use App\Agent\AgentClient;
 use App\Agent\FakeAgentClient;
 use App\Agent\SocketAgentClient;
+use App\Models\LoginKey;
+use App\Services\LoginKeyService;
 use Carbon\CarbonImmutable;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
@@ -33,6 +39,23 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureDefaults();
+        $this->configureApi();
+    }
+
+    /**
+     * The API: requests authenticate with a login key as a bearer token
+     * (AuthenticateWithLoginKey, which sets the user of the "api" guard),
+     * 120 requests a minute per key.
+     */
+    protected function configureApi(): void
+    {
+        Auth::viaRequest('login-key', LoginKeyService::authenticate(...));
+
+        RateLimiter::for('api', function (Request $request): Limit {
+            $key = $request->attributes->get('login_key');
+
+            return Limit::perMinute(120)->by($key instanceof LoginKey ? 'login-key:'.$key->id : 'ip:'.$request->ip());
+        });
     }
 
     /**

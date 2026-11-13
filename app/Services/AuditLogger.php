@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\AuditLog;
+use App\Models\LoginKey;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
@@ -34,7 +35,21 @@ class AuditLogger
             'ip_address' => $this->request->ip(),
             'user_agent' => Str::limit((string) $this->request->userAgent(), 500, ''),
             'changes' => $changes === [] ? null : $changes,
+            ...$this->loginKey(),
         ]);
+    }
+
+    /**
+     * The login key an API request came with, so the log shows which key
+     * made the change.
+     *
+     * @return array{login_key_id?: int, login_key_name?: string}
+     */
+    private function loginKey(): array
+    {
+        $key = $this->request->attributes->get('login_key');
+
+        return $key instanceof LoginKey ? ['login_key_id' => $key->id, 'login_key_name' => $key->name] : [];
     }
 
     /**

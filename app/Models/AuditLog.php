@@ -21,9 +21,11 @@ use LogicException;
  * @property string|null $ip_address
  * @property string|null $user_agent
  * @property array<string, mixed>|null $changes
+ * @property int|null $login_key_id The login key an API request came with.
+ * @property string|null $login_key_name That key's name when it acted.
  * @property Carbon $created_at
  */
-#[Fillable(['actor_id', 'impersonator_id', 'action', 'subject_type', 'subject_id', 'ip_address', 'user_agent', 'changes'])]
+#[Fillable(['actor_id', 'impersonator_id', 'action', 'subject_type', 'subject_id', 'ip_address', 'user_agent', 'changes', 'login_key_id', 'login_key_name'])]
 class AuditLog extends Model
 {
     public const UPDATED_AT = null;

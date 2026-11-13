@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Settings\LoginKeyController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\SecurityController;
 use Illuminate\Auth\Middleware\RequirePassword;
@@ -30,6 +31,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('user-password.update');
 
     Route::inertia('settings/appearance', 'settings/appearance')->name('appearance.edit');
+
+    // A login key works without the password or 2FA, so making and
+    // deleting keys asks for the password first, as the security page does.
+    Route::middleware(RequirePassword::class)->group(function () {
+        Route::get('settings/login-keys', [LoginKeyController::class, 'index'])->name('login-keys.index');
+        Route::post('settings/login-keys', [LoginKeyController::class, 'store'])->middleware('throttle:10,1,login-keys')->name('login-keys.store');
+        Route::delete('settings/login-keys/{loginKey}', [LoginKeyController::class, 'destroy'])->name('login-keys.destroy');
+    });
 });
 
 Route::get('.well-known/passkey-endpoints', function () {

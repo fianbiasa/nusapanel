@@ -189,6 +189,16 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     }
 
     /**
+     * The keys this account uses the API with.
+     *
+     * @return HasMany<LoginKey, $this>
+     */
+    public function loginKeys(): HasMany
+    {
+        return $this->hasMany(LoginKey::class);
+    }
+
+    /**
      * The public keys this account added in the panel.
      *
      * @return HasMany<SshKey, $this>

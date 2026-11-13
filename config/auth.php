@@ -42,6 +42,11 @@ return [
             'driver' => 'session',
             'provider' => 'users',
         ],
+
+        // The API: a login key as bearer token (LoginKeyService).
+        'api' => [
+            'driver' => 'login-key',
+        ],
     ],
 
     /*
