@@ -428,6 +428,27 @@ func TestSitesWithAddressesOfTheirOwnListenOnlyThere(t *testing.T) {
 	assertNotContains(t, "nginx vhost on its own addresses", nginx, "[::]")
 }
 
+func TestWebsitesGetTheAdministratorsAdditions(t *testing.T) {
+	env := newEnv(t)
+	env.manager.cfg.CustomNginx = "/etc/nginx/rayxo-custom/website*.conf"
+	env.manager.cfg.CustomApache = "/etc/apache2/rayxo-custom/website*.conf"
+	env.manager.cfg.CustomPHPDir = "/etc/rayxo/php"
+	env.manager.cfg.PoolTemplate = filepath.Join(env.base, "php-fpm-pool.conf")
+	env.write(env.manager.cfg.PoolTemplate, "pm = static\npm.max_children = 4\n")
+	env.mustApply(budiSite)
+
+	assertContains(t, "nginx vhost", env.read(env.nginxVhost("budi", "example.com")),
+		"    server_tokens off;\n\n    # The administrator's additions for every website.\n    include /etc/nginx/rayxo-custom/website*.conf;\n")
+	assertContains(t, "apache vhost", env.read(env.apacheVhost("budi", "example.com")),
+		"    IncludeOptional /etc/apache2/rayxo-custom/website*.conf\n")
+	assertContains(t, "unit", env.read(env.unitFile("84")),
+		"Environment=PHP_INI_SCAN_DIR=:/etc/rayxo/php/8.4\n")
+
+	pool := env.read(env.cfg.PoolDir + "/8.4/budi.d/example.com.conf")
+	assertContains(t, "pool", pool, "listen.mode = 0660\n\npm = static\npm.max_children = 4\npm.process_idle_timeout = 30s\n")
+	assertNotContains(t, "pool", pool, "pm = ondemand")
+}
+
 func TestSiteAddressesMustBeOfTheirVersion(t *testing.T) {
 	for _, site := range []Site{
 		{User: "budi", Domain: "example.com", PHPVersion: "8.4", IPv4Address: "2001:db8::10"},

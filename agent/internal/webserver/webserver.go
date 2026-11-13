@@ -107,6 +107,15 @@ type Config struct {
 	// own configuration those sites include, written by setup.sh.
 	SitesDir     string
 	PanelSnippet string
+	// The administrator's additions (internal/sysfiles): CustomNginx and
+	// CustomApache are globs every website's vhosts include (empty: none),
+	// CustomPHPDir holds <version>/*.ini the websites' PHP reads after the
+	// system's, and PoolTemplate the process manager settings of every
+	// website's pool (internal/fpmpool).
+	CustomNginx  string
+	CustomApache string
+	CustomPHPDir string
+	PoolTemplate string
 	// CertificateRoots are the roots a custom certificate must chain up to
 	// to count as trusted; nil means the system's.
 	CertificateRoots *x509.CertPool
@@ -162,6 +171,10 @@ func DefaultConfig() Config {
 		FTPUnit:              "pure-ftpd-mysql.service",
 		SitesDir:             "/etc/nginx/sites-enabled",
 		PanelSnippet:         "/etc/nginx/snippets/rayxo-panel.conf",
+		CustomNginx:          "/etc/nginx/rayxo-custom/website*.conf",
+		CustomApache:         "/etc/apache2/rayxo-custom/website*.conf",
+		CustomPHPDir:         "/etc/rayxo/php",
+		PoolTemplate:         "/etc/rayxo/php-fpm-pool.conf",
 		Hostnames:            systemHostnames,
 		Run:                  runner.Run,
 		PrepareSite:          sysuser.System{}.PrepareSite,

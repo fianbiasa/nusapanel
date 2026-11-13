@@ -56,6 +56,11 @@ server {
     error_log {{.LogDir}}/{{.Domain}}.error.log;
 
     server_tokens off;
+{{- if .CustomNginx}}
+
+    # The administrator's additions for every website.
+    include {{.CustomNginx}};
+{{- end}}
 {{- end}}
 {{- /* What the domain answers with, the same over HTTP and HTTPS. */ -}}
 {{define "content"}}

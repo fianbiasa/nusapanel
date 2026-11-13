@@ -8,12 +8,9 @@ listen = {{.Socket}}
 listen.owner = {{.User}}
 listen.group = www-data
 listen.mode = 0660
-
-pm = ondemand
-pm.max_children = 10
-pm.process_idle_timeout = 30s
-pm.max_requests = 500
-request_terminate_timeout = 300s
+{{range .Manager}}
+{{.Key}} = {{.Value}}
+{{- end}}
 
 chdir = {{.Home}}
 env[TMPDIR] = {{.Home}}/tmp

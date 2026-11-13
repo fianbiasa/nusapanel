@@ -1739,6 +1739,9 @@ configure_nginx() {
     # domains that rayxod writes.
     mkdir -p /etc/nginx/snippets
     render "$release_dir/config/nginx-panel-app.conf" /etc/nginx/snippets/rayxo-panel.conf
+    # The administrator's additions for every website, edited in the panel
+    # (File Konfigurasi) and never overwritten here.
+    mkdir -p /etc/nginx/rayxo-custom /etc/apache2/rayxo-custom
     render "$release_dir/config/nginx-panel.conf" "$site"
 
     # procfs files always report size 0, so check for content instead.

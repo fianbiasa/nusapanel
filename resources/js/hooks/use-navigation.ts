@@ -5,6 +5,7 @@ import {
     Boxes,
     Clock,
     Cpu,
+    FileCog,
     Database,
     FolderOpen,
     FolderUp,
@@ -42,6 +43,7 @@ import { index as resellerPackagesIndex } from '@/routes/admin/reseller-packages
 import { index as serverSettingsIndex } from '@/routes/admin/server-settings';
 import { index as servicesIndex } from '@/routes/admin/services';
 import { index as statisticsIndex } from '@/routes/admin/statistics';
+import { index as systemFilesIndex } from '@/routes/admin/system-files';
 import { index as tasksIndex } from '@/routes/admin/tasks';
 import { index as resellerAccountsIndex } from '@/routes/reseller/accounts';
 import { edit as resellerBrandingEdit } from '@/routes/reseller/branding';
@@ -165,6 +167,11 @@ export function useNavigation(): {
             href: ipAddressesIndex(),
             icon: Network,
         };
+        const systemFiles: NavItem = {
+            title: 'File Konfigurasi',
+            href: systemFilesIndex(),
+            icon: FileCog,
+        };
         const serverSettings: NavItem = {
             title: 'Pengaturan Server',
             href: serverSettingsIndex(),
@@ -193,6 +200,7 @@ export function useNavigation(): {
                     mailQueue,
                     ipAddresses,
                     serverSettings,
+                    systemFiles,
                     tasks,
                     auditLog,
                     loginHistory,

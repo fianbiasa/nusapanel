@@ -13,6 +13,7 @@ use App\Http\Controllers\Admin\ResellerPackageController;
 use App\Http\Controllers\Admin\ServerSettingController;
 use App\Http\Controllers\Admin\ServiceController;
 use App\Http\Controllers\Admin\StatisticsController;
+use App\Http\Controllers\Admin\SystemFileController;
 use App\Http\Controllers\Admin\TaskController;
 use App\Http\Controllers\AnnouncementController;
 use App\Http\Controllers\CatchAllController;
@@ -263,6 +264,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('tasks', [TaskController::class, 'index'])->name('tasks.index');
         Route::get('audit-logs', [AuditLogController::class, 'index'])->name('audit-logs.index');
         Route::get('login-history', [LoginHistoryController::class, 'index'])->name('login-history.index');
+        Route::get('system-files', [SystemFileController::class, 'index'])->middleware('throttle:60,1,system-files')->name('system-files.index');
+        Route::put('system-files', [SystemFileController::class, 'update'])->middleware('throttle:20,1,system-files-write')->name('system-files.update');
+        Route::post('system-files/restore', [SystemFileController::class, 'restore'])->middleware('throttle:20,1,system-files-write')->name('system-files.restore');
         Route::get('ip-addresses', [IpAddressController::class, 'index'])->name('ip-addresses.index');
         Route::post('ip-addresses', [IpAddressController::class, 'store'])->middleware('throttle:30,1,ip-addresses')->name('ip-addresses.store');
         Route::put('ip-addresses/{ipAddress}', [IpAddressController::class, 'update'])->name('ip-addresses.update');

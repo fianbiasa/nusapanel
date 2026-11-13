@@ -6,6 +6,11 @@
 
     # No access log: Nginx in front already logs every request.
     ErrorLog {{.LogDir}}/{{.Domain}}.apache-error.log
+{{- if .CustomApache}}
+
+    # The administrator's additions for every website.
+    IncludeOptional {{.CustomApache}}
+{{- end}}
 
 {{- if .PHP}}
 

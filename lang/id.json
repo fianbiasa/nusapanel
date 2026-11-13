@@ -527,5 +527,10 @@
     "This domain is a website on this server.": "Domain ini adalah website di server ini.",
     "Another reseller signs in at this domain.": "Reseller lain sudah memakai domain ini untuk masuk panel.",
     "The panel no longer answers at your own domain.": "Panel tidak lagi melayani di domain Anda sendiri.",
-    "The panel is being set up at :domain.": "Panel sedang disiapkan di :domain."
+    "The panel is being set up at :domain.": "Panel sedang disiapkan di :domain.",
+    "The file changed since you opened it. Open it again to see the change.": "File ini berubah sejak Anda membukanya. Buka lagi untuk melihat perubahannya.",
+    "The change was not saved: :reason": "Perubahan tidak disimpan: :reason",
+    "The file could not be saved. Try again in a moment.": "File tidak bisa disimpan. Coba lagi sebentar lagi.",
+    "The file is saved and in use.": "File disimpan dan sudah dipakai.",
+    "The backup is back in place.": "Versi sebelumnya sudah dipulihkan."
 }

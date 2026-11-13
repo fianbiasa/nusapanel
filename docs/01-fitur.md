@@ -154,26 +154,26 @@ Pembagian level sama seperti DirectAdmin:
 
 ### Server
 
-| Fitur                                 | Keterangan                                                                              | Fase |
-| ------------------------------------- | --------------------------------------------------------------------------------------- | ---- |
-| Info sistem                           | ✅ CPU, RAM, disk, load, uptime, versi software                                         | P1   |
-| Service monitor                       | ✅ Status, start/stop/restart; restart otomatis kalau mati                              | P1   |
-| Pengaturan server                     | ✅ Hostname, timezone, port panel, SSL panel, batas upload; bahasa default ikut fase PB | P1   |
-| Rebuild config                        | ✅ Tulis ulang semua config dari database (setara `rewrite_confs`)                      | P1   |
-| Nameserver default                    | ✅                                                                                      | P2   |
-| DNS administration                    | ✅ Semua zone, template DNS default                                                     | P2   |
-| Mail queue                            | ✅ Lihat (dengan alasan tertunda), kirim ulang, hapus (admin, menu Antrean Email)       | P2   |
-| Batas kirim email                     | ✅ Per akun (bawaan 300) dan seluruh server per 24 jam, diatur di Pengaturan Server     | P2   |
-| Process monitor                       | ✅ Lihat proses (CPU, RAM, pemakaian per user) & hentikan (TERM/KILL)                   | P3   |
-| Statistik pemakaian                   | ✅ Ranking akun per disk & bandwidth                                                    | P3   |
-| Manajemen IP                          | ✅ Tambah/hapus IPv4/IPv6, berikan ke reseller, IP sendiri per akun (website & DNS-nya) | P3   |
-| File editor sistem                    | Hanya file config yang diizinkan                                                        | P3   |
-| Template config kustom                | Override template vhost, PHP-FPM, DNS                                                   | P3   |
-| Update panel                          | Satu klik, kanal stable/beta                                                            | P5   |
-| Software manager (setara CustomBuild) | Pasang/hapus versi PHP & ekstensi, update phpMyAdmin/Roundcube, versi MariaDB           | P6   |
-| Multi-server & DNS cluster            |                                                                                         | P6   |
-| Plugin manager                        |                                                                                         | P6   |
-| Skin manager                          |                                                                                         | P6   |
+| Fitur                                 | Keterangan                                                                                                               | Fase |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ---- |
+| Info sistem                           | ✅ CPU, RAM, disk, load, uptime, versi software                                                                          | P1   |
+| Service monitor                       | ✅ Status, start/stop/restart; restart otomatis kalau mati                                                               | P1   |
+| Pengaturan server                     | ✅ Hostname, timezone, port panel, SSL panel, batas upload; bahasa default ikut fase PB                                  | P1   |
+| Rebuild config                        | ✅ Tulis ulang semua config dari database (setara `rewrite_confs`)                                                       | P1   |
+| Nameserver default                    | ✅                                                                                                                       | P2   |
+| DNS administration                    | ✅ Semua zone, template DNS default                                                                                      | P2   |
+| Mail queue                            | ✅ Lihat (dengan alasan tertunda), kirim ulang, hapus (admin, menu Antrean Email)                                        | P2   |
+| Batas kirim email                     | ✅ Per akun (bawaan 300) dan seluruh server per 24 jam, diatur di Pengaturan Server                                      | P2   |
+| Process monitor                       | ✅ Lihat proses (CPU, RAM, pemakaian per user) & hentikan (TERM/KILL)                                                    | P3   |
+| Statistik pemakaian                   | ✅ Ranking akun per disk & bandwidth                                                                                     | P3   |
+| Manajemen IP                          | ✅ Tambah/hapus IPv4/IPv6, berikan ke reseller, IP sendiri per akun (website & DNS-nya)                                  | P3   |
+| File editor sistem                    | ✅ Hanya file tambahan RAYXO (Nginx, Apache, PHP per versi, MariaDB): diuji, dibatalkan kalau ditolak, 10 versi cadangan | P3   |
+| Template config kustom                | ✅ Tambahan vhost Nginx & Apache untuk semua website, template pool PHP-FPM; template DNS sejak P2                       | P3   |
+| Update panel                          | Satu klik, kanal stable/beta                                                                                             | P5   |
+| Software manager (setara CustomBuild) | Pasang/hapus versi PHP & ekstensi, update phpMyAdmin/Roundcube, versi MariaDB                                            | P6   |
+| Multi-server & DNS cluster            |                                                                                                                          | P6   |
+| Plugin manager                        |                                                                                                                          | P6   |
+| Skin manager                          |                                                                                                                          | P6   |
 
 ### Keamanan
 

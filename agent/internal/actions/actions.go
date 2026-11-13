@@ -23,6 +23,7 @@ import (
 	"rayxo/agent/internal/runner"
 	"rayxo/agent/internal/services"
 	"rayxo/agent/internal/sitelogs"
+	"rayxo/agent/internal/sysfiles"
 	"rayxo/agent/internal/sysinfo"
 	"rayxo/agent/internal/sysuser"
 	"rayxo/agent/internal/version"
@@ -117,6 +118,14 @@ func Register(registry *rpc.Registry, config Config) {
 	}
 
 	for name, method := range logMethods(sysuser.System{}, sitelogs.New(sitelogs.DefaultConfig()), transfers) {
+		registry.Register(name, method)
+	}
+
+	files := sysfiles.DefaultConfig()
+	files.PHPVersions = web.PHPVersions
+	files.Run = runner.Run
+
+	for name, method := range configFileMethods(sysfiles.New(files)) {
 		registry.Register(name, method)
 	}
 

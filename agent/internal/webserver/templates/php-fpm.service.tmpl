@@ -12,6 +12,10 @@ Type=notify
 # The account's CPU, memory, process and IO limits, when its package has
 # any, are set on this slice.
 Slice=rayxo-%i.slice
+{{- if .CustomPHPDir}}
+# The administrator's php.ini additions, after the system's.
+Environment=PHP_INI_SCAN_DIR=:{{.CustomPHPDir}}
+{{- end}}
 ExecStart={{.Binary}} --nodaemonize --fpm-config {{.PoolDir}}/%i.conf
 ExecReload=/bin/kill -USR2 $MAINPID
 RuntimeDirectory={{.RuntimeDirectory}}

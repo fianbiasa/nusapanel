@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"rayxo/agent/internal/fpmpool"
 	"regexp"
 	"strings"
 	"text/template"
@@ -30,6 +31,10 @@ type siteData struct {
 	LogDir          string
 	NginxAccountDir string
 	Backend         string
+	// CustomNginx and CustomApache are the administrator's additions every
+	// website's vhosts include; empty for none.
+	CustomNginx  string
+	CustomApache string
 	// Listen are the addresses the site's servers listen on, each followed
 	// by the port: "" (every IPv4 address), "[::]:" (every IPv6 address),
 	// or "192.0.2.10:" and "[2001:db8::10]:" for its own.
@@ -109,6 +114,8 @@ type poolData struct {
 	// LimitExtensions are the only files the pool runs: .php, .phtml and
 	// the website's own PHP extensions.
 	LimitExtensions string
+	// Manager are the process manager settings (fpmpool).
+	Manager []fpmpool.Setting
 }
 
 // masterData is what the account's main PHP-FPM configuration of one
@@ -136,6 +143,9 @@ type unitData struct {
 	PoolDir          string
 	NginxDir         string
 	RuntimeDirectory string
+	// CustomPHPDir holds the administrator's php.ini additions for this
+	// version; empty for none.
+	CustomPHPDir string
 }
 
 // accountData is what the suspended page template sees.
@@ -201,6 +211,8 @@ func (m *Manager) siteData(site Site) siteData {
 		PHPPattern:        phpPattern(site.PHPExtensions),
 		CGI:               site.CGI,
 		Suspended:         site.Suspended,
+		CustomNginx:       m.cfg.CustomNginx,
+		CustomApache:      m.cfg.CustomApache,
 	}
 }
 
@@ -221,6 +233,7 @@ func (m *Manager) sitePoolData(site Site) poolData {
 		Settings:   phpSettingsData(site.PHPSettings),
 		// Apache hands the pool exactly these files (phpPattern).
 		LimitExtensions: limitExtensions(site.PHPExtensions),
+		Manager:         m.poolManager(),
 	}
 }
 
@@ -240,6 +253,7 @@ func (m *Manager) legacyPoolData(user, version string) poolData {
 		PoolName:        name,
 		Settings:        phpSettingsData(nil),
 		LimitExtensions: limitExtensions(nil),
+		Manager:         m.poolManager(),
 	}
 }
 
@@ -273,8 +287,28 @@ func siteKey(domain string) string {
 	return hex.EncodeToString(sum[:])[:12]
 }
 
+// poolManager returns the process manager settings of the administrator's
+// pool template; one that cannot be read gives the defaults, as the panel
+// only saves valid ones.
+func (m *Manager) poolManager() []fpmpool.Setting {
+	settings, err := fpmpool.Load(m.cfg.PoolTemplate)
+	if err != nil {
+		m.logger().Error("the PHP-FPM pool template cannot be read; the defaults are used", "error", err)
+
+		return fpmpool.Defaults
+	}
+
+	return settings
+}
+
 func (m *Manager) unitData(version string) unitData {
+	customPHPDir := ""
+	if m.cfg.CustomPHPDir != "" {
+		customPHPDir = filepath.Join(m.cfg.CustomPHPDir, version)
+	}
+
 	return unitData{
+		CustomPHPDir:     customPHPDir,
 		PHPVersion:       version,
 		PHPTag:           phpTag(version),
 		Binary:           m.phpFPMBinary(version),
