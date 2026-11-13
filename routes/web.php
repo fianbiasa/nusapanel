@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\AccountController;
 use App\Http\Controllers\Admin\AuditLogController;
+use App\Http\Controllers\Admin\BrandingController;
 use App\Http\Controllers\Admin\DnsController as AdminDnsController;
 use App\Http\Controllers\Admin\IpAddressController;
 use App\Http\Controllers\Admin\LoginHistoryController;
@@ -62,6 +63,11 @@ Route::match(['get', 'post'], 'autodiscover/autodiscover.xml', [MailClientConfig
     ->middleware('throttle:60,1,mail-autodiscover')
     ->withoutMiddleware(PreventRequestForgery::class)
     ->name('mail-client.autodiscover');
+
+// A reseller's logo, shown on its accounts' pages and before they sign in.
+Route::get('branding/{resellerSetting}/logo', [BrandingController::class, 'logo'])
+    ->middleware('throttle:120,1,branding-logo')
+    ->name('branding.logo');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
@@ -209,6 +215,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->name('accounts.login-as');
         Route::get('ip-addresses', [IpAddressController::class, 'index'])->name('ip-addresses.index');
         Route::put('ip-addresses/{ipAddress}', [IpAddressController::class, 'update'])->name('ip-addresses.update');
+        Route::get('branding', [BrandingController::class, 'edit'])->name('branding.edit');
+        Route::post('branding', [BrandingController::class, 'update'])->middleware('throttle:30,1,branding')->name('branding.update');
+        Route::put('branding/nameservers', [BrandingController::class, 'updateNameservers'])->middleware('throttle:30,1,branding')->name('branding.nameservers.update');
         Route::get('packages', [PackageController::class, 'index'])->name('packages.index');
         Route::get('packages/create', [PackageController::class, 'create'])->name('packages.create');
         Route::post('packages', [PackageController::class, 'store'])->name('packages.store');

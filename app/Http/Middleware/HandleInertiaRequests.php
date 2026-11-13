@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\BrandingService;
 use App\Services\ImpersonationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Vite;
@@ -48,6 +49,7 @@ class HandleInertiaRequests extends Middleware
                 'impersonator' => fn (): ?array => $this->impersonator($request),
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
+            'branding' => fn (): ?array => app(BrandingService::class)->forRequest($request),
         ];
     }
 

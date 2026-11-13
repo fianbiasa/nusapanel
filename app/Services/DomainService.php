@@ -370,7 +370,7 @@ class DomainService
             $this->tasks->dispatch('ssl.issue', [
                 'username' => $account->username,
                 'domain' => $domain->name,
-                ...($wildcard ? ['wildcard' => true, 'nameservers' => $this->dns->nameservers()] : []),
+                ...($wildcard ? ['wildcard' => true, 'nameservers' => $this->dns->nameserversFor($account)] : []),
             ], $account, $actor);
 
             $this->audit->record('domain.ssl_requested', $domain, array_filter([

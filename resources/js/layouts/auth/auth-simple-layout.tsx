@@ -1,4 +1,4 @@
-import { Link } from '@inertiajs/react';
+import { Link, usePage } from '@inertiajs/react';
 import { Globe, Mail, Server, ShieldCheck } from 'lucide-react';
 import AppLogo, { AppLogoMark } from '@/components/app-logo';
 import { home } from '@/routes';
@@ -20,6 +20,8 @@ export default function AuthSimpleLayout({
     title,
     description,
 }: AuthLayoutProps) {
+    const { branding } = usePage().props;
+
     return (
         <div className="rayxo-page-bg flex min-h-svh bg-background">
             <aside className="relative hidden w-[44%] max-w-2xl flex-col justify-between overflow-hidden bg-[#0b1530] p-12 text-white lg:flex">
@@ -55,7 +57,7 @@ export default function AuthSimpleLayout({
                 </div>
 
                 <p className="relative text-xs text-white/50">
-                    © {new Date().getFullYear()} RAYXO
+                    © {new Date().getFullYear()} {branding?.name ?? 'RAYXO'}
                 </p>
             </aside>
 

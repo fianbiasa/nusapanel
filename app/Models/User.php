@@ -130,6 +130,16 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     }
 
     /**
+     * A reseller's branding and nameservers, once it set any.
+     *
+     * @return HasOne<ResellerSetting, $this>
+     */
+    public function resellerSetting(): HasOne
+    {
+        return $this->hasOne(ResellerSetting::class);
+    }
+
+    /**
      * The IPv4 address of its own a hosting account's websites are served
      * on; null for the server's main address.
      *

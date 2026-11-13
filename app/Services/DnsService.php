@@ -502,6 +502,47 @@ class DnsService
     }
 
     /**
+     * The nameservers the zones of a hosting account name: its reseller's
+     * own, when the reseller set them, else the panel's.
+     *
+     * @return list<string>
+     */
+    public function nameserversFor(User $account): array
+    {
+        $owner = $account->owner;
+        $own = $owner !== null && $owner->isReseller() ? $owner->resellerSetting?->nameservers : null;
+
+        if (is_array($own) && $own !== []) {
+            return array_values(array_filter($own, is_string(...)));
+        }
+
+        return $this->nameservers();
+    }
+
+    /**
+     * Queue every zone of a reseller's accounts again, e.g. after its
+     * nameservers changed. Zones of accounts still being created are sent
+     * once they exist.
+     *
+     * @return int The number of zones queued.
+     */
+    public function syncResellerAccounts(User $reseller, ?User $actor): int
+    {
+        $queued = 0;
+
+        DnsZone::query()
+            ->with('account.owner.resellerSetting')
+            ->whereIn('user_id', User::query()->select('id')->where('owner_id', $reseller->id)->where('status', '!=', AccountStatus::Pending))
+            ->orderBy('id')
+            ->each(function (DnsZone $zone) use ($actor, &$queued): void {
+                $this->sync($zone, $actor);
+                $queued++;
+            });
+
+        return $queued;
+    }
+
+    /**
      * Point the website names of the account's zones (its domains,
      * subdomains and pointers, and their www) from its old addresses to its
      * new ones; null is the server's main IPv4 address, or no IPv6 address.
@@ -854,7 +895,7 @@ class DnsService
         $this->tasks->dispatch('dns.sync_zone', [
             'username' => $account->username,
             'zone' => $zone->name,
-            'nameservers' => $this->nameservers(),
+            'nameservers' => $this->nameserversFor($account),
             'records' => $zone->records()
                 ->orderBy('name')
                 ->orderBy('type')

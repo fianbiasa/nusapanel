@@ -519,5 +519,8 @@
     ":address saved.": ":address disimpan.",
     ":address was removed.": ":address dihapus.",
     "The websites of :username are being moved to their addresses.": "Website :username sedang dipindah ke alamatnya.",
-    "The :attribute must be an IP address websites can be served on.": ":attribute harus alamat IP yang bisa dipakai website."
+    "The :attribute must be an IP address websites can be served on.": ":attribute harus alamat IP yang bisa dipakai website.",
+    "Branding saved.": "Branding disimpan.",
+    "Your accounts use the panel's nameservers again.": "Akun-akun Anda kembali memakai nameserver panel.",
+    "Nameservers saved. The zones of your accounts are being updated.": "Nameserver disimpan. Zone DNS akun-akun Anda sedang diperbarui."
 }

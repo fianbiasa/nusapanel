@@ -44,7 +44,7 @@ class DnsController extends Controller
                     'priority' => $record->priority,
                 ])
                 ->values(),
-            'nameservers' => $this->dns->nameservers(),
+            'nameservers' => $this->dns->nameserversFor($account),
             'types' => DnsRecordInput::TYPES,
             'max_records' => DnsRecordInput::MAX_RECORDS,
             'sync' => $this->dns->syncState($account),

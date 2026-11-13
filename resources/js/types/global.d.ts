@@ -1,3 +1,4 @@
+import type { Branding } from '@/lib/branding';
 import type { Auth } from '@/types/auth';
 
 declare module 'react' {
@@ -12,6 +13,8 @@ declare module '@inertiajs/core' {
             name: string;
             auth: Auth;
             sidebarOpen: boolean;
+            /** A reseller's look of the panel, or null for RAYXO's. */
+            branding: Branding | null;
             [key: string]: unknown;
         };
     }
