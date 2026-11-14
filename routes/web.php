@@ -18,6 +18,7 @@ use App\Http\Controllers\Admin\StatisticsController;
 use App\Http\Controllers\Admin\SystemBackupController;
 use App\Http\Controllers\Admin\SystemFileController;
 use App\Http\Controllers\Admin\TaskController;
+use App\Http\Controllers\Admin\TransferController;
 use App\Http\Controllers\AnnouncementController;
 use App\Http\Controllers\BackupController;
 use App\Http\Controllers\CatchAllController;
@@ -288,6 +289,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('backups/schedule', [ServerBackupController::class, 'updateSchedule'])->middleware('throttle:20,1,backup-schedule')->name('backups.schedule');
         Route::post('backups/run', [ServerBackupController::class, 'run'])->middleware('throttle:5,1,backup-run')->name('backups.run');
         Route::post('backups/restore-all', [ServerBackupController::class, 'restoreAll'])->middleware('throttle:5,1,backup-restore-all')->name('backups.restore-all');
+        Route::post('backups/scan', [ServerBackupController::class, 'scan'])->middleware('throttle:10,1,backup-scan')->name('backups.scan');
+        Route::get('transfers', [TransferController::class, 'index'])->name('transfers.index');
+        Route::post('transfers/connect', [TransferController::class, 'connect'])->middleware('throttle:10,1,transfer-connect')->name('transfers.connect');
+        Route::post('transfers', [TransferController::class, 'store'])->middleware('throttle:5,1,transfer-start')->name('transfers.store');
         Route::put('backups/system/settings', [SystemBackupController::class, 'updateSettings'])->middleware('throttle:20,1,backup-system')->name('backups.system.settings');
         Route::post('backups/system', [SystemBackupController::class, 'store'])->middleware('throttle:5,1,backup-system-now')->name('backups.system.store');
         Route::get('backups/system/{systemBackup}/download', [SystemBackupController::class, 'download'])->middleware('throttle:10,1,backup-system-download')->name('backups.system.download');

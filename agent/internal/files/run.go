@@ -204,6 +204,11 @@ func (t Transfers) DownloadPath(id string) string {
 	return filepath.Join(t.Dir, id+".download")
 }
 
+// UploadPath is where the panel writes upload id.
+func (t Transfers) UploadPath(id string) string {
+	return filepath.Join(t.Dir, id+".upload")
+}
+
 // checkDir makes sure the folder belongs to root and nobody else can
 // replace it, when the agent runs as root.
 func (t Transfers) checkDir() error {

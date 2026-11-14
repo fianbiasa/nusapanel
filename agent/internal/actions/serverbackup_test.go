@@ -68,6 +68,7 @@ type serverBackupEnv struct {
 	dir       string
 	helper    *homeHelper
 	databases *dumpReader
+	transfers files.Transfers
 	free      uint64
 }
 
@@ -79,9 +80,12 @@ func newServerBackupEnv(t *testing.T) *serverBackupEnv {
 	env.helper = &homeHelper{homes: homes}
 	env.databases = &dumpReader{fakeDatabaseServer: &fakeDatabaseServer{}, homes: homes, imported: map[string]string{}}
 
+	env.transfers = files.Transfers{Dir: t.TempDir(), PanelUID: os.Getuid()}
+
 	actions := serverBackupActions{
-		backups: backupActions{accounts: accountActions{system: newQuotaSystem()}, helper: env.helper, databases: env.databases},
-		config:  BackupsConfig{Dir: env.dir, PanelGID: -1},
+		backups:   backupActions{accounts: accountActions{system: newQuotaSystem()}, helper: env.helper, databases: env.databases},
+		config:    BackupsConfig{Dir: env.dir, PanelGID: -1},
+		transfers: env.transfers,
 		space: func(string) (diskSpace, error) {
 			return diskSpace{Total: 200 << 30, Free: env.free, Reserve: 10 << 30}, nil
 		},
@@ -93,6 +97,8 @@ func newServerBackupEnv(t *testing.T) *serverBackupEnv {
 		"backup.server_restore": {Handler: actions.restore},
 		"backup.server_delete":  {Handler: actions.delete},
 		"backup.server_space":   {Handler: actions.diskSpace},
+		"backup.server_import":  {Handler: actions.importUpload},
+		"backup.server_list":    {Handler: actions.list},
 	}
 
 	for path, content := range map[string]string{
@@ -180,7 +186,7 @@ func TestServerBackupMethodsAreRegisteredAndOnlyRestoresLockTheAccount(t *testin
 		}
 	}
 
-	methods := serverBackupMethods(newQuotaSystem(), &homeHelper{}, &fakeDatabaseServer{}, BackupsConfig{})
+	methods := serverBackupMethods(newQuotaSystem(), &homeHelper{}, &fakeDatabaseServer{}, files.Transfers{}, BackupsConfig{})
 	if methods["backup.server_create"].LockKey != nil || methods["backup.server_create"].Timeout != backupTimeout {
 		t.Error("a backup must not hold the account's lock for hours")
 	}
@@ -396,5 +402,87 @@ func TestServerBackupsAreDeletedForGoodAndNeverThroughALink(t *testing.T) {
 
 	if readHome(t, secret) != "not a backup" {
 		t.Error("the file behind the link changed")
+	}
+}
+
+func TestABackupFromAnotherServerIsMovedIntoPlaceOnlyWhenItIsOne(t *testing.T) {
+	env := newServerBackupEnv(t)
+
+	created, err := env.create(t, map[string]any{"files": true, "email": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The panel downloaded it from the other server as an upload.
+	transfer := strings.Repeat("u", 32)
+	if err := os.Rename(filepath.Join(env.dir, created.Name), env.transfers.UploadPath(transfer)); err != nil {
+		t.Fatal(err)
+	}
+
+	raw, err := callBackup(env.methods, "backup.server_import", map[string]any{"transfer": transfer, "name": "budi-from-old.tar.gz"})
+	if err != nil || !strings.Contains(string(raw), `"manifest":"{\"format\":1}"`) {
+		t.Fatalf("import = %s, %v", raw, err)
+	}
+
+	info, err := os.Lstat(filepath.Join(env.dir, "budi-from-old.tar.gz"))
+	if err != nil || info.Mode().Perm() != 0o640 {
+		t.Fatalf("imported = %v, %v", info, err)
+	}
+
+	if _, err := os.Lstat(env.transfers.UploadPath(transfer)); !errors.Is(err, os.ErrNotExist) {
+		t.Error("the upload stayed")
+	}
+
+	// Anything else is refused, and the upload goes.
+	other := strings.Repeat("v", 32)
+	writeHomeFile(t, env.transfers.UploadPath(other), "not a backup")
+
+	if _, err := callBackup(env.methods, "backup.server_import", map[string]any{"transfer": other, "name": "evil.tar.gz"}); err == nil {
+		t.Error("imported a file that is not a backup")
+	}
+
+	if _, err := os.Lstat(filepath.Join(env.dir, "evil.tar.gz")); !errors.Is(err, os.ErrNotExist) {
+		t.Error("the refused file is in the backups folder")
+	}
+
+	if _, err := os.Lstat(env.transfers.UploadPath(other)); !errors.Is(err, os.ErrNotExist) {
+		t.Error("the refused upload stayed")
+	}
+
+	// A name that is taken is never replaced.
+	if err := os.Symlink("/etc/passwd", env.transfers.UploadPath(other)); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := callBackup(env.methods, "backup.server_import", map[string]any{"transfer": other, "name": "linked.tar.gz"}); err == nil {
+		t.Error("imported through a link")
+	}
+}
+
+func TestTheBackupsFolderIsListedWithoutLinksOrOtherFiles(t *testing.T) {
+	env := newServerBackupEnv(t)
+
+	if _, err := env.create(t, map[string]any{"files": true}); err != nil {
+		t.Fatal(err)
+	}
+
+	writeHomeFile(t, filepath.Join(env.dir, "notes.txt"), "not a backup")
+
+	if err := os.Symlink("/etc/passwd", filepath.Join(env.dir, "linked.tar.gz")); err != nil {
+		t.Fatal(err)
+	}
+
+	raw, err := callBackup(env.methods, "backup.server_list", map[string]any{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var listed struct {
+		Backups []serverBackupFile `json:"backups"`
+	}
+	_ = json.Unmarshal(raw, &listed)
+
+	if len(listed.Backups) != 1 || listed.Backups[0].Name != "budi-2026-11-14-020000.tar.gz" || listed.Backups[0].Size == 0 {
+		t.Errorf("listed = %+v", listed.Backups)
 	}
 }

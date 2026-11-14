@@ -14,6 +14,7 @@ use App\Models\BackupRun;
 use App\Models\ServerBackup;
 use App\Models\Setting;
 use App\Models\User;
+use App\Rules\ValidUsername;
 use App\Support\NotificationEvents;
 use Carbon\CarbonImmutable;
 use DateTimeZone;
@@ -583,6 +584,89 @@ class ServerBackupService
 
             $this->audit->record('backup.server_restored', $account, ['name' => $backup->name, 'files' => $files, 'email' => $email, 'databases' => $databases], $actor);
         });
+    }
+
+    /**
+     * Register the backups in the folder the panel does not know yet:
+     * those copied there by hand, such as from another server. A backup of
+     * a username that is an account here belongs to it; the others make
+     * their account again. Returns what was added, and what was not a
+     * RAYXO backup.
+     *
+     * @return array{added: list<string>, refused: list<string>}
+     *
+     * @throws ValidationException
+     */
+    public function scan(User $actor): array
+    {
+        try {
+            $files = (array) ($this->agent->call('backup.server_list', [], 60)['backups'] ?? []);
+        } catch (AgentException $exception) {
+            throw ValidationException::withMessages(['backup' => $this->reason($exception)]);
+        }
+
+        $names = array_values(array_filter(array_map(fn (mixed $file): ?string => is_array($file) && is_string($file['name'] ?? null) ? $file['name'] : null, $files)));
+        $known = ServerBackup::query()->whereIn('name', $names)->pluck('name')->all();
+        $added = [];
+        $refused = [];
+
+        foreach ($files as $file) {
+            if (! is_array($file) || ! is_string($file['name'] ?? null) || in_array($file['name'], $known, true)) {
+                continue;
+            }
+
+            try {
+                $meta = $this->agent->call('backup.server_inspect', ['name' => $file['name']]);
+                $this->register($file['name'], (int) ($file['size'] ?? 0), $meta, $actor);
+                $added[] = $file['name'];
+            } catch (AgentException|ValidationException) {
+                $refused[] = $file['name'];
+            }
+        }
+
+        if ($added !== []) {
+            $this->audit->record('backup.server_scanned', null, ['added' => $added], $actor);
+        }
+
+        return ['added' => $added, 'refused' => $refused];
+    }
+
+    /**
+     * Remember a backup the agent keeps but did not make here, from the
+     * manifest and settings it read at its start.
+     *
+     * @param  array<string, mixed>  $meta
+     *
+     * @throws ValidationException
+     */
+    public function register(string $name, int $size, array $meta, User $actor): ServerBackup
+    {
+        $manifest = json_decode((string) ($meta['manifest'] ?? ''), true);
+        $username = is_array($manifest) ? ($manifest['username'] ?? null) : null;
+
+        if (! is_array($manifest) || ($manifest['format'] ?? null) !== BackupService::FORMAT || ! is_string($username) || preg_match(ValidUsername::PATTERN, $username) !== 1) {
+            throw ValidationException::withMessages(['backup' => __('This file is not a RAYXO backup.')]);
+        }
+
+        $account = User::query()->where('role', Role::User)->where('username', $username)->first();
+        $databases = array_values(array_filter((array) ($manifest['databases'] ?? []), fn (mixed $database): bool => is_string($database) && str_starts_with($database, $username.'_')));
+
+        $backup = new ServerBackup;
+        $backup->forceFill([
+            'backup_run_id' => null,
+            'user_id' => $account?->id,
+            'owner_id' => $account !== null ? $account->owner_id : $actor->id,
+            'username' => $username,
+            'name' => $name,
+            'status' => ServerBackupStatus::Completed,
+            'files' => ($manifest['files'] ?? false) === true,
+            'email' => ($manifest['email'] ?? false) === true,
+            'databases' => $databases,
+            'size_bytes' => $size,
+            'finished_at' => now(),
+        ])->save();
+
+        return $backup;
     }
 
     /**

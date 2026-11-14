@@ -20,6 +20,8 @@ final class LoginKeyPermissions
         'accounts:read' => [Role::Admin, Role::Reseller],
         'accounts:write' => [Role::Admin, Role::Reseller],
         'packages:read' => [Role::Admin, Role::Reseller],
+        'backups:read' => [Role::Admin, Role::Reseller],
+        'backups:write' => [Role::Admin, Role::Reseller],
         'domains:read' => [Role::User],
         'domains:write' => [Role::User],
         'databases:read' => [Role::User],

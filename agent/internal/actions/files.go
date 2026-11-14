@@ -33,6 +33,7 @@ type fileHelper interface {
 // implements it.
 type fileTransfers interface {
 	OpenUpload(id string) (*os.File, error)
+	UploadPath(id string) string
 	CreateDownload(id string) (*os.File, error)
 	DownloadPath(id string) string
 }

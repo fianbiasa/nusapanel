@@ -1,6 +1,7 @@
 import { usePage } from '@inertiajs/react';
 import {
     Archive,
+    ArrowLeftRight,
     Activity,
     ChartColumn,
     Boxes,
@@ -36,6 +37,7 @@ import { index as dnsIndex } from '@/routes/dns';
 import { index as accountsIndex } from '@/routes/admin/accounts';
 import { index as auditLogsIndex } from '@/routes/admin/audit-logs';
 import { index as serverBackupsIndex } from '@/routes/admin/backups';
+import { index as transfersIndex } from '@/routes/admin/transfers';
 import { index as ipAddressesIndex } from '@/routes/admin/ip-addresses';
 import { index as loginHistoryIndex } from '@/routes/admin/login-history';
 import { index as adminDnsIndex } from '@/routes/admin/dns';
@@ -187,6 +189,11 @@ export function useNavigation(): {
             href: serverBackupsIndex(),
             icon: Archive,
         };
+        const transfers: NavItem = {
+            title: 'Transfer',
+            href: transfersIndex(),
+            icon: ArrowLeftRight,
+        };
 
         sections.push(
             {
@@ -210,6 +217,7 @@ export function useNavigation(): {
                     mailQueue,
                     ipAddresses,
                     serverBackups,
+                    transfers,
                     serverSettings,
                     systemFiles,
                     tasks,

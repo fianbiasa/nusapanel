@@ -119,16 +119,18 @@ type serverBackupCreated struct {
 // home are still only read and written by the files helper, as the
 // account: they reach the agent and go back as a tar stream.
 type serverBackupActions struct {
-	backups backupActions
-	config  BackupsConfig
-	space   func(dir string) (diskSpace, error)
+	backups   backupActions
+	config    BackupsConfig
+	transfers fileTransfers
+	space     func(dir string) (diskSpace, error)
 }
 
-func serverBackupMethods(system accountSystem, helper fileHelper, databases databaseServer, config BackupsConfig) map[string]rpc.Method {
+func serverBackupMethods(system accountSystem, helper fileHelper, databases databaseServer, transfers fileTransfers, config BackupsConfig) map[string]rpc.Method {
 	actions := serverBackupActions{
-		backups: backupActions{accounts: accountActions{system: system}, helper: helper, databases: databases},
-		config:  config,
-		space:   readDiskSpace,
+		backups:   backupActions{accounts: accountActions{system: system}, helper: helper, databases: databases},
+		config:    config,
+		transfers: transfers,
+		space:     readDiskSpace,
 	}
 
 	return map[string]rpc.Method{
@@ -139,7 +141,138 @@ func serverBackupMethods(system accountSystem, helper fileHelper, databases data
 		"backup.server_restore": {Handler: actions.restore, LockKey: webLockKey[backupRestoreParams], Timeout: backupTimeout},
 		"backup.server_delete":  {Handler: actions.delete},
 		"backup.server_space":   {Handler: actions.diskSpace},
+		"backup.server_import":  {Handler: actions.importUpload, Timeout: backupTimeout},
+		"backup.server_list":    {Handler: actions.list},
 	}
+}
+
+// serverBackupImportParams are the params of backup.server_import: the
+// upload the panel wrote (a backup it downloaded from another server) and
+// the name it is kept under.
+type serverBackupImportParams struct {
+	Transfer string `json:"transfer"`
+	Name     string `json:"name"`
+}
+
+func (p serverBackupImportParams) account() string { return "" }
+
+func (p serverBackupImportParams) validate() error {
+	return errors.Join(files.CheckTransferID(p.Transfer), validateBackupName(p.Name))
+}
+
+// importUpload implements backup.server_import: an upload that is a RAYXO
+// backup becomes <dir>/<name>, root's and readable by the panel's group,
+// as if the agent had made it. It is moved, not copied, so a backup of
+// many gigabytes does not need its size twice; the file moved must be the
+// one opened and checked. Its manifest and settings are returned.
+func (s serverBackupActions) importUpload(_ context.Context, raw json.RawMessage) (any, error) {
+	params, err := decodeWebParams[serverBackupImportParams](raw)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.ensureDir(); err != nil {
+		return nil, err
+	}
+
+	path := filepath.Join(s.config.Dir, params.Name)
+	if _, err := os.Lstat(path); err == nil {
+		return nil, rpc.Errorf(rpc.CodeActionFailed, "backup %s already exists", params.Name)
+	}
+
+	upload, err := s.transfers.OpenUpload(params.Transfer)
+	if err != nil {
+		slog.Warn("backup import refused", "transfer", params.Transfer, "error", err)
+
+		return nil, rpc.Errorf(rpc.CodeActionFailed, "the uploaded backup could not be read")
+	}
+	defer upload.Close()
+
+	meta, err := files.ReadBackupMeta(upload)
+	if err != nil {
+		_ = os.Remove(s.transfers.UploadPath(params.Transfer))
+
+		return nil, fileError(err)
+	}
+
+	if err := os.Rename(s.transfers.UploadPath(params.Transfer), path); err != nil {
+		return nil, fmt.Errorf("move backup %s into place: %w", params.Name, err)
+	}
+
+	opened, err := upload.Stat()
+	if err != nil {
+		_ = os.Remove(path)
+
+		return nil, fmt.Errorf("read backup %s: %w", params.Name, err)
+	}
+
+	if moved, err := os.Lstat(path); err != nil || !os.SameFile(opened, moved) {
+		_ = os.Remove(path)
+
+		return nil, rpc.Errorf(rpc.CodeActionFailed, "the uploaded backup changed while it was imported")
+	}
+
+	if err := upload.Chmod(0o640); err != nil {
+		_ = os.Remove(path)
+
+		return nil, fmt.Errorf("protect backup %s: %w", params.Name, err)
+	}
+
+	if os.Geteuid() == 0 && s.config.PanelGID >= 0 {
+		if err := upload.Chown(0, s.config.PanelGID); err != nil {
+			_ = os.Remove(path)
+
+			return nil, fmt.Errorf("give backup %s to root: %w", params.Name, err)
+		}
+	}
+
+	return map[string]any{"name": params.Name, "size": opened.Size(), "manifest": meta.Manifest, "settings": meta.Settings}, nil
+}
+
+// serverBackupFile is one file in the backups folder.
+type serverBackupFile struct {
+	Name     string `json:"name"`
+	Size     int64  `json:"size"`
+	Modified int64  `json:"modified"`
+}
+
+// list implements backup.server_list: the backups in the folder, such as
+// those copied there from another server. Links and other files are left
+// out.
+func (s serverBackupActions) list(_ context.Context, raw json.RawMessage) (any, error) {
+	if err := rpc.DecodeParams(raw, &struct{}{}); err != nil {
+		return nil, err
+	}
+
+	if err := s.ensureDir(); err != nil {
+		return nil, err
+	}
+
+	entries, err := os.ReadDir(s.config.Dir)
+	if err != nil {
+		return nil, fmt.Errorf("list the backups folder: %w", err)
+	}
+
+	found := []serverBackupFile{}
+
+	for _, entry := range entries {
+		if !entry.Type().IsRegular() || validateBackupName(entry.Name()) != nil {
+			continue
+		}
+
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+
+		found = append(found, serverBackupFile{Name: entry.Name(), Size: info.Size(), Modified: info.ModTime().Unix()})
+
+		if len(found) == 10000 {
+			break
+		}
+	}
+
+	return map[string]any{"backups": found}, nil
 }
 
 // create implements backup.server_create: <dir>/<name> becomes a tar.gz

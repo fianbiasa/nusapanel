@@ -225,6 +225,24 @@ class ServerBackupController extends Controller
     }
 
     /**
+     * Register the backups copied into the backups folder by hand.
+     */
+    public function scan(Request $request): RedirectResponse
+    {
+        $result = $this->backups->scan($request->user());
+
+        $message = __('Found :count new backup(s) in the backups folder.', ['count' => count($result['added'])]);
+
+        if ($result['refused'] !== []) {
+            $message .= ' '.__('Not RAYXO backups: :names', ['names' => implode(', ', array_slice($result['refused'], 0, 5)).(count($result['refused']) > 5 ? ', …' : '')]);
+        }
+
+        Inertia::flash('toast', ['type' => $result['refused'] === [] ? 'success' : 'error', 'message' => $message]);
+
+        return back();
+    }
+
+    /**
      * Back up one account now.
      */
     public function store(Request $request): RedirectResponse

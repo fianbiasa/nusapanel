@@ -2,6 +2,7 @@ import { router } from '@inertiajs/react';
 import {
     DatabaseBackup,
     Download,
+    FolderSearch,
     RotateCcw,
     Server,
     Trash2,
@@ -25,7 +26,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { formatBytes, formatDateTime } from '@/lib/format';
-import { restoreAll } from '@/routes/admin/backups';
+import { restoreAll, scan } from '@/routes/admin/backups';
 import {
     destroy,
     download,
@@ -285,6 +286,7 @@ function Command({ children }: { children: string }) {
 export function ServerRestorePanel() {
     const [confirming, setConfirming] = useState(false);
     const [processing, setProcessing] = useState(false);
+    const [scanning, setScanning] = useState(false);
 
     const restore = () => {
         setProcessing(true);
@@ -327,6 +329,27 @@ export function ServerRestorePanel() {
                             'chown root:rayxo /var/lib/rayxo/backups/*.tar.gz\nchmod 640 /var/lib/rayxo/backups/*.tar.gz'
                         }
                     </Command>
+                    lalu daftarkan file-file itu ke panel:
+                    <div>
+                        <Button
+                            variant="outline"
+                            disabled={scanning}
+                            onClick={() => {
+                                setScanning(true);
+                                router.post(
+                                    scan.url(),
+                                    {},
+                                    {
+                                        preserveScroll: true,
+                                        onFinish: () => setScanning(false),
+                                    },
+                                );
+                            }}
+                        >
+                            {scanning ? <Spinner /> : <FolderSearch />}
+                            Pindai folder backup
+                        </Button>
+                    </div>
                 </li>
                 <li className="grid gap-2">
                     Masuk ke panel di server baru dengan login admin lama, buka

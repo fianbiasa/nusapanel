@@ -37,6 +37,9 @@ const permissionLabels: Record<string, string> = {
     'accounts:read': 'Lihat akun hosting',
     'accounts:write': 'Buat, suspend, ubah paket, dan hapus akun hosting',
     'packages:read': 'Lihat paket',
+    'backups:read':
+        'Lihat dan unduh backup akun hosting (berisi data dan hash password akun)',
+    'backups:write': 'Buat backup akun hosting',
     'domains:read': 'Lihat domain',
     'domains:write': 'Tambah dan hapus domain',
     'databases:read': 'Lihat database dan user database',
@@ -93,6 +96,22 @@ const endpoints: {
         method: 'DELETE',
         path: '/accounts/{username}',
         permission: 'accounts:write',
+    },
+    {
+        method: 'GET',
+        path: '/accounts/{username}/backups',
+        permission: 'backups:read',
+    },
+    {
+        method: 'POST',
+        path: '/accounts/{username}/backups',
+        permission: 'backups:write',
+    },
+    { method: 'GET', path: '/backups/{id}', permission: 'backups:read' },
+    {
+        method: 'GET',
+        path: '/backups/{id}/download',
+        permission: 'backups:read',
     },
     { method: 'GET', path: '/domains', permission: 'domains:read' },
     {

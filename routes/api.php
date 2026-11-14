@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AccountController;
+use App\Http\Controllers\Api\V1\BackupController;
 use App\Http\Controllers\Api\V1\DatabaseController;
 use App\Http\Controllers\Api\V1\DnsController;
 use App\Http\Controllers\Api\V1\DomainController;
@@ -24,6 +25,14 @@ Route::prefix('v1')->name('api.v1.')->middleware([AuthenticateWithLoginKey::clas
             Route::get('accounts', [AccountController::class, 'index'])->name('accounts.index');
             Route::get('accounts/{account:username}', [AccountController::class, 'show'])->name('accounts.show');
         });
+
+        Route::middleware('login-key:backups:read')->group(function () {
+            Route::get('accounts/{account:username}/backups', [BackupController::class, 'index'])->name('accounts.backups.index');
+            Route::get('backups/{serverBackup}', [BackupController::class, 'show'])->name('backups.show');
+            Route::get('backups/{serverBackup}/download', [BackupController::class, 'download'])->middleware('throttle:10,1,api-backup-download')->name('backups.download');
+        });
+
+        Route::post('accounts/{account:username}/backups', [BackupController::class, 'store'])->middleware(['login-key:backups:write', 'throttle:20,1,api-backup-now'])->name('accounts.backups.store');
 
         Route::middleware('login-key:accounts:write')->group(function () {
             Route::post('accounts', [AccountController::class, 'store'])->name('accounts.store');
