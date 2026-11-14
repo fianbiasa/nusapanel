@@ -289,7 +289,7 @@ export default function AccountsIndex({
                     <Form
                         {...routes.index.form()}
                         options={{ preserveState: true, replace: true }}
-                        className="hidden w-full max-w-3xl items-center gap-2 md:flex"
+                        className="hidden w-full max-w-3xl flex-wrap items-center justify-end gap-2 md:flex"
                     >
                         {sort !== 'newest' && (
                             <input type="hidden" name="sort" value={sort} />
