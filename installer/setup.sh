@@ -117,6 +117,9 @@ admin_user="admin"
 admin_email=""
 assume_yes=0
 force=0
+# A backup of the panel itself (Backup page of the old panel, "Backup sistem
+# panel") to bring back on this server; see restore_system.
+restore_file=""
 public_ip=""
 public_ip_given=0
 skip_dns_check=0
@@ -198,6 +201,10 @@ Lainnya:
                         dipakai panel untuk mengganti hostname (bersama --hostname)
   --yes                 jangan minta konfirmasi
   --force               lewati pengecekan "server harus bersih" (tidak disarankan)
+  --restore-system FILE pulihkan panel dari backup sistem panel lama (menu Backup):
+                        database panel, kunci data, kunci DKIM, dan file unggahan.
+                        Akun hosting, domain, database, dan email dibuat lagi (kosong);
+                        isinya kembali dari backup akun lewat menu Backup
   -h, --help            tampilkan bantuan ini
 USAGE
 }
@@ -221,6 +228,7 @@ parse_args() {
             --allow-downgrade) allow_downgrade=1; shift ;;
             --panel-port) need_value "$1" "${2:-}"; requested_panel_port="$2"; shift 2 ;;
             --force) force=1; shift ;;
+            --restore-system) need_value "$1" "${2:-}"; restore_file="$2"; shift 2 ;;
             --public-ip) need_value "$1" "${2:-}"; public_ip="$2"; public_ip_given=1; shift 2 ;;
             --skip-dns-check) skip_dns_check=1; shift ;;
             --version) need_value "$1" "${2:-}"; requested_version="${2#v}"; shift 2 ;;
@@ -491,6 +499,10 @@ is_private_ip() {
 
 preflight() {
     step "Memeriksa server"
+
+    if [[ -n "$restore_file" ]]; then
+        check_restore_file
+    fi
 
     [[ -r /etc/os-release ]] || die "tidak bisa membaca /etc/os-release"
 
@@ -1539,6 +1551,90 @@ prepare_panel() {
     quietly artisan migrate --force
     quietly artisan optimize
     info "Tabel database dibuat dan cache aplikasi disiapkan"
+}
+
+# The backup of the panel given with --restore-system must be readable and
+# hold the panel's database and configuration; checked before anything is
+# installed.
+check_restore_file() {
+    [[ -f "$restore_file" && -r "$restore_file" ]] || die "backup sistem $restore_file tidak ada atau tidak bisa dibaca"
+
+    local listing
+    listing="$(tar -tzf "$restore_file" 2>/dev/null)" || die "$restore_file bukan backup sistem RAYXO (bukan .tar.gz yang utuh)"
+
+    local entry
+    for entry in rayxo-system/manifest.json rayxo-system/panel.sql rayxo-system/etc-rayxo/panel.env; do
+        grep -qxF "$entry" <<<"$listing" || die "$restore_file bukan backup sistem RAYXO ($entry tidak ada)"
+    done
+}
+
+# Bring the panel back from a backup of itself (--restore-system): its
+# database replaces this one, it gets the key that decrypts its data back,
+# then the DKIM keys and uploaded files. Every hosting account, database,
+# website, mail domain and DNS zone in it is then made on this server again
+# (rayxo:restore-server); their data comes back from the accounts' own
+# backups, from the Backup page. The queue workers are stopped meanwhile,
+# so nothing queued on the old server runs here.
+restore_system() {
+    step "Memulihkan panel dari backup sistem"
+
+    local hosting
+    hosting="$(mariadb -N rayxo -e "SELECT COUNT(*) FROM users WHERE role = 'user'" 2>/dev/null || printf 0)"
+    if [[ "$hosting" != 0 && $force -eq 0 ]]; then
+        die "panel di server ini sudah punya $hosting akun hosting; backup sistem hanya dipulihkan di server baru (atau tambahkan --force untuk menimpanya)"
+    fi
+
+    local work
+    work="$(mktemp -d /root/rayxo-restore.XXXXXX)"
+    tar -xzf "$restore_file" -C "$work" --no-same-owner --no-same-permissions rayxo-system ||
+        { rm -rf "$work"; die "backup sistem tidak bisa dibuka: $restore_file"; }
+
+    local key
+    key="$(sed -n 's/^APP_KEY=//p' "$work/rayxo-system/etc-rayxo/panel.env" | head -n 1)"
+    if [[ ! "$key" =~ ^base64:[A-Za-z0-9+/=]+$ ]]; then
+        rm -rf "$work"
+        die "backup sistem tidak berisi APP_KEY panel"
+    fi
+
+    systemctl stop rayxo-scheduler.timer rayxo-queue.service rayxo-backup-queue.service
+
+    mariadb -e 'DROP DATABASE IF EXISTS `rayxo`; CREATE DATABASE `rayxo` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;'
+    mariadb rayxo <"$work/rayxo-system/panel.sql" ||
+        { rm -rf "$work"; die "database panel dari backup tidak bisa dimuat (detail di $INSTALL_LOG)"; }
+    info "Database panel dipulihkan"
+
+    # The old key decrypts the panel's data (two-factor secrets, tasks);
+    # this server keeps its own database password and address.
+    set_env_value APP_KEY "$key"
+
+    # The DKIM keys the domains' DNS records were published for.
+    if [[ -d "$work/rayxo-system/opendkim-keys" ]]; then
+        install -d -m 0750 -o opendkim -g opendkim /etc/opendkim/keys
+        cp -R "$work/rayxo-system/opendkim-keys/." /etc/opendkim/keys/
+        chown -R opendkim:opendkim /etc/opendkim/keys
+        find /etc/opendkim/keys -type f -name '*.private' -exec chmod 0600 {} +
+        info "Kunci DKIM dipulihkan"
+    fi
+
+    # Ticket attachments and logos.
+    if [[ -d "$work/rayxo-system/storage" ]]; then
+        cp -R "$work/rayxo-system/storage/." "$DATA_DIR/storage/app/"
+        chown -R -h "$PANEL_USER:$PANEL_USER" "$DATA_DIR/storage/app"
+        info "File unggahan panel dipulihkan"
+    fi
+
+    rm -rf "$work"
+
+    quietly artisan migrate --force
+    quietly artisan optimize
+    quietly artisan rayxo:restore-server --system-backup="$(basename "$restore_file")"
+
+    # The admins of the old panel sign in again; no new one is made.
+    touch "$CONFIG_DIR/admin-created"
+
+    systemctl start rayxo-queue.service rayxo-backup-queue.service rayxo-scheduler.timer
+    info "Akun hosting, database, website, email, dan DNS dibuat lagi di latar belakang (lihat Tasks di panel)"
+    info "Isi akun: salin backup akun ke $DATA_DIR/backups, lalu di panel buka Backup > Pulihkan semua akun"
 }
 
 create_admin() {
@@ -3425,11 +3521,17 @@ main() {
     configure_cron_slices
     install_services
     verify_install
-    rebuild_websites
-    apply_quotas
-    sync_dns_zones
-    sync_send_limits
-    apply_mail_rules
+    if [[ -n "$restore_file" ]]; then
+        # Makes the accounts again and writes every configuration, so the
+        # steps below would only repeat it.
+        restore_system
+    else
+        rebuild_websites
+        apply_quotas
+        sync_dns_zones
+        sync_send_limits
+        apply_mail_rules
+    fi
     sync_mail_ssl
     # Last, right before the summary, so a failure in an earlier step can never
     # leave an admin whose generated password was not shown.

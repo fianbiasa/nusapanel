@@ -582,5 +582,14 @@
     "Account :username could not be restored": "Akun :username gagal dipulihkan",
     "Its domain did not come back.": "Domain induknya tidak ikut kembali.",
     "It is not a subdomain of :parent.": "Bukan subdomain dari :parent.",
-    "A cron job": "Cron job"
+    "A cron job": "Cron job",
+    "A backup of the panel is already being made.": "Backup sistem panel sedang dibuat.",
+    "The backup of the panel failed": "Backup sistem panel gagal",
+    "Only a finished backup can be downloaded.": "Hanya backup yang sudah selesai yang bisa diunduh.",
+    "Backing up the panel; :name appears here when it is done.": "Membuat backup sistem panel; :name muncul di sini begitu selesai.",
+    "Settings saved.": "Pengaturan disimpan.",
+    "Restoring :count account(s). See Tasks for how it goes.": "Memulihkan :count akun. Lihat Tasks untuk perkembangannya.",
+    "Not restored: :accounts": "Tidak dipulihkan: :accounts",
+    "no backup of it is on this server": "tidak ada backup-nya di server ini",
+    "Stopped: the panel was restored from a backup on another server.": "Dihentikan: panel dipulihkan dari backup di server lain."
 }

@@ -49,7 +49,14 @@ class ApplyAccountTaskResult
 
     private function applyCreate(User $account, Task $task): void
     {
+        // An account made again on a new server the panel was restored on
+        // (see ServerRestoreService) keeps its status, but may get other
+        // ids there.
         if ($account->status !== AccountStatus::Pending) {
+            if ($task->status === TaskStatus::Success) {
+                $account->forceFill($this->ids($account, $task))->save();
+            }
+
             return;
         }
 
@@ -66,20 +73,29 @@ class ApplyAccountTaskResult
             return;
         }
 
-        $uid = filter_var($task->output['uid'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]);
-        $gid = filter_var($task->output['gid'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]);
-
-        $account->forceFill([
-            'status' => AccountStatus::Active,
-            'uid' => $uid === false ? $account->uid : $uid,
-            'gid' => $gid === false ? $account->gid : $gid,
-        ])->save();
+        $account->forceFill(['status' => AccountStatus::Active, ...$this->ids($account, $task)])->save();
 
         $this->quotas->applyToNewAccount($account, $task->actor);
 
         $this->domains->dispatchPendingDomains($account, $task->actor);
 
         $this->restores->resume($account);
+    }
+
+    /**
+     * The uid and gid the server gave the account, or those it had.
+     *
+     * @return array{uid: int|null, gid: int|null}
+     */
+    private function ids(User $account, Task $task): array
+    {
+        $uid = filter_var($task->output['uid'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]);
+        $gid = filter_var($task->output['gid'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]);
+
+        return [
+            'uid' => $uid === false ? $account->uid : $uid,
+            'gid' => $gid === false ? $account->gid : $gid,
+        ];
     }
 
     private function applyDelete(User $account, Task $task): void

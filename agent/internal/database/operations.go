@@ -66,6 +66,28 @@ func (m *Manager) Export(ctx context.Context, user, name string, out io.Writer) 
 	return nil
 }
 
+// panelDatabasePattern is what the panel's own database may be called.
+var panelDatabasePattern = regexp.MustCompile(`^[A-Za-z0-9_]{1,64}$`)
+
+// ExportPanel writes a dump of the panel's own database name to out, like
+// Export: for a backup of the panel itself.
+func (m *Manager) ExportPanel(ctx context.Context, name string, out io.Writer) error {
+	if !panelDatabasePattern.MatchString(name) {
+		return fmt.Errorf("invalid panel database name %q", name)
+	}
+
+	args := []string{
+		"--single-transaction", "--quick", "--routines", "--triggers", "--events", "--hex-blob",
+		"--default-character-set=utf8mb4", "--skip-dump-date", name,
+	}
+
+	if err := m.cfg.Dump(ctx, args, out); err != nil {
+		return fmt.Errorf("%w: %w", ErrServer, err)
+	}
+
+	return nil
+}
+
 // Import runs the SQL of file (plain or gzip) in database name of user, as
 // the account's Linux user, signed in as its owner user through
 // unix_socket: the SQL reaches only the account's own databases, and the

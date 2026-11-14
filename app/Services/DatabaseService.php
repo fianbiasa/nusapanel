@@ -270,6 +270,39 @@ class DatabaseService
     }
 
     /**
+     * Queue every database of the hosting accounts on the server, and every
+     * database user's password and access, again: on a new server the
+     * panel was restored on. Returns how many databases were queued.
+     */
+    public function reapplyAll(?User $actor = null): int
+    {
+        $accounts = fn ($query) => $query->where('role', Role::User)->whereIn('status', [AccountStatus::Active, AccountStatus::Suspended, AccountStatus::Pending]);
+        $count = 0;
+
+        Database::query()
+            ->with('account')
+            ->whereIn('status', [DatabaseStatus::Active, DatabaseStatus::Pending])
+            ->whereHas('account', $accounts)
+            ->orderBy('id')
+            ->each(function (Database $database) use ($actor, &$count): void {
+                $this->tasks->dispatch('db.create_database', [
+                    'username' => $database->account->username,
+                    'database' => $database->name,
+                ], $database->account, $actor);
+
+                $count++;
+            });
+
+        DatabaseUser::query()
+            ->with('account')
+            ->whereHas('account', $accounts)
+            ->orderBy('id')
+            ->each(fn (DatabaseUser $user) => $this->dispatchApplyUser($user, $user->account, $actor));
+
+        return $count;
+    }
+
+    /**
      * Queue the whole state of a user: its password and the databases it
      * may use, leaving out those being dropped.
      */

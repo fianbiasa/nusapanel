@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"os/user"
+	"path/filepath"
 	"strconv"
 	"syscall"
 	"time"
@@ -133,8 +134,11 @@ func run(logger *slog.Logger, cfg config) error {
 			PanelUID:    int(allowedUID),
 		},
 		Backups: actions.BackupsConfig{
-			Dir:      cfg.backupDir,
-			PanelGID: gid,
+			Dir:           cfg.backupDir,
+			PanelGID:      gid,
+			SystemDir:     filepath.Join(cfg.backupDir, "system"),
+			PanelDatabase: "rayxo",
+			SystemSources: actions.DefaultSystemBackupSources(),
 		},
 		Services:    manager,
 		Reconfigure: changer,

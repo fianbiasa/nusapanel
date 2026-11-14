@@ -44,6 +44,12 @@ type BackupsConfig struct {
 	Dir string
 	// PanelGID is the panel's group, or -1.
 	PanelGID int
+	// SystemDir holds the backups of the panel itself, for root alone.
+	SystemDir string
+	// PanelDatabase is the panel's own MariaDB database.
+	PanelDatabase string
+	// SystemSources are the folders a backup of the panel holds.
+	SystemSources SystemBackupSources
 }
 
 // diskSpace is the size of a filesystem and what of it is free.

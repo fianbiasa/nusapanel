@@ -586,6 +586,43 @@ class ServerBackupService
     }
 
     /**
+     * Restore every active account from its newest finished backup whose
+     * file is on this server: after the panel was brought back on a new
+     * server and the backups were copied there. Returns how many restores
+     * were queued, and why the others were not.
+     *
+     * @return array{queued: int, skipped: list<string>}
+     */
+    public function restoreAll(User $actor): array
+    {
+        $queued = 0;
+        $skipped = [];
+
+        foreach ($this->accounts() as $account) {
+            $backup = ServerBackup::query()
+                ->where('user_id', $account->id)
+                ->where('status', ServerBackupStatus::Completed)
+                ->latest('id')
+                ->first();
+
+            if ($backup === null || ! is_file($backup->path())) {
+                $skipped[] = $account->username.': '.__('no backup of it is on this server');
+
+                continue;
+            }
+
+            try {
+                $this->restore($backup, $backup->files, $backup->email, $backup->databases, $actor);
+                $queued++;
+            } catch (ValidationException $exception) {
+                $skipped[] = $account->username.': '.collect($exception->errors())->flatten()->first();
+            }
+        }
+
+        return ['queued' => $queued, 'skipped' => $skipped];
+    }
+
+    /**
      * Delete a backup for good.
      *
      * @throws ValidationException

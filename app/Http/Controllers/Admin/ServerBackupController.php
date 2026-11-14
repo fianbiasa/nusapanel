@@ -11,11 +11,13 @@ use App\Models\AccountRestore;
 use App\Models\BackupRun;
 use App\Models\Package;
 use App\Models\ServerBackup;
+use App\Models\SystemBackup;
 use App\Models\Task;
 use App\Models\User;
 use App\Services\AccountRestoreService;
 use App\Services\AuditLogger;
 use App\Services\ServerBackupService;
+use App\Services\SystemBackupService;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -41,6 +43,7 @@ class ServerBackupController extends Controller
     public function __construct(
         private ServerBackupService $backups,
         private AccountRestoreService $restores,
+        private SystemBackupService $systemBackups,
         private AuditLogger $audit,
     ) {}
 
@@ -136,6 +139,18 @@ class ServerBackupController extends Controller
                 'finished_at' => $run->finished_at?->toIso8601String(),
             ]),
             'running' => $this->backups->running() !== null,
+            'system' => [
+                'settings' => $this->systemBackups->settings(),
+                'keep_max' => SystemBackupService::MAX_KEEP,
+                'backups' => SystemBackup::query()->latest('id')->limit(10)->get()->map(fn (SystemBackup $backup): array => [
+                    'id' => $backup->id,
+                    'name' => $backup->name,
+                    'status' => $backup->status->value,
+                    'size' => $backup->size_bytes,
+                    'error' => $backup->error,
+                    'created_at' => $backup->created_at?->toIso8601String(),
+                ]),
+            ],
         ]);
     }
 
@@ -186,6 +201,25 @@ class ServerBackupController extends Controller
         Inertia::flash('toast', $run->message === null
             ? ['type' => 'success', 'message' => __('Backing up :count account(s). This page shows each one as it is done.', ['count' => $run->accounts])]
             : ['type' => 'error', 'message' => $run->message]);
+
+        return back();
+    }
+
+    /**
+     * Restore every account from its newest backup on this server, after
+     * the panel was brought back on a new server.
+     */
+    public function restoreAll(Request $request): RedirectResponse
+    {
+        $result = $this->backups->restoreAll($request->user());
+
+        $message = __('Restoring :count account(s). See Tasks for how it goes.', ['count' => $result['queued']]);
+
+        if ($result['skipped'] !== []) {
+            $message .= ' '.__('Not restored: :accounts', ['accounts' => implode('; ', array_slice($result['skipped'], 0, 5)).(count($result['skipped']) > 5 ? '; …' : '')]);
+        }
+
+        Inertia::flash('toast', ['type' => $result['queued'] > 0 ? 'success' : 'error', 'message' => $message]);
 
         return back();
     }

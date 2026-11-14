@@ -4,13 +4,15 @@ namespace App\Console\Commands;
 
 use App\Models\BackupRun;
 use App\Services\ServerBackupService;
+use App\Services\SystemBackupService;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Illuminate\Validation\ValidationException;
 
 /**
  * Starts the automatic backups when their schedule says so, and closes a
- * run that stopped moving. The scheduler runs it every hour, on the hour.
+ * run that stopped moving; backs up the panel itself once a day. The
+ * scheduler runs it every hour, on the hour.
  */
 class RunBackupsCommand extends Command
 {
@@ -25,9 +27,14 @@ class RunBackupsCommand extends Command
      */
     protected $description = 'Start the automatic backups of every account when they are due';
 
-    public function handle(ServerBackupService $backups): int
+    public function handle(ServerBackupService $backups, SystemBackupService $system): int
     {
         $backups->closeStale();
+
+        // The panel itself is backed up every day, apart from the accounts.
+        if ($system->due()) {
+            $system->start();
+        }
 
         if (! $this->option('now') && ($backups->running() !== null || ! $backups->due(CarbonImmutable::now()))) {
             return self::SUCCESS;

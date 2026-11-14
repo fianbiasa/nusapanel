@@ -18,6 +18,11 @@ import {
     ServerBackupsPanel,
 } from '@/components/server-backups';
 import type { ServerBackupsProps } from '@/components/server-backups';
+import {
+    ServerRestorePanel,
+    SystemBackupPanel,
+} from '@/components/system-backups';
+import type { SystemBackups } from '@/components/system-backups';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -77,6 +82,7 @@ type Props = ServerBackupsProps & {
     estimate: { accounts: number; per_run: number; stored: number };
     runs: Run[];
     running: boolean;
+    system: SystemBackups;
 };
 
 const frequencies: { value: Frequency; label: string }[] = [
@@ -118,6 +124,7 @@ export default function ServerBackups({
     manual_keep,
     restores,
     inspected,
+    system,
 }: Props) {
     const [form, setForm] = useState<Schedule>(schedule);
     const [saving, setSaving] = useState(false);
@@ -126,6 +133,10 @@ export default function ServerBackups({
     const [starting, setStarting] = useState(false);
     const busy =
         running ||
+        system.backups.some(
+            (backup) =>
+                backup.status === 'queued' || backup.status === 'running',
+        ) ||
         backups.data.some(
             (backup) =>
                 backup.status === 'queued' || backup.status === 'running',
@@ -535,6 +546,8 @@ export default function ServerBackups({
                 )}
             </Panel>
 
+            <SystemBackupPanel system={system} />
+
             <BackupNowPanel
                 scope={scope}
                 accounts={accounts}
@@ -549,6 +562,8 @@ export default function ServerBackups({
                 filters={filters}
                 inspected={inspected}
             />
+
+            <ServerRestorePanel />
 
             <Dialog open={confirmRun} onOpenChange={setConfirmRun}>
                 <DialogContent className="rounded-2xl">
