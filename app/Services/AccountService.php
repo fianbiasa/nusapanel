@@ -40,29 +40,32 @@ class AccountService
     ) {}
 
     /**
-     * Create a pending hosting account owned by the actor, on the given
+     * Create a pending hosting account owned by the actor (or by owner, an
+     * administrator or reseller the actor creates it for), on the given
      * package if any, and queue its creation on the server. A primary
      * domain, if given, must fit the package and is set up once the account
-     * exists on the server.
+     * exists on the server. The password may already be hashed.
      *
      * @param  array{username: string, name: string, email: string, password: string, domain?: string|null, package_id?: int|null}  $data
      *
      * @throws ValidationException When the primary domain cannot be used.
      */
-    public function create(array $data, User $actor): User
+    public function create(array $data, User $actor, ?User $owner = null): User
     {
-        return DB::transaction(function () use ($data, $actor): User {
+        $owner ??= $actor;
+
+        return DB::transaction(function () use ($data, $actor, $owner): User {
             $package = isset($data['package_id']) ? Package::query()->findOrFail($data['package_id']) : null;
 
-            $this->ensurePackageBelongsTo($package, $actor);
-            $this->ensureOwnerCanGiveOut($actor, $package);
+            $this->ensurePackageBelongsTo($package, $owner);
+            $this->ensureOwnerCanGiveOut($owner, $package);
 
             $account = new User(Arr::only($data, ['username', 'name', 'email', 'password']));
 
             $account->forceFill([
                 'role' => Role::User,
                 'status' => AccountStatus::Pending,
-                'owner_id' => $actor->id,
+                'owner_id' => $owner->id,
                 'package_id' => $data['package_id'] ?? null,
                 'email_verified_at' => now(),
             ])->save();

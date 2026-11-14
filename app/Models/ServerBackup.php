@@ -5,6 +5,8 @@ namespace App\Models;
 use App\Enums\ServerBackupStatus;
 use Database\Factories\ServerBackupFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -17,6 +19,7 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property int|null $backup_run_id
  * @property int|null $user_id Null once the account is deleted.
+ * @property int|null $owner_id The account's administrator or reseller when the backup was made.
  * @property string $username
  * @property string $name
  * @property ServerBackupStatus $status
@@ -31,7 +34,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['backup_run_id', 'user_id', 'username', 'name', 'status', 'files', 'email', 'databases'])]
+#[Fillable(['backup_run_id', 'user_id', 'owner_id', 'username', 'name', 'status', 'files', 'email', 'databases'])]
 class ServerBackup extends Model
 {
     /** @use HasFactory<ServerBackupFactory> */
@@ -62,6 +65,37 @@ class ServerBackup extends Model
     public function account(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    /**
+     * @return BelongsTo<User, $this>
+     */
+    public function owner(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'owner_id');
+    }
+
+    /**
+     * Whether an administrator or a reseller made it by hand, outside the
+     * automatic backups.
+     */
+    public function isManual(): bool
+    {
+        return $this->backup_run_id === null;
+    }
+
+    /**
+     * The backups viewer may see: every one for an administrator, those of
+     * its accounts for a reseller.
+     *
+     * @param  Builder<ServerBackup>  $query
+     */
+    #[Scope]
+    protected function visibleTo(Builder $query, User $viewer): void
+    {
+        if (! $viewer->isAdmin()) {
+            $query->where('owner_id', $viewer->id);
+        }
     }
 
     /**

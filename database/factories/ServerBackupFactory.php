@@ -25,6 +25,7 @@ class ServerBackupFactory extends Factory
         return [
             'backup_run_id' => BackupRun::factory(),
             'user_id' => User::factory(),
+            'owner_id' => fn (array $attributes): ?int => User::query()->whereKey($attributes['user_id'])->value('owner_id'),
             'username' => fn (array $attributes): string => (string) User::query()->whereKey($attributes['user_id'])->value('username'),
             'name' => fn (array $attributes): string => $attributes['username'].'-'.fake()->unique()->dateTimeThisYear()->format('Y-m-d-His').'.tar.gz',
             'status' => ServerBackupStatus::Completed,

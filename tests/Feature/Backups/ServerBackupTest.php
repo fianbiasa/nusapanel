@@ -338,7 +338,7 @@ class ServerBackupTest extends TestCase
 
         $this->actingAs($this->admin)
             ->post(route('admin.backups.restore', $deleted), ['files' => true])
-            ->assertSessionHasErrors(['backup' => 'The account of this backup no longer exists.']);
+            ->assertSessionHasErrors(['backup' => 'The account of this backup no longer exists; restore the account from it instead.']);
 
         $this->actingAs($this->admin)
             ->post(route('admin.backups.restore', $failed), ['files' => true])

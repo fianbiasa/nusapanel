@@ -7,6 +7,7 @@ use App\Enums\TaskStatus;
 use App\Events\AgentTaskFinished;
 use App\Models\Task;
 use App\Models\User;
+use App\Services\AccountRestoreService;
 use App\Services\DomainService;
 use App\Services\QuotaService;
 use App\Services\TicketService;
@@ -18,7 +19,8 @@ use App\Services\TicketService;
  *
  * Once a new account exists on the server, it gets the disk quota of its
  * package and the domains added while it was being created are set up;
- * those domains fail with it when it could not be created.
+ * those domains fail with it when it could not be created. An account made
+ * again from a backup then gets the rest of it back.
  */
 class ApplyAccountTaskResult
 {
@@ -26,6 +28,7 @@ class ApplyAccountTaskResult
         private DomainService $domains,
         private QuotaService $quotas,
         private TicketService $tickets,
+        private AccountRestoreService $restores,
     ) {}
 
     public function handle(AgentTaskFinished $event): void
@@ -54,6 +57,7 @@ class ApplyAccountTaskResult
             $account->forceFill(['status' => AccountStatus::Failed])->save();
 
             $this->domains->failPendingDomains($account);
+            $this->restores->accountFailed($account);
 
             return;
         }
@@ -74,6 +78,8 @@ class ApplyAccountTaskResult
         $this->quotas->applyToNewAccount($account, $task->actor);
 
         $this->domains->dispatchPendingDomains($account, $task->actor);
+
+        $this->restores->resume($account);
     }
 
     private function applyDelete(User $account, Task $task): void

@@ -120,6 +120,8 @@ export const auditActionLabels: Record<string, string> = {
     'backup.server_restored': 'Backup server dipulihkan',
     'backup.server_downloaded': 'Backup server diunduh',
     'backup.server_deleted': 'Backup server dihapus',
+    'backup.server_created': 'Backup server dibuat',
+    'backup.account_restored': 'Akun dibuat lagi dari backup',
     'cron_job.updated': 'Cron job diubah',
     'cron_job.deleted': 'Cron job dihapus',
     'cron_job.email_changed': 'Email output cron diubah',

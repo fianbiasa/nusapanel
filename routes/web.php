@@ -243,6 +243,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::delete('packages/{package}', [PackageController::class, 'destroy'])->name('packages.destroy');
         Route::get('statistics', [StatisticsController::class, 'index'])->name('statistics.index');
         Route::get('login-history', [LoginHistoryController::class, 'index'])->name('login-history.index');
+        Route::get('backups', [ServerBackupController::class, 'index'])->name('backups.index');
+        Route::post('backups', [ServerBackupController::class, 'store'])->middleware('throttle:20,1,backup-now')->name('backups.store');
+        Route::get('backups/{serverBackup}/download', [ServerBackupController::class, 'download'])->name('backups.download');
+        Route::post('backups/{serverBackup}/restore', [ServerBackupController::class, 'restore'])->middleware('throttle:10,1,backup-restore')->name('backups.restore');
+        Route::post('backups/{serverBackup}/restore-account', [ServerBackupController::class, 'restoreAccount'])->middleware('throttle:10,1,backup-restore')->name('backups.restore-account');
+        Route::delete('backups/{serverBackup}', [ServerBackupController::class, 'destroy'])->name('backups.destroy');
     });
 
     // Back to one's own account after "login as".
@@ -280,8 +286,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('backups', [ServerBackupController::class, 'index'])->name('backups.index');
         Route::put('backups/schedule', [ServerBackupController::class, 'updateSchedule'])->middleware('throttle:20,1,backup-schedule')->name('backups.schedule');
         Route::post('backups/run', [ServerBackupController::class, 'run'])->middleware('throttle:5,1,backup-run')->name('backups.run');
+        Route::post('backups', [ServerBackupController::class, 'store'])->middleware('throttle:20,1,backup-now')->name('backups.store');
         Route::get('backups/{serverBackup}/download', [ServerBackupController::class, 'download'])->name('backups.download');
         Route::post('backups/{serverBackup}/restore', [ServerBackupController::class, 'restore'])->middleware('throttle:10,1,backup-restore')->name('backups.restore');
+        Route::post('backups/{serverBackup}/restore-account', [ServerBackupController::class, 'restoreAccount'])->middleware('throttle:10,1,backup-restore')->name('backups.restore-account');
         Route::delete('backups/{serverBackup}', [ServerBackupController::class, 'destroy'])->name('backups.destroy');
         Route::get('audit-logs', [AuditLogController::class, 'index'])->name('audit-logs.index');
         Route::get('login-history', [LoginHistoryController::class, 'index'])->name('login-history.index');

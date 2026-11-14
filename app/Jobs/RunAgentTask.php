@@ -91,6 +91,15 @@ class RunAgentTask implements ShouldQueue
             return;
         }
 
+        // A restore runs on a queue of its own, so it waits here for the
+        // tasks queued for the account before it, such as the databases
+        // and mailboxes it fills.
+        if (in_array($this->task->action, self::BACKUP_QUEUE_TASKS, true) && $this->hasEarlierTasks()) {
+            $this->release(10);
+
+            return;
+        }
+
         $this->task->markRunning();
 
         try {
@@ -110,6 +119,19 @@ class RunAgentTask implements ShouldQueue
         $this->task->markSucceeded($output);
 
         AgentTaskFinished::dispatch($this->task);
+    }
+
+    /**
+     * Whether a task queued for the account before this one has not
+     * finished.
+     */
+    private function hasEarlierTasks(): bool
+    {
+        return $this->task->user_id !== null && Task::query()
+            ->where('user_id', $this->task->user_id)
+            ->where('id', '<', $this->task->id)
+            ->whereIn('status', [TaskStatus::Queued, TaskStatus::Running])
+            ->exists();
     }
 
     public function failed(?Throwable $exception): void

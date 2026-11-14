@@ -18,6 +18,7 @@ use App\Support\NotificationEvents;
 use Carbon\CarbonImmutable;
 use DateTimeZone;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Collection as SupportCollection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -41,6 +42,12 @@ class ServerBackupService
     public const FREQUENCIES = ['daily', 'weekly', 'monthly'];
 
     public const MAX_KEEP = 30;
+
+    /**
+     * How many backups made by hand each account keeps; a new one deletes
+     * the oldest beyond these.
+     */
+    public const MANUAL_KEEP = 3;
 
     /**
      * How long one backup of an account may take; the agent bounds it the
@@ -307,6 +314,7 @@ class ServerBackupService
         $backups = DB::transaction(fn (): array => $accounts->map(fn (User $account): ServerBackup => ServerBackup::create([
             'backup_run_id' => $run->id,
             'user_id' => $account->id,
+            'owner_id' => $account->owner_id,
             'username' => $account->username,
             'name' => "{$account->username}-{$stamp}.tar.gz",
             'status' => ServerBackupStatus::Queued,
@@ -325,7 +333,44 @@ class ServerBackupService
     }
 
     /**
-     * Make one backup: the job of an account in a run.
+     * Back up one account now, outside the schedule, with all it holds. It
+     * runs on the backups queue like the automatic backups; each account
+     * keeps its newest MANUAL_KEEP of these.
+     *
+     * @throws ValidationException
+     */
+    public function backupNow(User $account, User $actor): ServerBackup
+    {
+        if (! $account->hasRole(Role::User) || ! in_array($account->status, [AccountStatus::Active, AccountStatus::Suspended], true)) {
+            throw ValidationException::withMessages(['username' => __('Only an active or suspended hosting account can be backed up.')]);
+        }
+
+        if (ServerBackup::query()->where('user_id', $account->id)->whereIn('status', [ServerBackupStatus::Queued, ServerBackupStatus::Running])->exists()) {
+            throw ValidationException::withMessages(['username' => __('A backup of :username is already being made.', ['username' => $account->username])]);
+        }
+
+        $backup = ServerBackup::create([
+            'backup_run_id' => null,
+            'user_id' => $account->id,
+            'owner_id' => $account->owner_id,
+            'username' => $account->username,
+            'name' => $account->username.'-'.now()->format('Y-m-d-His').'-manual.tar.gz',
+            'status' => ServerBackupStatus::Queued,
+            'files' => true,
+            'email' => true,
+            'databases' => [],
+        ]);
+
+        CreateServerBackup::dispatch($backup, true);
+
+        $this->audit->record('backup.server_created', $account, ['name' => $backup->name], $actor);
+
+        return $backup;
+    }
+
+    /**
+     * Make one backup: the job of an account in a run, or of one made by
+     * hand.
      */
     public function create(ServerBackup $backup, bool $withDatabases): void
     {
@@ -369,6 +414,17 @@ class ServerBackupService
             'skipped' => (int) ($result['skipped'] ?? 0),
             'finished_at' => now(),
         ])->save();
+
+        if ($backup->isManual()) {
+            $manual = fn () => ServerBackup::query()
+                ->whereNull('backup_run_id')
+                ->where('user_id', $account->id)
+                ->where('status', ServerBackupStatus::Completed);
+
+            $kept = $manual()->orderByDesc('id')->limit(self::MANUAL_KEEP)->pluck('id');
+
+            $this->deleteFiles($manual()->whereNotIn('id', $kept)->get(['id', 'name']));
+        }
     }
 
     /**
@@ -456,24 +512,14 @@ class ServerBackupService
             ->groupBy('user_id')
             ->flatMap(fn (Collection $backups): Collection => $backups->slice($keep));
 
-        foreach ($old->chunk(500) as $chunk) {
-            try {
-                $this->agent->call('backup.server_delete', ['names' => $chunk->pluck('name')->values()->all()], 120);
-            } catch (AgentException $exception) {
-                report($exception);
-
-                continue;
-            }
-
-            ServerBackup::query()->whereKey($chunk->pluck('id')->all())->delete();
-        }
+        $this->deleteFiles($old);
 
         ServerBackup::query()->where('status', ServerBackupStatus::Failed)->where('created_at', '<', now()->subDays(30))->delete();
         BackupRun::query()->where('created_at', '<', now()->subDays(90))->whereDoesntHave('backups')->delete();
     }
 
     /**
-     * What a backup holds, for choosing what to restore.
+     * What a backup holds, for choosing what to restore into its account.
      *
      * @return array{name: string, created_at: string|null, files: bool, email: bool, databases: list<string>, mailboxes: list<string>, settings: array<string, mixed>}
      *
@@ -481,7 +527,22 @@ class ServerBackupService
      */
     public function inspect(ServerBackup $backup): array
     {
-        $account = $this->restorableAccount($backup);
+        return $this->read($backup, $this->restorableAccount($backup)->username);
+    }
+
+    /**
+     * What a finished backup of the account username holds, as its manifest
+     * and settings say.
+     *
+     * @return array{name: string, created_at: string|null, files: bool, email: bool, databases: list<string>, mailboxes: list<string>, settings: array<string, mixed>}
+     *
+     * @throws ValidationException
+     */
+    public function read(ServerBackup $backup, string $username): array
+    {
+        if ($backup->status !== ServerBackupStatus::Completed) {
+            throw ValidationException::withMessages(['backup' => __('Only a finished backup can be restored.')]);
+        }
 
         try {
             $meta = $this->agent->call('backup.server_inspect', ['name' => $backup->name]);
@@ -489,7 +550,7 @@ class ServerBackupService
             throw ValidationException::withMessages(['backup' => $this->reason($exception)]);
         }
 
-        return $this->backups->describe($account, $backup->name, $meta);
+        return $this->backups->describe($username, $backup->name, $meta);
     }
 
     /**
@@ -547,6 +608,27 @@ class ServerBackupService
     }
 
     /**
+     * Delete the files of backups, then forget them. Those the agent could
+     * not delete stay for the next try.
+     *
+     * @param  SupportCollection<int, ServerBackup>  $backups
+     */
+    private function deleteFiles(SupportCollection $backups): void
+    {
+        foreach ($backups->chunk(500) as $chunk) {
+            try {
+                $this->agent->call('backup.server_delete', ['names' => $chunk->pluck('name')->values()->all()], 120);
+            } catch (AgentException $exception) {
+                report($exception);
+
+                continue;
+            }
+
+            ServerBackup::query()->whereKey($chunk->pluck('id')->all())->delete();
+        }
+    }
+
+    /**
      * Why the disk has no room for a run over accounts, or null when it has.
      *
      * @param  Collection<int, User>  $accounts
@@ -588,7 +670,7 @@ class ServerBackupService
         $account = $backup->account;
 
         if ($account === null) {
-            throw ValidationException::withMessages(['backup' => __('The account of this backup no longer exists.')]);
+            throw ValidationException::withMessages(['backup' => __('The account of this backup no longer exists; restore the account from it instead.')]);
         }
 
         return $account;

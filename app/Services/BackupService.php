@@ -165,19 +165,19 @@ class BackupService
             throw $this->failure($exception);
         }
 
-        return $this->describe($account, $name, $meta);
+        return $this->describe($account->username, $name, $meta);
     }
 
     /**
      * What the manifest and settings an agent read from backup name say,
-     * once they are checked to be a RAYXO backup of the account.
+     * once they are checked to be a RAYXO backup of the account username.
      *
      * @param  array<string, mixed>  $meta
      * @return array{name: string, created_at: string|null, files: bool, email: bool, databases: list<string>, mailboxes: list<string>, settings: array<string, mixed>}
      *
      * @throws ValidationException
      */
-    public function describe(User $account, string $name, array $meta): array
+    public function describe(string $username, string $name, array $meta): array
     {
         $manifest = json_decode((string) ($meta['manifest'] ?? ''), true);
         $settings = json_decode((string) ($meta['settings'] ?? ''), true);
@@ -186,11 +186,11 @@ class BackupService
             throw ValidationException::withMessages(['backup' => __('This file is not a RAYXO backup.')]);
         }
 
-        if (($manifest['username'] ?? null) !== $account->username) {
+        if (($manifest['username'] ?? null) !== $username) {
             throw ValidationException::withMessages(['backup' => __('This backup belongs to another account.')]);
         }
 
-        $databases = array_values(array_filter((array) ($manifest['databases'] ?? []), fn (mixed $database): bool => is_string($database) && str_starts_with($database, $account->username.'_')));
+        $databases = array_values(array_filter((array) ($manifest['databases'] ?? []), fn (mixed $database): bool => is_string($database) && str_starts_with($database, $username.'_')));
 
         return [
             'name' => $name,
@@ -316,10 +316,19 @@ class BackupService
 
         return [
             'format' => self::FORMAT,
+            // What a deleted account is made again from.
+            'account' => [
+                'name' => $account->name,
+                'email' => $account->email,
+                'password_hash' => $account->getAuthPassword(),
+                'package' => $account->package?->name,
+                'owner' => $account->owner?->username,
+            ],
             'domains' => $account->domains()->with('parent')->orderBy('id')->get()->map(fn (Domain $domain): array => [
                 'name' => $domain->name,
                 'type' => $domain->type->value,
                 'parent' => $domain->parent?->name,
+                'pointer_mode' => $domain->pointer_mode?->value,
                 'php_version' => $domain->php_version,
                 'is_primary' => $domain->is_primary,
             ])->all(),
@@ -338,7 +347,7 @@ class BackupService
             'forwarders' => $forwarders->map(fn (MailForwarder $forwarder): array => [
                 'domain' => $forwarder->mailDomain->domain->name,
                 'local_part' => $forwarder->local_part,
-                'destinations' => $forwarder->destinations,
+                'destinations' => $forwarder->destinationList(),
             ])->all(),
             'cron_jobs' => $account->cronJobs()->orderBy('id')->get()->map(fn (CronJob $job): array => [
                 'schedule' => $job->schedule,

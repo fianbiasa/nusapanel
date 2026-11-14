@@ -49,6 +49,7 @@ import { index as statisticsIndex } from '@/routes/admin/statistics';
 import { index as systemFilesIndex } from '@/routes/admin/system-files';
 import { index as tasksIndex } from '@/routes/admin/tasks';
 import { index as resellerAccountsIndex } from '@/routes/reseller/accounts';
+import { index as resellerBackupsIndex } from '@/routes/reseller/backups';
 import { edit as resellerBrandingEdit } from '@/routes/reseller/branding';
 import { index as resellerDnsTemplateIndex } from '@/routes/reseller/dns-template';
 import { index as resellerIpAddressesIndex } from '@/routes/reseller/ip-addresses';
@@ -306,6 +307,11 @@ export function useNavigation(): {
                     title: 'Statistik',
                     href: resellerStatisticsIndex(),
                     icon: ChartColumn,
+                },
+                {
+                    title: 'Backup',
+                    href: resellerBackupsIndex(),
+                    icon: Archive,
                 },
                 {
                     title: 'Alamat IP',

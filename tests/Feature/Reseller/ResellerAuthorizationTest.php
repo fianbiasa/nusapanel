@@ -6,6 +6,7 @@ use App\Enums\AccountStatus;
 use App\Models\DnsTemplateRecord;
 use App\Models\IpAddress;
 use App\Models\Package;
+use App\Models\ServerBackup;
 use App\Models\User;
 use App\Services\ImpersonationService;
 use Illuminate\Database\Eloquent\Model;
@@ -56,6 +57,11 @@ class ResellerAuthorizationTest extends TestCase
             'package' => [$otherPackage, $adminPackage],
             'ipAddress' => [$otherAddress, $adminAddress],
             'dnsTemplateRecord' => [$otherTemplateRecord, $adminTemplateRecord],
+            'serverBackup' => [
+                ServerBackup::factory()->for($otherAccount, 'account')->create(),
+                ServerBackup::factory()->for($adminAccount, 'account')->create(),
+                ServerBackup::factory()->create(['user_id' => null, 'owner_id' => $otherReseller->id, 'username' => 'gone']),
+            ],
         ];
 
         $checked = 0;
@@ -81,8 +87,9 @@ class ResellerAuthorizationTest extends TestCase
 
         // Six account routes against four accounts, three package routes
         // against two packages, one address route against two addresses,
-        // two DNS template routes against two records.
-        $this->assertSame(36, $checked);
+        // two DNS template routes against two records, four backup routes
+        // against three backups (one of a deleted account).
+        $this->assertSame(48, $checked);
 
         // Nothing changed hands, was queued, removed, or signed in as.
         $this->assertSame(AccountStatus::Active, $otherAccount->fresh()->status);
@@ -95,6 +102,7 @@ class ResellerAuthorizationTest extends TestCase
         $this->assertFalse($adminAddress->fresh()->dedicated);
         $this->assertModelExists($otherTemplateRecord);
         $this->assertModelExists($adminTemplateRecord);
+        $this->assertDatabaseCount('server_backups', 3);
         $this->assertDatabaseCount('tasks', 0);
         $this->assertAuthenticatedAs($reseller);
         $this->assertFalse(session()->has(ImpersonationService::SESSION_KEY));
@@ -127,7 +135,13 @@ class ResellerAuthorizationTest extends TestCase
         $address->forceFill(['owner_id' => $reseller->id])->save();
         $templateRecord = DnsTemplateRecord::factory()->create();
         $templateRecord->forceFill(['owner_id' => $reseller->id])->save();
-        $models = ['account' => $account, 'package' => $package, 'ipAddress' => $address, 'dnsTemplateRecord' => $templateRecord];
+        $models = [
+            'account' => $account,
+            'package' => $package,
+            'ipAddress' => $address,
+            'dnsTemplateRecord' => $templateRecord,
+            'serverBackup' => ServerBackup::factory()->for($account, 'account')->create(),
+        ];
 
         foreach ([User::factory()->create(), User::factory()->admin()->create()] as $outsider) {
             foreach ($this->routesNamed('reseller.') as $route) {

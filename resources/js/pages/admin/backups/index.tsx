@@ -1,27 +1,23 @@
-import { Form, Head, router, usePoll } from '@inertiajs/react';
+import { Head, router, usePoll } from '@inertiajs/react';
 import {
-    Archive,
     CalendarClock,
-    Download,
     HardDrive,
     History,
     LoaderCircle,
     Play,
-    RotateCcw,
-    Search,
-    Trash2,
     TriangleAlert,
 } from 'lucide-react';
 import { useState } from 'react';
-import {
-    BackupChoice,
-    BackupRestoreDialog,
-} from '@/components/backup-restore-dialog';
-import type { InspectedBackup } from '@/components/backup-restore-dialog';
+import { BackupChoice } from '@/components/backup-restore-dialog';
 import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
-import { Pagination } from '@/components/pagination';
 import { Panel, tableStyles } from '@/components/panel';
+import {
+    AccountRestoresPanel,
+    BackupNowPanel,
+    ServerBackupsPanel,
+} from '@/components/server-backups';
+import type { ServerBackupsProps } from '@/components/server-backups';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -45,15 +41,7 @@ import {
 import { Spinner } from '@/components/ui/spinner';
 import { formatBytes, formatDateTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
-import {
-    destroy,
-    download,
-    index,
-    restore,
-    run,
-    schedule as updateSchedule,
-} from '@/routes/admin/backups';
-import type { Paginated } from '@/types';
+import { run, schedule as updateSchedule } from '@/routes/admin/backups';
 
 type Frequency = 'daily' | 'weekly' | 'monthly';
 
@@ -81,23 +69,7 @@ type Run = {
     finished_at: string | null;
 };
 
-type ServerBackup = {
-    id: number;
-    username: string;
-    account_exists: boolean;
-    name: string;
-    status: 'queued' | 'running' | 'completed' | 'failed';
-    files: boolean;
-    email: boolean;
-    databases: number;
-    size: number | null;
-    skipped: number;
-    error: string | null;
-    automatic: boolean;
-    created_at: string | null;
-};
-
-type Props = {
+type Props = ServerBackupsProps & {
     schedule: Schedule;
     timezone: string;
     next_run: string | null;
@@ -105,9 +77,6 @@ type Props = {
     estimate: { accounts: number; per_run: number; stored: number };
     runs: Run[];
     running: boolean;
-    backups: Paginated<ServerBackup>;
-    filters: { search: string };
-    inspected?: InspectedBackup | null;
 };
 
 const frequencies: { value: Frequency; label: string }[] = [
@@ -134,17 +103,6 @@ function hourLabel(hour: number): string {
     return `${String(hour).padStart(2, '0')}:00`;
 }
 
-/** What a backup holds, in a few words. */
-function contents(backup: ServerBackup): string {
-    const parts = [
-        backup.files && 'file',
-        backup.email && 'email',
-        backup.databases > 0 && `${backup.databases} database`,
-    ].filter(Boolean);
-
-    return parts.length > 0 ? parts.join(', ') : '–';
-}
-
 export default function ServerBackups({
     schedule,
     timezone,
@@ -153,8 +111,12 @@ export default function ServerBackups({
     estimate,
     runs,
     running,
+    scope,
     backups,
     filters,
+    accounts,
+    manual_keep,
+    restores,
     inspected,
 }: Props) {
     const [form, setForm] = useState<Schedule>(schedule);
@@ -162,13 +124,26 @@ export default function ServerBackups({
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [confirmRun, setConfirmRun] = useState(false);
     const [starting, setStarting] = useState(false);
-    const [restoring, setRestoring] = useState<ServerBackup | null>(null);
-    const [deleting, setDeleting] = useState<ServerBackup | null>(null);
+    const busy =
+        running ||
+        backups.data.some(
+            (backup) =>
+                backup.status === 'queued' || backup.status === 'running',
+        );
 
     usePoll(
         5000,
-        { only: ['runs', 'running', 'backups', 'estimate', 'space'] },
-        { autoStart: running },
+        {
+            only: [
+                'runs',
+                'running',
+                'backups',
+                'estimate',
+                'space',
+                'restores',
+            ],
+        },
+        { autoStart: busy },
     );
 
     const dirty = JSON.stringify(form) !== JSON.stringify(schedule);
@@ -196,11 +171,6 @@ export default function ServerBackups({
                 },
             },
         );
-    };
-
-    const openRestore = (backup: ServerBackup) => {
-        setRestoring(backup);
-        router.reload({ only: ['inspected'], data: { restore: backup.id } });
     };
 
     // Each backup is a full copy; old ones go only after a new one is done,
@@ -565,187 +535,20 @@ export default function ServerBackups({
                 )}
             </Panel>
 
-            <Panel
-                flush
-                title="Backup tersimpan"
-                description="Unduh untuk menyimpannya di luar server. Pulihkan mengembalikan isi backup ke akunnya; backup akun yang sudah dihapus tetap ada sampai dihapus di sini."
-                action={
-                    <Form
-                        {...index.form()}
-                        options={{ preserveState: true, replace: true }}
-                        className="flex w-full max-w-sm items-center gap-2"
-                    >
-                        <div className="relative flex-1">
-                            <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground" />
-                            <Input
-                                type="search"
-                                name="search"
-                                defaultValue={filters.search}
-                                placeholder="Cari username"
-                                aria-label="Cari backup"
-                                maxLength={100}
-                                className="h-10 pl-10"
-                            />
-                        </div>
-                        <Button type="submit" variant="outline">
-                            Cari
-                        </Button>
-                    </Form>
-                }
-            >
-                {backups.data.length === 0 ? (
-                    <div className="flex flex-col items-center gap-2 px-6 pt-4 pb-10 text-center text-sm text-muted-foreground">
-                        <Archive className="size-8" />
-                        {filters.search
-                            ? `Tidak ada backup akun yang cocok dengan "${filters.search}".`
-                            : 'Belum ada backup.'}
-                    </div>
-                ) : (
-                    <div className="overflow-x-auto">
-                        <table className={tableStyles.table}>
-                            <thead className={tableStyles.head}>
-                                <tr>
-                                    <th className={tableStyles.th}>Akun</th>
-                                    <th className={tableStyles.th}>Dibuat</th>
-                                    <th className={tableStyles.th}>Isi</th>
-                                    <th className={tableStyles.th}>Ukuran</th>
-                                    <th className={tableStyles.th}>Status</th>
-                                    <th className={tableStyles.th}>
-                                        <span className="sr-only">Aksi</span>
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y">
-                                {backups.data.map((backup) => (
-                                    <tr
-                                        key={backup.id}
-                                        className={tableStyles.row}
-                                    >
-                                        <td className={tableStyles.td}>
-                                            <div className="font-medium">
-                                                {backup.username}
-                                            </div>
-                                            {!backup.account_exists && (
-                                                <div className="text-xs text-muted-foreground">
-                                                    Akun sudah dihapus
-                                                </div>
-                                            )}
-                                        </td>
-                                        <td
-                                            className={`${tableStyles.td} whitespace-nowrap`}
-                                        >
-                                            {backup.created_at
-                                                ? formatDateTime(
-                                                      backup.created_at,
-                                                  )
-                                                : '–'}
-                                        </td>
-                                        <td className={tableStyles.td}>
-                                            {contents(backup)}
-                                        </td>
-                                        <td
-                                            className={`${tableStyles.td} whitespace-nowrap`}
-                                        >
-                                            {backup.size !== null
-                                                ? formatBytes(backup.size)
-                                                : '–'}
-                                        </td>
-                                        <td className={tableStyles.td}>
-                                            <StatusBadge
-                                                status={backup.status}
-                                            />
-                                            {backup.error && (
-                                                <p className="mt-1 max-w-xs text-xs text-destructive">
-                                                    {backup.error}
-                                                </p>
-                                            )}
-                                            {backup.skipped > 0 && (
-                                                <p className="mt-1 max-w-xs text-xs text-muted-foreground">
-                                                    {backup.skipped} file tidak
-                                                    terbaca dan dilewati.
-                                                </p>
-                                            )}
-                                        </td>
-                                        <td className={tableStyles.td}>
-                                            <div className="flex justify-end gap-1">
-                                                {backup.status ===
-                                                    'completed' && (
-                                                    <>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            asChild
-                                                        >
-                                                            <a
-                                                                href={
-                                                                    download(
-                                                                        backup.id,
-                                                                    ).url
-                                                                }
-                                                            >
-                                                                <Download />{' '}
-                                                                Unduh
-                                                            </a>
-                                                        </Button>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            disabled={
-                                                                !backup.account_exists
-                                                            }
-                                                            onClick={() =>
-                                                                openRestore(
-                                                                    backup,
-                                                                )
-                                                            }
-                                                        >
-                                                            <RotateCcw />{' '}
-                                                            Pulihkan
-                                                        </Button>
-                                                    </>
-                                                )}
-                                                {backup.status !==
-                                                    'running' && (
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        aria-label={`Hapus ${backup.name}`}
-                                                        onClick={() =>
-                                                            setDeleting(backup)
-                                                        }
-                                                    >
-                                                        <Trash2 />
-                                                    </Button>
-                                                )}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-                <div className="px-6 py-4">
-                    <Pagination page={backups} />
-                </div>
-            </Panel>
+            <BackupNowPanel
+                scope={scope}
+                accounts={accounts}
+                manualKeep={manual_keep}
+            />
 
-            <BackupRestoreDialog
-                name={restoring?.name ?? null}
-                inspected={
-                    inspected && inspected.name === restoring?.name
-                        ? inspected
-                        : null
-                }
-                action={restoring ? restore.url(restoring.id) : null}
-                onClose={() => setRestoring(null)}
-            >
-                <p className="rounded-xl border bg-muted/40 px-4 py-3 text-sm">
-                    Dipulihkan ke akun <strong>{restoring?.username}</strong>.
-                    Restore berjalan di worker backup; kalau ada backup semua
-                    akun yang sedang berjalan, restore menunggu giliran.
-                </p>
-            </BackupRestoreDialog>
+            <AccountRestoresPanel restores={restores} />
+
+            <ServerBackupsPanel
+                scope={scope}
+                backups={backups}
+                filters={filters}
+                inspected={inspected}
+            />
 
             <Dialog open={confirmRun} onOpenChange={setConfirmRun}>
                 <DialogContent className="rounded-2xl">
@@ -765,37 +568,6 @@ export default function ServerBackups({
                         <Button onClick={startRun} disabled={starting}>
                             {starting ? <Spinner /> : <Play />}
                             Mulai backup
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-
-            <Dialog
-                open={deleting !== null}
-                onOpenChange={(open) => !open && setDeleting(null)}
-            >
-                <DialogContent className="rounded-2xl">
-                    <DialogHeader>
-                        <DialogTitle>Hapus backup?</DialogTitle>
-                        <DialogDescription>
-                            {deleting?.name} dihapus permanen dari disk server.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter className="gap-2">
-                        <DialogClose asChild>
-                            <Button variant="outline">Batal</Button>
-                        </DialogClose>
-                        <Button
-                            variant="destructive"
-                            onClick={() =>
-                                deleting &&
-                                router.delete(destroy.url(deleting.id), {
-                                    preserveScroll: true,
-                                    onFinish: () => setDeleting(null),
-                                })
-                            }
-                        >
-                            Hapus
                         </Button>
                     </DialogFooter>
                 </DialogContent>
