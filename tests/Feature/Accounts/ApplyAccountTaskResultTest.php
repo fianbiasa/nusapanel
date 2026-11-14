@@ -10,6 +10,7 @@ use App\Enums\TaskStatus;
 use App\Jobs\RunAgentTask;
 use App\Models\Domain;
 use App\Models\Package;
+use App\Models\ResellerPackage;
 use App\Models\Task;
 use App\Models\User;
 use App\Services\AccountService;
@@ -157,6 +158,29 @@ class ApplyAccountTaskResultTest extends TestCase
 
         $this->assertSame(
             ['username' => 'budi', 'disk_mb' => 0, 'inodes' => 0, 'cpu_percent' => 0, 'memory_mb' => 0, 'tasks' => 100, 'io_weight' => 0],
+            Task::query()->where('action', 'account.set_quota')->sole()->payload,
+        );
+    }
+
+    public function test_a_new_account_of_a_reseller_gets_the_resource_caps_of_the_reseller_package()
+    {
+        Queue::fake();
+        $reseller = User::factory()->reseller()->create([
+            'reseller_package_id' => ResellerPackage::factory()->create(['oversell' => true, 'memory_mb' => 512])->id,
+        ]);
+
+        $this->app->make(AccountService::class)->create([
+            'username' => 'budi',
+            'name' => 'Budi Santoso',
+            'email' => 'budi@example.com',
+            'password' => 'correct-horse-battery',
+            'package_id' => Package::factory()->for($reseller, 'owner')->create(['disk_mb' => null, 'inodes' => null])->id,
+        ], $reseller);
+
+        $this->runQueuedTask('account.create', ['username' => 'budi', 'uid' => 1001]);
+
+        $this->assertSame(
+            ['username' => 'budi', 'disk_mb' => 0, 'inodes' => 0, 'cpu_percent' => 0, 'memory_mb' => 512, 'tasks' => 0, 'io_weight' => 0],
             Task::query()->where('action', 'account.set_quota')->sole()->payload,
         );
     }

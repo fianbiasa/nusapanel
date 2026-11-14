@@ -65,6 +65,47 @@ class ResellerPackageTest extends TestCase
         $this->assertDatabaseCount('packages', 0);
     }
 
+    public function test_a_package_of_a_reseller_may_not_give_an_account_more_resources_than_its_reseller_package()
+    {
+        $reseller = $this->reseller(['cpu_percent' => 100, 'memory_mb' => 1024]);
+
+        $this->actingAs($reseller)
+            ->get(route('reseller.packages.create'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('resellerLimits.cpu_percent', 100)
+                ->where('resellerLimits.memory_mb', 1024)
+                ->where('resellerLimits.max_processes', null));
+
+        $this->actingAs($reseller)
+            ->post(route('reseller.packages.store'), $this->packageData(['cpu_percent' => 200, 'memory_mb' => null, 'max_processes' => null]))
+            ->assertSessionHasErrors([
+                'cpu_percent' => 'At most 100, the limit of your reseller package.',
+                'memory_mb' => 'At most 1024, the limit of your reseller package.',
+            ])
+            ->assertSessionDoesntHaveErrors('max_processes');
+        $this->assertDatabaseCount('packages', 0);
+
+        $this->actingAs($reseller)
+            ->post(route('reseller.packages.store'), $this->packageData(['cpu_percent' => 50, 'memory_mb' => 1024, 'max_processes' => null]))
+            ->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('packages', ['owner_id' => $reseller->id, 'cpu_percent' => 50, 'memory_mb' => 1024, 'max_processes' => null]);
+    }
+
+    public function test_a_resource_limit_left_out_keeps_the_packages_and_must_fit_too()
+    {
+        $reseller = $this->reseller(['memory_mb' => 1024]);
+        $fits = Package::factory()->for($reseller, 'owner')->create($this->limits(['name' => 'Fits', 'memory_mb' => 512]));
+        $older = Package::factory()->for($reseller, 'owner')->create($this->limits(['name' => 'Older', 'memory_mb' => null]));
+
+        $this->actingAs($reseller)
+            ->put(route('reseller.packages.update', $fits), $this->packageData(['name' => 'Fits', 'domains' => 2]))
+            ->assertSessionHasNoErrors();
+
+        $this->actingAs($reseller)
+            ->put(route('reseller.packages.update', $older), $this->packageData(['name' => 'Older', 'domains' => 2]))
+            ->assertSessionHasErrors(['memory_mb' => 'At most 1024, the limit of your reseller package.']);
+    }
+
     public function test_package_names_are_unique_per_owner()
     {
         $reseller = $this->reseller();

@@ -75,6 +75,14 @@ class Ticket extends Model
     }
 
     /**
+     * @return HasMany<TicketAttachment, $this>
+     */
+    public function attachments(): HasMany
+    {
+        return $this->hasMany(TicketAttachment::class);
+    }
+
+    /**
      * Whether user answers this ticket, rather than having opened it.
      */
     public function isAnsweredBy(User $user): bool

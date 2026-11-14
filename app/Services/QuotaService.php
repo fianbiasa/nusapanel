@@ -8,6 +8,7 @@ use App\Enums\AccountStatus;
 use App\Enums\Role;
 use App\Models\AccountUsage;
 use App\Models\Package;
+use App\Models\ResellerPackage;
 use App\Models\UsageSnapshot;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
@@ -19,7 +20,8 @@ use Illuminate\Support\Facades\DB;
  * each account's disk space and number of files (inodes) to what its
  * package allows, and reports how much of both every account uses. With
  * the quota go the package's CPU, memory, process and disk IO limits,
- * which the server enforces with cgroups.
+ * which the server enforces with cgroups; an account of a reseller gets
+ * no more of each than the reseller's package allows one account.
  *
  * Only hosting accounts that exist on the server (active or suspended) get
  * a quota: an account that is still being created gets one once it exists,
@@ -56,13 +58,31 @@ class QuotaService
             'username' => $account->username,
             'disk_mb' => $package->disk_mb ?? 0,
             'inodes' => $package->inodes ?? 0,
-            'cpu_percent' => $package->cpu_percent ?? 0,
-            'memory_mb' => $package->memory_mb ?? 0,
-            'tasks' => $package->max_processes ?? 0,
-            'io_weight' => $package->io_weight ?? 0,
+            'cpu_percent' => $this->resourceLimit($account, 'cpu_percent') ?? 0,
+            'memory_mb' => $this->resourceLimit($account, 'memory_mb') ?? 0,
+            'tasks' => $this->resourceLimit($account, 'max_processes') ?? 0,
+            'io_weight' => $this->resourceLimit($account, 'io_weight') ?? 0,
         ], $account, $actor);
 
         return true;
+    }
+
+    /**
+     * What the account may use of a resource (one of
+     * {@see Package::RESOURCE_LIMITS}): its package's limit, but no more
+     * than its reseller's package allows one account; null when neither
+     * limits it.
+     */
+    public function resourceLimit(User $account, string $key): ?int
+    {
+        $limit = $account->package?->getAttribute($key);
+        $cap = $account->owner?->resellerPackage?->resourceCap($key);
+
+        return match (true) {
+            $limit === null => $cap,
+            $cap === null => (int) $limit,
+            default => min((int) $limit, $cap),
+        };
     }
 
     /**
@@ -73,8 +93,9 @@ class QuotaService
     public function applyToNewAccount(User $account, ?User $actor): void
     {
         $package = $account->package;
+        $limitsSomething = $package !== null && ($package->disk_mb !== null || $package->inodes !== null);
 
-        if ($package === null || collect(['disk_mb', 'inodes', ...Package::RESOURCE_LIMITS])->every(fn (string $key): bool => $package->getAttribute($key) === null)) {
+        if (! $limitsSomething && collect(Package::RESOURCE_LIMITS)->every(fn (string $key): bool => $this->resourceLimit($account, $key) === null)) {
             return;
         }
 
@@ -90,6 +111,28 @@ class QuotaService
     public function applyToPackage(Package $package, ?User $actor): int
     {
         return $this->applyToEach($package->accounts()->getQuery(), $actor);
+    }
+
+    /**
+     * Queue the quota of every account of the resellers on the reseller
+     * package again, e.g. after its resource caps changed.
+     *
+     * @return int The number of accounts queued.
+     */
+    public function applyToResellerPackage(ResellerPackage $package, ?User $actor): int
+    {
+        return $this->applyToEach(User::query()->whereIn('owner_id', $package->resellers()->select('id')), $actor);
+    }
+
+    /**
+     * Queue the quota of every account of the reseller again, e.g. after it
+     * moved to another reseller package.
+     *
+     * @return int The number of accounts queued.
+     */
+    public function applyToReseller(User $reseller, ?User $actor): int
+    {
+        return $this->applyToEach(User::query()->where('owner_id', $reseller->id), $actor);
     }
 
     /**
@@ -179,7 +222,7 @@ class QuotaService
     {
         $queued = 0;
 
-        $query->with('package')
+        $query->with(['package', 'owner.resellerPackage'])
             ->where('role', Role::User)
             ->whereIn('status', [AccountStatus::Active, AccountStatus::Suspended])
             ->orderBy('id')

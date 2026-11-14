@@ -70,7 +70,7 @@ export default function Statistics({
 
             <Panel
                 title="30 hari terakhir"
-                description="Bandwidth dari log website, email, dan FTP; disk dari pengukuran terakhir tiap hari; CPU dan RAM dari PHP dan sesi SSH, diukur tiap 5 menit. RAM puncak adalah puncak tiap akun, dijumlahkan."
+                description="Bandwidth dari log website, email, dan FTP; disk dari pengukuran terakhir tiap hari; CPU dan RAM dari PHP, cron job, dan sesi SSH, diukur tiap 5 menit. RAM puncak adalah puncak tiap akun, dijumlahkan."
             >
                 <div className="grid gap-8 lg:grid-cols-2">
                     <DailyBars

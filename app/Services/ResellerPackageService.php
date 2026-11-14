@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Package;
 use App\Models\ResellerPackage;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -10,7 +11,8 @@ use Illuminate\Validation\ValidationException;
 /**
  * Creates, changes and deletes reseller packages. Resellers on a package
  * follow its new limits right away; one that already gives out more than
- * the new limits keeps its accounts, but cannot add more.
+ * the new limits keeps its accounts, but cannot add more. New resource
+ * caps apply to the resellers' accounts on the server at once.
  */
 class ResellerPackageService
 {
@@ -18,6 +20,7 @@ class ResellerPackageService
         private AuditLogger $audit,
         private DomainService $domains,
         private SshService $ssh,
+        private QuotaService $quotas,
     ) {}
 
     /**
@@ -69,6 +72,10 @@ class ResellerPackageService
 
             if (in_array('ssh', $changed, true)) {
                 $this->ssh->reapply($accounts, $actor);
+            }
+
+            if (array_intersect(Package::RESOURCE_LIMITS, $changed) !== []) {
+                $this->quotas->applyToResellerPackage($package, $actor);
             }
         });
     }

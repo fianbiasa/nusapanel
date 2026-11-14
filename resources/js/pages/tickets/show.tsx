@@ -4,6 +4,14 @@ import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
 import { Panel } from '@/components/panel';
 import { StatusBadge } from '@/components/status-badge';
+import {
+    TicketAttachmentList,
+    TicketAttachmentsInput,
+} from '@/components/ticket-attachments';
+import type {
+    AttachmentLimits,
+    TicketAttachment,
+} from '@/components/ticket-attachments';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { formatDateTime } from '@/lib/format';
@@ -27,6 +35,7 @@ type Message = {
     author: { username: string; name: string; role: string } | null;
     mine: boolean;
     created_at: string | null;
+    attachments: TicketAttachment[];
 };
 
 const roleLabels: Record<string, string> = {
@@ -42,10 +51,12 @@ export default function TicketShow({
     ticket,
     messages,
     max_body,
+    attachment_limits,
 }: {
     ticket: Ticket;
     messages: Message[];
     max_body: number;
+    attachment_limits: AttachmentLimits;
 }) {
     const closed = ticket.status === 'closed';
 
@@ -132,6 +143,9 @@ export default function TicketShow({
                         <p className="text-sm whitespace-pre-wrap">
                             {message.body}
                         </p>
+                        <TicketAttachmentList
+                            attachments={message.attachments}
+                        />
                     </article>
                 ))}
             </div>
@@ -158,6 +172,11 @@ export default function TicketShow({
                                 className={textareaClass}
                             />
                             <InputError message={errors.body} />
+                            <TicketAttachmentsInput
+                                id="reply-attachments"
+                                limits={attachment_limits}
+                                errors={errors}
+                            />
                             <div>
                                 <Button type="submit" disabled={processing}>
                                     {processing ? <Spinner /> : <Send />}

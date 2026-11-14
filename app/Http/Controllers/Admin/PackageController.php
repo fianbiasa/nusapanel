@@ -124,8 +124,8 @@ class PackageController extends Controller
     }
 
     /**
-     * For a reseller, the limits of its reseller package, which its own
-     * packages may not go over; null for administrators.
+     * For a reseller, the limits and resource caps of its reseller package,
+     * which its own packages may not go over; null for administrators.
      *
      * @return array<string, int|null>|null
      */
@@ -141,6 +141,7 @@ class PackageController extends Controller
 
         return [
             ...array_combine(Package::LIMITS, array_map(fn (string $key): ?int => $limits->limit($key), Package::LIMITS)),
+            ...array_combine(Package::RESOURCE_LIMITS, array_map(fn (string $key): ?int => $limits->resourceCap($key), Package::RESOURCE_LIMITS)),
             'ssl' => $limits->allowsSsl() ? 1 : 0,
             'cgi' => $limits->allowsCgi() ? 1 : 0,
             'ssh' => $limits->allowsSsh() ? 1 : 0,

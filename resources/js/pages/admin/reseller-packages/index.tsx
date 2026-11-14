@@ -25,7 +25,7 @@ import { formatMegabytes } from '@/lib/format';
 import { create, destroy, edit } from '@/routes/admin/reseller-packages';
 import type { ResellerPackage } from '@/types';
 
-/** "10 akun · 10 GB disk · 30 domain · SSL · overselling" */
+/** "10 akun · 10 GB disk · 30 domain · RAM maks 1 GB/akun · SSL · overselling" */
 function keyLimits(pkg: ResellerPackage): string {
     const { accounts, disk_mb, domains } = pkg.limits;
 
@@ -35,6 +35,10 @@ function keyLimits(pkg: ResellerPackage): string {
             ? 'Disk tanpa batas'
             : `${formatMegabytes(disk_mb)} disk`,
         domains === null ? 'Domain tanpa batas' : `${domains} domain`,
+        pkg.resources.cpu_percent !== null &&
+            `CPU maks ${pkg.resources.cpu_percent}%/akun`,
+        pkg.resources.memory_mb !== null &&
+            `RAM maks ${formatMegabytes(pkg.resources.memory_mb)}/akun`,
         pkg.ssl ? 'SSL' : 'Tanpa SSL',
         pkg.cgi && 'CGI',
         pkg.ssh && 'SSH',

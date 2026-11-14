@@ -288,6 +288,8 @@
     "Placeholders only go in the content.": "Placeholder hanya boleh di isi record.",
     "Only {domain} and {ip} can be filled in.": "Hanya {domain} dan {ip} yang bisa diisi otomatis.",
     "The template is saved; new zones start with it.": "Template disimpan; zone baru memakainya.",
+    "Attachments: :names": "Lampiran: :names",
+    "The file :name could not be saved.": "File :name tidak bisa disimpan.",
     "Your accounts now get your own template; change it as you like.": "Akun Anda sekarang memakai template Anda sendiri; silakan ubah sesuai kebutuhan.",
     "Your accounts get the administrators' template again.": "Akun Anda kembali memakai template admin.",
     "The template is back to the default.": "Template kembali ke bawaan.",

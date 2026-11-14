@@ -362,7 +362,7 @@ export default function Dashboard({
                     {usageHistory && (
                         <Panel
                             title="Pemakaian 30 hari terakhir"
-                            description="Bandwidth dari log website, email, dan FTP kamu; disk dari pengukuran terakhir tiap hari; CPU dan RAM dari PHP dan sesi SSH kamu, diukur tiap 5 menit."
+                            description="Bandwidth dari log website, email, dan FTP kamu; disk dari pengukuran terakhir tiap hari; CPU dan RAM dari PHP, cron job, dan sesi SSH kamu, diukur tiap 5 menit."
                         >
                             <div className="grid gap-8 lg:grid-cols-2">
                                 <DailyBars

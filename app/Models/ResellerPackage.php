@@ -19,6 +19,10 @@ use InvalidArgumentException;
  * limits; with it they may, and only the number of accounts is a hard
  * limit. {@see ResellerLimits} reads and checks them.
  *
+ * The resource caps ({@see Package::RESOURCE_LIMITS}) are not shared out:
+ * each is the most one account of the reseller may get, whatever its
+ * hosting package says.
+ *
  * @property int $id
  * @property string $name
  * @property string|null $description
@@ -38,10 +42,14 @@ use InvalidArgumentException;
  * @property bool $cgi Whether the reseller's accounts may run CGI scripts.
  * @property bool $ssh Whether the reseller's accounts may turn on SSH.
  * @property bool $oversell Whether the reseller may give out more than its limits.
+ * @property int|null $cpu_percent The most CPU an account may get, in percent of one CPU.
+ * @property int|null $memory_mb The most memory an account may get.
+ * @property int|null $max_processes The most processes an account may run.
+ * @property int|null $io_weight The highest disk IO priority an account may get.
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['name', 'description', 'accounts', 'disk_mb', 'inodes', 'bandwidth_mb', 'domains', 'subdomains', 'pointers', 'email_accounts', 'email_forwarders', 'databases', 'ftp_accounts', 'cron_jobs', 'ssl', 'cgi', 'ssh', 'oversell'])]
+#[Fillable(['name', 'description', 'accounts', 'disk_mb', 'inodes', 'bandwidth_mb', 'domains', 'subdomains', 'pointers', 'email_accounts', 'email_forwarders', 'databases', 'ftp_accounts', 'cron_jobs', 'ssl', 'cgi', 'ssh', 'oversell', 'cpu_percent', 'memory_mb', 'max_processes', 'io_weight'])]
 class ResellerPackage extends Model
 {
     /** @use HasFactory<ResellerPackageFactory> */
@@ -74,6 +82,7 @@ class ResellerPackage extends Model
     {
         return [
             ...array_fill_keys(self::LIMITS, 'integer'),
+            ...array_fill_keys(Package::RESOURCE_LIMITS, 'integer'),
             'ssl' => 'boolean',
             'cgi' => 'boolean',
             'ssh' => 'boolean',
@@ -93,6 +102,21 @@ class ResellerPackage extends Model
         $limit = $this->getAttribute($key);
 
         return $limit === null ? null : (int) $limit;
+    }
+
+    /**
+     * The most of the resource (one of {@see Package::RESOURCE_LIMITS}) an
+     * account of the reseller may get, or null when it is not capped.
+     */
+    public function resourceCap(string $key): ?int
+    {
+        if (! in_array($key, Package::RESOURCE_LIMITS, true)) {
+            throw new InvalidArgumentException("Unknown resource limit [{$key}].");
+        }
+
+        $cap = $this->getAttribute($key);
+
+        return $cap === null ? null : (int) $cap;
     }
 
     /**

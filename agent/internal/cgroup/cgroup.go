@@ -3,9 +3,10 @@
 // processes and its share of disk IO.
 //
 // The PHP-FPM pools of an account run in rayxo-<user>.slice (their unit
-// template says Slice=rayxo-%i.slice), and its SSH sessions in the
-// user-<uid>.slice systemd-logind makes; both get the same limits. Cron
-// jobs run in cron.service and are not limited.
+// template says Slice=rayxo-%i.slice), and so do its cron jobs, which
+// rayxod's cron-scope PAM hook moves there (see AttachCronJob); its SSH
+// sessions run in the user-<uid>.slice systemd-logind makes. Both slices
+// get the same limits.
 package cgroup
 
 import (
@@ -73,6 +74,8 @@ type Config struct {
 	UnitDir string
 	// Root is where cgroups are mounted, /sys/fs/cgroup.
 	Root string
+	// Proc is where the kernel shows processes, /proc.
+	Proc string
 	Run  func(ctx context.Context, program string, args ...string) ([]byte, error)
 }
 

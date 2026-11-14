@@ -229,6 +229,8 @@ return [
         'catchall_target' => 'alamat tujuan catch-all',
         'subject' => 'subjek',
         'body' => 'isi balasan',
+        'attachments' => 'lampiran',
+        'attachments.*' => 'lampiran',
         'starts_on' => 'tanggal mulai',
         'ends_on' => 'tanggal selesai',
         'interval_days' => 'jeda balasan',

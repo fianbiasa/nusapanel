@@ -28,6 +28,8 @@ import { formatRelative } from '@/lib/format';
 import { ticketPriority, ticketStatus } from '@/lib/tickets';
 import { index, show, store } from '@/routes/tickets';
 import type { Paginated } from '@/types';
+import { TicketAttachmentsInput } from '@/components/ticket-attachments';
+import type { AttachmentLimits } from '@/components/ticket-attachments';
 
 type Row = {
     id: number;
@@ -48,6 +50,7 @@ type Props = {
     waiting: { mine: number; inbox: number };
     priorities: string[];
     max_body: number;
+    attachment_limits: AttachmentLimits;
 };
 
 const textareaClass =
@@ -63,6 +66,7 @@ export default function Tickets({
     waiting,
     priorities,
     max_body,
+    attachment_limits,
 }: Props) {
     const [creating, setCreating] = useState(false);
     const [priority, setPriority] = useState('normal');
@@ -280,6 +284,11 @@ export default function Tickets({
                                     />
                                     <InputError message={errors.body} />
                                 </div>
+                                <TicketAttachmentsInput
+                                    id="ticket-attachments"
+                                    limits={attachment_limits}
+                                    errors={errors}
+                                />
                                 <div>
                                     <Button type="submit" disabled={processing}>
                                         {processing && <Spinner />}

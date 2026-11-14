@@ -8,8 +8,10 @@ use App\Models\AuditLog;
 use App\Models\Domain;
 use App\Models\Package;
 use App\Models\ResellerPackage;
+use App\Models\Task;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Queue;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
@@ -203,6 +205,49 @@ class ResellerManagementTest extends TestCase
             ->delete(route('admin.reseller-packages.destroy', $package))
             ->assertSessionHasNoErrors();
         $this->assertModelMissing($package);
+    }
+
+    public function test_resource_caps_of_a_reseller_package_hold_back_its_resellers_accounts_on_the_server()
+    {
+        $admin = User::factory()->admin()->create();
+        $package = ResellerPackage::factory()->create();
+        $reseller = User::factory()->reseller()->create(['reseller_package_id' => $package->id]);
+        $hosting = Package::factory()->for($reseller, 'owner')->create(['cpu_percent' => 200, 'memory_mb' => 512, 'max_processes' => null]);
+        $account = User::factory()->for($reseller, 'owner')->create(['username' => 'budi', 'package_id' => $hosting->id]);
+        User::factory()->create(['username' => 'other']);
+
+        $this->actingAs($admin)
+            ->put(route('admin.reseller-packages.update', $package), $this->resellerPackageData([
+                'name' => $package->name,
+                'cpu_percent' => 100,
+                'memory_mb' => 1024,
+                'max_processes' => 50,
+            ]))
+            ->assertSessionHasNoErrors();
+
+        // The lower of the package and the cap; the cap where the package
+        // does not limit.
+        $task = Task::query()->sole();
+        $this->assertSame($account->id, $task->user_id);
+        $this->assertSame(['cpu_percent' => 100, 'memory_mb' => 512, 'tasks' => 50, 'io_weight' => 0], Arr::only($task->payload, ['cpu_percent', 'memory_mb', 'tasks', 'io_weight']));
+
+        // Another change that leaves the caps alone queues nothing.
+        $this->actingAs($admin)
+            ->put(route('admin.reseller-packages.update', $package), $this->resellerPackageData([
+                'name' => 'Renamed',
+                'cpu_percent' => 100,
+                'memory_mb' => 1024,
+                'max_processes' => 50,
+            ]))
+            ->assertSessionHasNoErrors();
+        $this->assertSame(1, Task::query()->count());
+
+        $this->actingAs($admin)
+            ->put(route('admin.accounts.reseller-package.update', $reseller), ['reseller_package_id' => ResellerPackage::factory()->create()->id])
+            ->assertSessionHasNoErrors();
+
+        $lifted = Task::query()->latest('id')->first();
+        $this->assertSame(['cpu_percent' => 200, 'memory_mb' => 512, 'tasks' => 0, 'io_weight' => 0], Arr::only($lifted->payload, ['cpu_percent', 'memory_mb', 'tasks', 'io_weight']));
     }
 
     public function test_the_account_list_offers_each_account_the_packages_of_its_owner()

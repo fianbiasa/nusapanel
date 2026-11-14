@@ -2946,6 +2946,26 @@ configure_logrotate() {
     info "Rotasi log panel diatur (/etc/logrotate.d/rayxo)"
 }
 
+# The PAM line through which cron jobs of hosting accounts move into their
+# account's resource slice (rayxod cron-scope, run as root when cron opens
+# the session of a job). It is optional: a job whose move fails still runs.
+CRON_SCOPE_PAM_LINE="session optional pam_exec.so quiet $INSTALL_DIR/bin/rayxod cron-scope"
+
+# cron opens a PAM session for every job; there rayxod moves the jobs of
+# hosting accounts into rayxo-<user>.slice, so they get the account's
+# resource limits and count in its CPU and memory history like its PHP.
+configure_cron_slices() {
+    local file=/etc/pam.d/cron
+
+    [[ -f "$file" ]] || die "$file tidak ada (paket cron belum terpasang?)"
+
+    if ! grep -qxF "$CRON_SCOPE_PAM_LINE" "$file"; then
+        sed -i '/^# RAYXO: cron jobs of hosting accounts/d; /rayxod cron-scope/d' "$file"
+        printf '# RAYXO: cron jobs of hosting accounts run in their resource slice.\n%s\n' "$CRON_SCOPE_PAM_LINE" >>"$file"
+    fi
+    info "Cron job akun hosting berjalan di slice resource akunnya ($file)"
+}
+
 install_services() {
     step "Memasang service systemd"
 
@@ -3054,6 +3074,9 @@ verify_install() {
         die "user $PANEL_USER tidak bisa memanggil agent (cek: journalctl -u rayxod)"
     fi
     info "Agent rayxod menjawab panggilan dari panel"
+
+    grep -qxF "$CRON_SCOPE_PAM_LINE" /etc/pam.d/cron ||
+        die "cron job akun hosting tidak masuk slice resource-nya (baris rayxod cron-scope tidak ada di /etc/pam.d/cron)"
 
     systemctl is-active --quiet rayxo-queue.service ||
         die "queue worker tidak berjalan (cek: journalctl -u rayxo-queue)"
@@ -3390,6 +3413,7 @@ main() {
     configure_web
     configure_quota
     configure_logrotate
+    configure_cron_slices
     install_services
     verify_install
     rebuild_websites

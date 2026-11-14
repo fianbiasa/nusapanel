@@ -63,6 +63,15 @@ final class ResellerLimits implements Arrayable
         return $this->reseller->resellerPackage?->limit($key);
     }
 
+    /**
+     * The most of the resource (one of {@see Package::RESOURCE_LIMITS}) each
+     * of the reseller's accounts may get, or null when it is not capped.
+     */
+    public function resourceCap(string $key): ?int
+    {
+        return $this->reseller->resellerPackage?->resourceCap($key);
+    }
+
     public function oversells(): bool
     {
         return $this->reseller->resellerPackage === null || $this->reseller->resellerPackage->oversell;
@@ -212,13 +221,15 @@ final class ResellerLimits implements Arrayable
 
     /**
      * Refuse a package of the reseller that gives out more than the
-     * reseller's own limits, or SSL that the reseller may not give.
+     * reseller's own limits, more of a resource than the reseller may give
+     * each account, or SSL that the reseller may not give. A resource limit
+     * left out of the data keeps what the package (if any) has.
      *
      * @param  array<string, mixed>  $data  The package's validated limits and ssl.
      *
      * @throws ValidationException
      */
-    public function ensurePackageFits(array $data): void
+    public function ensurePackageFits(array $data, ?Package $package = null): void
     {
         $errors = [];
 
@@ -228,6 +239,15 @@ final class ResellerLimits implements Arrayable
 
             if ($limit !== null && ($given === null || (int) $given > $limit)) {
                 $errors[$key] = __('At most :limit, the limit of your reseller package.', ['limit' => $limit]);
+            }
+        }
+
+        foreach (Package::RESOURCE_LIMITS as $key) {
+            $cap = $this->resourceCap($key);
+            $given = array_key_exists($key, $data) ? $data[$key] : $package?->getAttribute($key);
+
+            if ($cap !== null && ($given === null || (int) $given > $cap)) {
+                $errors[$key] = __('At most :limit, the limit of your reseller package.', ['limit' => $cap]);
             }
         }
 
@@ -259,7 +279,7 @@ final class ResellerLimits implements Arrayable
      */
     public function ensurePackageChangeFits(Package $package, array $data): void
     {
-        $this->ensurePackageFits($data);
+        $this->ensurePackageFits($data, $package);
 
         $onPackage = $this->accounts()->where('package_id', $package->id);
 

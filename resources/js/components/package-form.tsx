@@ -230,32 +230,54 @@ export function PackageForm({
                         </div>
                     </Panel>
 
-                    {kind === 'hosting' && (
-                        <Panel
-                            title="Batas resource"
-                            description="Yang boleh dipakai setiap akun sekaligus. Server menerapkannya ke PHP dan sesi SSH akun; cron job tidak ikut dibatasi. Perubahan menyalakan ulang PHP akun yang belum dibatasi."
-                        >
-                            <div className="grid gap-5 md:grid-cols-2">
-                                {resourceKeys.map((key) => (
+                    <Panel
+                        title={
+                            kind === 'reseller'
+                                ? 'Batas resource per akun'
+                                : 'Batas resource'
+                        }
+                        description={
+                            kind === 'reseller'
+                                ? 'Paling banyak yang boleh diberikan reseller ke setiap akunnya, tidak dijumlah. Paket hosting reseller tidak bisa melewatinya, dan server selalu menerapkan yang lebih kecil.'
+                                : 'Yang boleh dipakai setiap akun sekaligus. Server menerapkannya ke PHP, cron job, dan sesi SSH akun. Perubahan menyalakan ulang PHP akun yang belum dibatasi.'
+                        }
+                    >
+                        <div className="grid gap-5 md:grid-cols-2">
+                            {resourceKeys.map((key) => {
+                                const cap = resellerLimits
+                                    ? resellerLimits[key]
+                                    : null;
+
+                                return (
                                     <QuotaField
                                         key={key}
                                         name={key}
                                         label={resourceFields[key].label}
                                         unit={resourceFields[key].unit}
                                         min={resourceFields[key].min}
-                                        hint={resourceFields[key].hint}
+                                        max={cap}
+                                        hint={
+                                            cap !== null
+                                                ? `Paling tinggi ${resourceFields[key].unit === 'MB' ? formatMegabytes(cap) : `${cap.toLocaleString('id-ID')}${resourceFields[key].unit ?? ''}`}, batas paket reseller Anda.`
+                                                : resourceFields[key].hint
+                                        }
                                         unlimitedLabel={
-                                            resourceFields[key].unlimitedLabel
+                                            kind === 'reseller'
+                                                ? 'Tanpa batas'
+                                                : resourceFields[key]
+                                                      .unlimitedLabel
                                         }
                                         defaultValue={
-                                            pkg?.resources?.[key] ?? null
+                                            pkg
+                                                ? (pkg.resources?.[key] ?? null)
+                                                : cap
                                         }
                                         error={errors[key]}
                                     />
-                                ))}
-                            </div>
-                        </Panel>
-                    )}
+                                );
+                            })}
+                        </div>
+                    </Panel>
 
                     <Panel title="Fitur">
                         <div className="grid gap-5">

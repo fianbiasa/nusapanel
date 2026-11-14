@@ -46,6 +46,12 @@ func main() {
 		os.Exit(srs.Main(os.Args[2:]))
 	}
 
+	// cron's PAM session hook moves the jobs of hosting accounts into
+	// their slice (see internal/actions/cronscope.go).
+	if len(os.Args) > 1 && os.Args[1] == actions.CronScopeArg {
+		os.Exit(actions.CronScopeMain(os.Args[2:]))
+	}
+
 	var cfg config
 
 	flag.StringVar(&cfg.socketPath, "socket", "/run/rayxo/agent.sock", "Unix socket to listen on")

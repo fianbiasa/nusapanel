@@ -36,6 +36,7 @@ class AccountService
         private MailService $mail,
         private SshService $ssh,
         private IpAddressService $ipAddresses,
+        private TicketService $tickets,
     ) {}
 
     /**
@@ -141,6 +142,10 @@ class AccountService
             $this->domains->reapplyCgiWebsites(User::query()->where('owner_id', $reseller->id), $actor);
             $this->ssh->reapply(User::query()->where('owner_id', $reseller->id), $actor);
 
+            if (collect(Package::RESOURCE_LIMITS)->contains(fn (string $key): bool => $previous?->resourceCap($key) !== $package?->resourceCap($key))) {
+                $this->quotas->applyToReseller($reseller, $actor);
+            }
+
             $this->audit->record('account.reseller_package_changed', $reseller, [
                 'username' => $reseller->username,
                 'from' => $previous?->name,
@@ -188,7 +193,10 @@ class AccountService
             $account->setRelation('owner', $owner);
             $account->setRelation('package', $package);
 
-            if ($previousPackage?->id !== $package?->id) {
+            $capsChanged = collect(Package::RESOURCE_LIMITS)
+                ->contains(fn (string $key): bool => $previousOwner?->resellerPackage?->resourceCap($key) !== $owner->resellerPackage?->resourceCap($key));
+
+            if ($previousPackage?->id !== $package?->id || $capsChanged) {
                 $this->quotas->apply($account, $actor);
             }
 
@@ -432,6 +440,7 @@ class AccountService
 
             Package::query()->where('owner_id', $account->id)->delete();
 
+            $this->tickets->deleteAttachmentsOf($account);
             $account->delete();
         });
     }

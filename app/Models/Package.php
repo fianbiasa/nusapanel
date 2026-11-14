@@ -81,7 +81,8 @@ class Package extends Model
     /**
      * What each account may use of the server at once, in the order the
      * panel shows them. Unlike {@see self::LIMITS} they are not shared out
-     * by a reseller package: they only hold back the account itself.
+     * by a reseller package: they only hold back the account itself, and a
+     * reseller package can cap them per account.
      *
      * @var list<string>
      */

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreResellerPackageRequest;
 use App\Http\Requests\Admin\UpdateResellerPackageRequest;
+use App\Models\Package;
 use App\Models\ResellerPackage;
 use App\Services\ResellerPackageService;
 use Illuminate\Http\RedirectResponse;
@@ -98,7 +99,7 @@ class ResellerPackageController extends Controller
     }
 
     /**
-     * @return array{id: int, name: string, description: string|null, limits: array<string, int|null>, ssl: bool, cgi: bool, ssh: bool, oversell: bool, resellers_count: int}
+     * @return array{id: int, name: string, description: string|null, limits: array<string, int|null>, resources: array<string, int|null>, ssl: bool, cgi: bool, ssh: bool, oversell: bool, resellers_count: int}
      */
     private function packageData(ResellerPackage $package): array
     {
@@ -113,6 +114,7 @@ class ResellerPackageController extends Controller
             'name' => $package->name,
             'description' => $package->description,
             'limits' => $limits,
+            'resources' => array_combine(Package::RESOURCE_LIMITS, array_map($package->resourceCap(...), Package::RESOURCE_LIMITS)),
             'ssl' => $package->ssl,
             'cgi' => $package->cgi,
             'ssh' => $package->ssh,

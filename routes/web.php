@@ -80,6 +80,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('tickets', [TicketController::class, 'store'])->middleware('throttle:10,1,tickets')->name('tickets.store');
     Route::get('tickets/{ticket}', [TicketController::class, 'show'])->name('tickets.show');
     Route::post('tickets/{ticket}/messages', [TicketController::class, 'reply'])->middleware('throttle:30,1,ticket-replies')->name('tickets.reply');
+    Route::get('tickets/{ticket}/attachments/{attachment}', [TicketController::class, 'attachment'])->scopeBindings()->name('tickets.attachment');
     Route::post('tickets/{ticket}/close', [TicketController::class, 'close'])->name('tickets.close');
     Route::post('tickets/{ticket}/reopen', [TicketController::class, 'reopen'])->name('tickets.reopen');
     Route::get('announcements', [AnnouncementController::class, 'index'])->name('announcements.index');

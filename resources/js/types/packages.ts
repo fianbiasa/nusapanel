@@ -71,6 +71,8 @@ export type ResellerPackage = {
     name: string;
     description: string | null;
     limits: Record<ResellerQuotaKey, number | null>;
+    /** The most each of the reseller's accounts may get; null is no cap. */
+    resources: ResourceLimits;
     ssl: boolean;
     cgi: boolean;
     ssh: boolean;
@@ -82,11 +84,12 @@ export type ResellerPackage = {
  * For a reseller: the limits of its reseller package, which its own
  * packages may not go over; `ssl`, `cgi` and `ssh` are 1 when it may give them.
  */
-export type ResellerPackageLimits = Record<QuotaKey, number | null> & {
-    ssl: number;
-    cgi: number;
-    ssh: number;
-};
+export type ResellerPackageLimits = Record<QuotaKey, number | null> &
+    Record<ResourceKey, number | null> & {
+        ssl: number;
+        cgi: number;
+        ssh: number;
+    };
 
 /**
  * What a reseller's package allows, how much its accounts use together

@@ -9,6 +9,7 @@ use App\Models\Task;
 use App\Models\User;
 use App\Services\DomainService;
 use App\Services\QuotaService;
+use App\Services\TicketService;
 
 /**
  * Bring an account's panel record in line with what the agent did on the
@@ -24,6 +25,7 @@ class ApplyAccountTaskResult
     public function __construct(
         private DomainService $domains,
         private QuotaService $quotas,
+        private TicketService $tickets,
     ) {}
 
     public function handle(AgentTaskFinished $event): void
@@ -81,6 +83,7 @@ class ApplyAccountTaskResult
         }
 
         if ($task->status === TaskStatus::Success) {
+            $this->tickets->deleteAttachmentsOf($account);
             $account->delete();
         } elseif ($task->status === TaskStatus::Failed) {
             $account->forceFill(['status' => AccountStatus::Failed])->save();

@@ -91,28 +91,28 @@ Pembagian level sama seperti DirectAdmin:
 
 ### Fitur lanjutan
 
-| Fitur                       | Keterangan                                                                                                                   | Fase |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ---- |
-| Cron jobs                   | ✅ Preset jadwal, email hasil output                                                                                         | P1   |
-| 2FA                         | ✅ TOTP + kode cadangan                                                                                                      | P1   |
-| Riwayat login               | ✅ IP, waktu, berhasil/gagal                                                                                                 | P1   |
-| Tema                        | ✅ Mode terang/gelap                                                                                                         | P1   |
-| Bahasa                      | Indonesia & English, pilihan per user                                                                                        | PB   |
-| SSH access                  | ✅ Shell di jail sendiri (hanya program server & home akun), diizinkan per paket, on/off per akun                            | P3   |
-| SSH keys                    | ✅ Tambah/hapus public key, untuk SSH dan SFTP                                                                               | P3   |
-| Site statistics             | ✅ Laporan GoAccess per domain dari log 14 hari, dibuka di tab terpisah yang terisolasi dari panel                           | P3   |
-| Log viewer                  | ✅ Log akses, error Nginx, dan error PHP/Apache per domain: baris terakhir dengan saringan, unduh 14 hari                    | P3   |
-| Pemakaian resource          | ✅ Disk, bandwidth, CPU & RAM (grafik 30 hari), inode (kuota); CPU & RAM saat ini ★                                          | P3   |
-| Disk usage explorer         | ✅ Folder & file terbesar, telusuri per folder                                                                               | P3   |
-| Login keys (API key)        | ✅ Izin per area (baca/tulis), batasi alamat IP, masa berlaku; key ditampilkan sekali dan hanya disimpan sebagai hash        | P3   |
-| Pesan/tiket                 | ✅ Tiket ke reseller-nya, atau ke admin kalau dibuat admin; balasan dan statusnya, notifikasi email/Telegram; lampiran belum | P3   |
-| Backup & restore            | Pilih item, download, restore sebagian                                                                                       | P4   |
-| App installer ★             | WordPress satu klik                                                                                                          | P6   |
-| WordPress manager ★         | Update core/plugin/tema, reset password admin, mode maintenance, staging                                                     | P6   |
-| Git deploy                  | Clone repo, deploy otomatis via webhook                                                                                      | P6   |
-| Aplikasi Node.js / Python ★ | Proses dikelola systemd + reverse proxy                                                                                      | P6   |
-| Redis per user ★            |                                                                                                                              | P6   |
-| Web terminal ★              |                                                                                                                              | P6   |
+| Fitur                       | Keterangan                                                                                                                                                                    | Fase |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| Cron jobs                   | ✅ Preset jadwal, email hasil output                                                                                                                                          | P1   |
+| 2FA                         | ✅ TOTP + kode cadangan                                                                                                                                                       | P1   |
+| Riwayat login               | ✅ IP, waktu, berhasil/gagal                                                                                                                                                  | P1   |
+| Tema                        | ✅ Mode terang/gelap                                                                                                                                                          | P1   |
+| Bahasa                      | Indonesia & English, pilihan per user                                                                                                                                         | PB   |
+| SSH access                  | ✅ Shell di jail sendiri (hanya program server & home akun), diizinkan per paket, on/off per akun                                                                             | P3   |
+| SSH keys                    | ✅ Tambah/hapus public key, untuk SSH dan SFTP                                                                                                                                | P3   |
+| Site statistics             | ✅ Laporan GoAccess per domain dari log 14 hari, dibuka di tab terpisah yang terisolasi dari panel                                                                            | P3   |
+| Log viewer                  | ✅ Log akses, error Nginx, dan error PHP/Apache per domain: baris terakhir dengan saringan, unduh 14 hari                                                                     | P3   |
+| Pemakaian resource          | ✅ Disk, bandwidth, CPU & RAM (grafik 30 hari), inode (kuota); CPU & RAM saat ini ★                                                                                           | P3   |
+| Disk usage explorer         | ✅ Folder & file terbesar, telusuri per folder                                                                                                                                | P3   |
+| Login keys (API key)        | ✅ Izin per area (baca/tulis), batasi alamat IP, masa berlaku; key ditampilkan sekali dan hanya disimpan sebagai hash                                                         | P3   |
+| Pesan/tiket                 | ✅ Tiket ke reseller-nya, atau ke admin kalau dibuat admin; balasan dan statusnya, notifikasi email/Telegram; lampiran (gambar, PDF, teks, CSV, ZIP; 5 file × 5 MB per pesan) | P3   |
+| Backup & restore            | Pilih item, download, restore sebagian                                                                                                                                        | P4   |
+| App installer ★             | WordPress satu klik                                                                                                                                                           | P6   |
+| WordPress manager ★         | Update core/plugin/tema, reset password admin, mode maintenance, staging                                                                                                      | P6   |
+| Git deploy                  | Clone repo, deploy otomatis via webhook                                                                                                                                       | P6   |
+| Aplikasi Node.js / Python ★ | Proses dikelola systemd + reverse proxy                                                                                                                                       | P6   |
+| Redis per user ★            |                                                                                                                                                                               | P6   |
+| Web terminal ★              |                                                                                                                                                                               | P6   |
 
 ---
 
@@ -147,7 +147,7 @@ Pembagian level sama seperti DirectAdmin:
 | Buat reseller & admin lain | ✅                                                                                          | P3   |
 | Semua akun                 | ✅ Cari, filter, aksi massal (suspend, hapus, ganti paket)                                  | P1   |
 | Paket user                 | ✅                                                                                          | P1   |
-| Paket reseller             | ✅                                                                                          | P3   |
+| Paket reseller             | ✅ Jatah total untuk semua akunnya, plus batas CPU, RAM, proses, dan IO tertinggi per akun  | P3   |
 | Pindah pemilik             | ✅ Pindahkan user antar reseller                                                            | P3   |
 | Login as                   | ✅ Masuk sebagai reseller/user, tercatat di audit log                                       | P3   |
 | Pesan massal               | ✅ Ke semua reseller dan/atau semua akun hosting: tampil di dashboard, opsional lewat email | P3   |
@@ -178,17 +178,17 @@ Pembagian level sama seperti DirectAdmin:
 
 ### Keamanan
 
-| Fitur                     | Keterangan                                                                                                                                      | Fase |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| Audit log                 | ✅ Siapa melakukan apa, kapan, dari IP mana                                                                                                     | P0   |
-| 2FA                       | ✅ Untuk semua level                                                                                                                            | P1   |
-| Riwayat login semua akun  | ✅ Admin: semua akun, termasuk percobaan dengan nama yang tidak terdaftar; reseller: akun-akunnya. Saring berhasil/gagal, cari username atau IP | P3   |
-| Batas resource per user ★ | ✅ CPU, RAM, jumlah proses, prioritas IO per paket (cgroups v2), untuk PHP-FPM dan sesi SSH akun; cron job belum ikut                           | P3   |
-| Brute force monitor       | Deteksi login gagal di SSH, FTP, email, panel, WordPress; blokir otomatis; daftar putih                                                         | P5   |
-| Firewall                  | Buka/tutup port, allow/deny IP (nftables)                                                                                                       | P5   |
-| ModSecurity + OWASP CRS   | On/off global & per domain                                                                                                                      | P5   |
-| Kebijakan keamanan        | Wajib 2FA untuk admin/reseller, aturan password                                                                                                 | P5   |
-| Malware scan ★            | ClamAV/maldet                                                                                                                                   | P6   |
+| Fitur                     | Keterangan                                                                                                                                           | Fase |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| Audit log                 | ✅ Siapa melakukan apa, kapan, dari IP mana                                                                                                          | P0   |
+| 2FA                       | ✅ Untuk semua level                                                                                                                                 | P1   |
+| Riwayat login semua akun  | ✅ Admin: semua akun, termasuk percobaan dengan nama yang tidak terdaftar; reseller: akun-akunnya. Saring berhasil/gagal, cari username atau IP      | P3   |
+| Batas resource per user ★ | ✅ CPU, RAM, jumlah proses, prioritas IO per paket (cgroups v2), untuk PHP-FPM, cron job, dan sesi SSH akun; paket reseller membatasi yang tertinggi | P3   |
+| Brute force monitor       | Deteksi login gagal di SSH, FTP, email, panel, WordPress; blokir otomatis; daftar putih                                                              | P5   |
+| Firewall                  | Buka/tutup port, allow/deny IP (nftables)                                                                                                            | P5   |
+| ModSecurity + OWASP CRS   | On/off global & per domain                                                                                                                           | P5   |
+| Kebijakan keamanan        | Wajib 2FA untuk admin/reseller, aturan password                                                                                                      | P5   |
+| Malware scan ★            | ClamAV/maldet                                                                                                                                        | P6   |
 
 ### Backup & migrasi
 
