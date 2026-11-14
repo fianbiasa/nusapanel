@@ -6,6 +6,7 @@ import AppLayout from '@/layouts/app-layout';
 import AuthLayout from '@/layouts/auth-layout';
 import SettingsLayout from '@/layouts/settings/layout';
 import { titleName } from '@/lib/branding';
+import { keepNumberFieldsFromTheWheel } from '@/lib/number-fields';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
@@ -40,3 +41,5 @@ void createInertiaApp({
 
 // This will set light / dark mode on load...
 initializeTheme();
+
+keepNumberFieldsFromTheWheel();
