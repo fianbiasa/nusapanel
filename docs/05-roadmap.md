@@ -208,7 +208,10 @@ Semua fitur P2 sudah ada, terpasang di server produksi dan dirilis sebagai v0.6.
 - Process monitor, file editor sistem, template config kustom ✅
 - Template DNS reseller, riwayat CPU/RAM, batas resource paket reseller, lampiran tiket, cron job di slice akun ✅
 
-**Selesai kalau:** reseller bisa membuat dan mengelola user dalam batasnya, dan terbukti tidak bisa menyentuh akun di luar miliknya (test otorisasi otomatis untuk setiap endpoint). ✅ `ResellerAuthorizationTest` menelusuri setiap route yang terdaftar, jadi route baru ikut teruji tanpa mengubah test-nya: setiap route reseller yang memakai akun, paket, atau alamat IP menjawab 404 untuk milik reseller lain dan admin (32 kombinasi, tanpa ada yang berubah), lebih dari 100 route admin dan akun hosting menolak reseller, dan route reseller menolak admin serta akun hosting; untuk API, `tests/Feature/Api` menguji peran dan izin setiap login key. Di VPS, reseller membuat paket dan akun dalam jatahnya, masuk sebagai pelanggan, serta memakai branding, nameserver, dan domain login sendiri (tahap 1 dan 8c).
+**Selesai kalau:**
+
+- reseller bisa membuat dan mengelola user dalam batasnya; ✅ di VPS, reseller membuat paket dan akun dalam jatahnya dan masuk sebagai pelanggan (tahap 1), memakai branding, nameserver, dan domain login sendiri (tahap 8c) serta template DNS sendiri (tahap 8e), dan batas resource paket resellernya ditegakkan server di setiap akunnya, termasuk paket lama yang lebih besar (tahap 8f);
+- reseller terbukti tidak bisa menyentuh akun di luar miliknya (test otorisasi otomatis untuk setiap endpoint). ✅ `ResellerAuthorizationTest` menelusuri setiap route yang terdaftar: setiap route reseller yang memakai akun, paket, alamat IP, atau record template DNS menjawab 404 untuk milik reseller lain dan admin (36 kombinasi, tanpa ada yang berubah), lebih dari 100 route admin dan akun hosting menolak reseller, dan route reseller menolak admin serta akun hosting. Route baru otomatis ikut teruji; route dengan jenis parameter baru membuat test gagal sampai parameter itu ditambahkan ke test. Untuk API, `tests/Feature/Api` menguji peran dan izin setiap login key.
 
 ## P4 — Backup, migrasi, WHMCS
 
