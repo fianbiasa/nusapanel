@@ -5,9 +5,11 @@ namespace App\Services;
 use App\Enums\DomainType;
 use App\Enums\PointerMode;
 use App\Enums\Role;
+use App\Enums\TaskStatus;
 use App\Models\AccountRestore;
 use App\Models\Domain;
 use App\Models\ServerBackup;
+use App\Models\Task;
 use App\Models\User;
 use App\Rules\CronSchedule;
 use App\Rules\ValidDomain;
@@ -186,6 +188,38 @@ class AccountRestoreService
         } catch (ValidationException $exception) {
             $this->fail($restore, (string) collect($exception->errors())->flatten()->first());
         }
+    }
+
+    /**
+     * How the account made again from server backup went, for the pages
+     * that started it (moves and imports): still restoring, completed or
+     * failed with why, and what was left out. Null when nothing was made.
+     *
+     * @return array{status: string, error: string|null, skipped: list<string>}|null
+     */
+    public function progressOf(int $serverBackupId): ?array
+    {
+        $restore = AccountRestore::query()->where('server_backup_id', $serverBackupId)->latest('id')->first();
+
+        if ($restore === null) {
+            return null;
+        }
+
+        $task = $restore->status === AccountRestore::STATUS_RESTORING
+            ? Task::query()->where('user_id', $restore->user_id)->where('action', 'backup.server_restore')->latest('id')->first()
+            : null;
+
+        $status = match (true) {
+            $restore->status === AccountRestore::STATUS_FAILED, $task?->status === TaskStatus::Failed => 'failed',
+            $task?->status === TaskStatus::Success => 'completed',
+            default => 'restoring',
+        };
+
+        return [
+            'status' => $status,
+            'error' => $restore->error ?? ($status === 'failed' ? $task?->error : null),
+            'skipped' => $restore->skipped ?? [],
+        ];
     }
 
     /**

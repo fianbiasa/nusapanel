@@ -27,6 +27,8 @@ const statuses: Record<string, { label: string; tone: Tone; busy?: boolean }> =
         backing_up: { label: 'Backup', tone: 'info', busy: true },
         downloading: { label: 'Mengunduh', tone: 'info', busy: true },
         restoring: { label: 'Dipulihkan', tone: 'info', busy: true },
+        reading: { label: 'Membaca', tone: 'info', busy: true },
+        converting: { label: 'Mengubah', tone: 'info', busy: true },
     };
 
 const tones: Record<Tone, string> = {

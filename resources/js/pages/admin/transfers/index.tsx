@@ -1,5 +1,5 @@
-import { Head, router, usePoll } from '@inertiajs/react';
-import { ArrowLeftRight, PlugZap, Send } from 'lucide-react';
+import { Head, Link, router, usePoll } from '@inertiajs/react';
+import { ArrowLeftRight, FileArchive, PlugZap, Send } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { BackupChoice } from '@/components/backup-restore-dialog';
 import InputError from '@/components/input-error';
@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { formatDateTime } from '@/lib/format';
 import { connect, store } from '@/routes/admin/transfers';
+import { index as cpanelIndex } from '@/routes/admin/transfers/cpanel';
 
 type Transfer = {
     id: number;
@@ -20,7 +21,7 @@ type Transfer = {
     source: string;
     status: string;
     error: string | null;
-    account_status: string | null;
+    skipped: string[];
     created_at: string | null;
 };
 
@@ -47,7 +48,8 @@ const statusLabels: Record<string, string> = {
     queued: 'Antre',
     backing_up: 'Backup di server asal',
     downloading: 'Mengunduh',
-    restoring: 'Dibuat di sini',
+    restoring: 'Isinya dipulihkan',
+    completed: 'Selesai',
     failed: 'Gagal',
 };
 
@@ -110,6 +112,14 @@ export default function Transfers({ transfers, going }: Props) {
             <PageHeader
                 title="Transfer"
                 description="Pindahkan akun hosting dari server RAYXO lain ke server ini."
+                actions={
+                    <Button variant="outline" asChild>
+                        <Link href={cpanelIndex()}>
+                            <FileArchive />
+                            Dari cPanel
+                        </Link>
+                    </Button>
+                }
             />
 
             <Panel
@@ -342,6 +352,27 @@ export default function Transfers({ transfers, going }: Props) {
                                                 <p className="mt-1 max-w-md text-xs text-destructive">
                                                     {transfer.error}
                                                 </p>
+                                            )}
+                                            {transfer.skipped.length > 0 && (
+                                                <details className="mt-1 max-w-md text-xs text-muted-foreground">
+                                                    <summary className="cursor-pointer">
+                                                        Tidak ikut (
+                                                        {
+                                                            transfer.skipped
+                                                                .length
+                                                        }
+                                                        )
+                                                    </summary>
+                                                    <ul className="mt-1 grid list-disc gap-1 pl-4">
+                                                        {transfer.skipped.map(
+                                                            (item) => (
+                                                                <li key={item}>
+                                                                    {item}
+                                                                </li>
+                                                            ),
+                                                        )}
+                                                    </ul>
+                                                </details>
                                             )}
                                         </td>
                                     </tr>

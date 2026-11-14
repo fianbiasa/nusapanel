@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\AccountController;
 use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\BrandingController;
+use App\Http\Controllers\Admin\CpanelImportController;
 use App\Http\Controllers\Admin\DnsController as AdminDnsController;
 use App\Http\Controllers\Admin\IpAddressController;
 use App\Http\Controllers\Admin\LoginHistoryController;
@@ -293,6 +294,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('transfers', [TransferController::class, 'index'])->name('transfers.index');
         Route::post('transfers/connect', [TransferController::class, 'connect'])->middleware('throttle:10,1,transfer-connect')->name('transfers.connect');
         Route::post('transfers', [TransferController::class, 'store'])->middleware('throttle:5,1,transfer-start')->name('transfers.store');
+        Route::get('transfers/cpanel', [CpanelImportController::class, 'index'])->name('transfers.cpanel.index');
+        Route::post('transfers/cpanel', [CpanelImportController::class, 'store'])->middleware('throttle:10,1,cpanel-import')->name('transfers.cpanel.store');
         Route::put('backups/system/settings', [SystemBackupController::class, 'updateSettings'])->middleware('throttle:20,1,backup-system')->name('backups.system.settings');
         Route::post('backups/system', [SystemBackupController::class, 'store'])->middleware('throttle:5,1,backup-system-now')->name('backups.system.store');
         Route::get('backups/system/{systemBackup}/download', [SystemBackupController::class, 'download'])->middleware('throttle:10,1,backup-system-download')->name('backups.system.download');

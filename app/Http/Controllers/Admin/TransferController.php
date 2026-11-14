@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\AccountTransfer;
+use App\Services\AccountRestoreService;
 use App\Services\AccountTransferService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,26 +18,35 @@ use Inertia\Response;
  */
 class TransferController extends Controller
 {
-    public function __construct(private AccountTransferService $transfers) {}
+    public function __construct(
+        private AccountTransferService $transfers,
+        private AccountRestoreService $restores,
+    ) {}
 
     /**
      * The latest moves.
      */
     public function index(): Response
     {
-        $transfers = AccountTransfer::query()->with('account:id,username,status')->latest('id')->limit(50)->get();
+        $transfers = AccountTransfer::query()->latest('id')->limit(50)->get()->map(function (AccountTransfer $transfer): array {
+            $progress = $transfer->status === AccountTransfer::STATUS_RESTORING && $transfer->server_backup_id !== null
+                ? $this->restores->progressOf($transfer->server_backup_id)
+                : null;
 
-        return Inertia::render('admin/transfers/index', [
-            'transfers' => $transfers->map(fn (AccountTransfer $transfer): array => [
+            return [
                 'id' => $transfer->id,
                 'username' => $transfer->username,
                 'source' => (string) parse_url($transfer->source_url, PHP_URL_HOST),
-                'status' => $transfer->status,
-                'error' => $transfer->error,
-                'account_status' => $transfer->account?->status->value,
+                'status' => $progress['status'] ?? $transfer->status,
+                'error' => $transfer->error ?? $progress['error'] ?? null,
+                'skipped' => $progress['skipped'] ?? [],
                 'created_at' => $transfer->created_at?->toIso8601String(),
-            ]),
-            'going' => $transfers->contains(fn (AccountTransfer $transfer): bool => $transfer->isGoing()),
+            ];
+        });
+
+        return Inertia::render('admin/transfers/index', [
+            'transfers' => $transfers,
+            'going' => $transfers->contains(fn (array $transfer): bool => ! in_array($transfer['status'], ['completed', AccountTransfer::STATUS_FAILED], true)),
             'permissions' => AccountTransferService::PERMISSIONS,
         ]);
     }

@@ -127,6 +127,8 @@ export const auditActionLabels: Record<string, string> = {
     'backup.system_downloaded': 'Backup sistem diunduh',
     'backup.system_deleted': 'Backup sistem dihapus',
     'backup.server_scanned': 'Backup di folder server didaftarkan',
+    'backup.cpanel_import_started': 'Impor dari cPanel dimulai',
+    'backup.cpanel_imported': 'Akun diimpor dari cPanel',
     'backup.transfer_started': 'Transfer akun dari server lain dimulai',
     'cron_job.updated': 'Cron job diubah',
     'cron_job.deleted': 'Cron job dihapus',

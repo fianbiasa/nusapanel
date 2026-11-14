@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\BackupRun;
 use App\Services\AccountTransferService;
+use App\Services\CpanelImportService;
 use App\Services\ServerBackupService;
 use App\Services\SystemBackupService;
 use Carbon\CarbonImmutable;
@@ -28,10 +29,11 @@ class RunBackupsCommand extends Command
      */
     protected $description = 'Start the automatic backups of every account when they are due';
 
-    public function handle(ServerBackupService $backups, SystemBackupService $system, AccountTransferService $transfers): int
+    public function handle(ServerBackupService $backups, SystemBackupService $system, AccountTransferService $transfers, CpanelImportService $imports): int
     {
         $backups->closeStale();
         $transfers->closeStale();
+        $imports->closeStale();
 
         // The panel itself is backed up every day, apart from the accounts.
         if ($system->due()) {

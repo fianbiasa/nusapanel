@@ -143,6 +143,8 @@ func serverBackupMethods(system accountSystem, helper fileHelper, databases data
 		"backup.server_space":   {Handler: actions.diskSpace},
 		"backup.server_import":  {Handler: actions.importUpload, Timeout: backupTimeout},
 		"backup.server_list":    {Handler: actions.list},
+		"backup.cpanel_inspect": {Handler: actions.cpanelInspect, Timeout: backupTimeout},
+		"backup.cpanel_convert": {Handler: actions.cpanelConvert, Timeout: backupTimeout},
 	}
 }
 

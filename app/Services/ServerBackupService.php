@@ -797,7 +797,10 @@ class ServerBackupService
         return $account;
     }
 
-    private function reason(AgentException $exception): string
+    /**
+     * What an agent error about backups means for the administrator.
+     */
+    public function reason(AgentException $exception): string
     {
         return match ($exception->reason) {
             'no_space' => __('The server disk does not have enough free space for backups.'),
