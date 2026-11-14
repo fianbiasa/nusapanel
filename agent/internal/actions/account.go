@@ -17,7 +17,7 @@ import (
 	"rayxo/agent/internal/validate"
 )
 
-// How hosting accounts look on the server (docs/04-agent-dan-server.md 4.4).
+// How hosting accounts look on the server.
 // Every account the panel creates carries accountMarker as its GECOS
 // comment; the account actions never touch a user without it.
 const (

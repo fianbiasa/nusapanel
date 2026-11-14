@@ -1,8 +1,7 @@
 // Package webserver manages the websites of hosting accounts: an Nginx vhost
 // and an Apache vhost per domain, a PHP-FPM pool per account per PHP
 // version that runs as its own systemd service (rayxo-php<ver>@<user>), and
-// a Let's Encrypt certificate per domain (certificate.go). See
-// docs/02-arsitektur.md 2.6-2.7 and docs/04-agent-dan-server.md 4.4-4.6.
+// a Let's Encrypt certificate per domain (certificate.go).
 //
 // Every value written into a config file comes from a validated username,
 // domain or PHP version, or from Config; each method validates its inputs

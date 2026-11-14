@@ -14,7 +14,7 @@
 
 Panel hosting self-hosted untuk server Ubuntu, gratis dan open source, dengan tiga level akses (Admin, Reseller, User). Targetnya fitur **minimal setara DirectAdmin** tanpa biaya lisensi.
 
-**Status:** beta, versi terbaru [v0.7.2](https://github.com/fianbiasa/rayxo/releases/latest). Fase P0–P3 di [roadmap](docs/05-roadmap.md) sudah selesai; backup dan migrasi (P4) belum ada.
+**Status:** beta, versi terbaru [v0.7.2](https://github.com/fianbiasa/rayxo/releases/latest). Fase P0–P3 sudah selesai; backup dan migrasi (P4) belum ada.
 
 ## Yang sudah bisa dipakai
 
@@ -29,17 +29,7 @@ Panel hosting self-hosted untuk server Ubuntu, gratis dan open source, dengan ti
 - **Operasional:** REST API dengan login key, notifikasi email dan Telegram, tiket bantuan dengan lampiran, pesan massal, monitor layanan dengan watchdog, process monitor, editor file konfigurasi, riwayat login, task, dan audit log.
 - **Keamanan akun:** setiap akun hosting adalah user Linux sendiri; login panel dengan 2FA atau passkey.
 
-Daftar lengkap per level ada di [docs/01-fitur.md](docs/01-fitur.md), dan panduan pemakaian di [rayxopanel.com/docs](https://rayxopanel.com/docs/).
-
-## Dokumen spesifikasi
-
-| #   | Dokumen                                       | Isi                                                                  |
-| --- | --------------------------------------------- | -------------------------------------------------------------------- |
-| 1   | [Daftar fitur](docs/01-fitur.md)              | Semua fitur per level (User, Reseller, Admin) dan fase pengerjaannya |
-| 2   | [Arsitektur](docs/02-arsitektur.md)           | Komponen, stack layanan, isolasi user, model keamanan, alur task     |
-| 3   | [Database](docs/03-database.md)               | Skema tabel panel dan view SQL untuk layanan                         |
-| 4   | [Agent & server](docs/04-agent-dan-server.md) | Daftar aksi agent, aturan validasi, layout folder, port              |
-| 5   | [Roadmap](docs/05-roadmap.md)                 | Fase P0–P6, estimasi, kriteria selesai, strategi migrasi, risiko     |
+Panduan pemakaian lengkap ada di [rayxopanel.com/docs](https://rayxopanel.com/docs/).
 
 ## Keputusan utama
 
@@ -67,7 +57,7 @@ Daftar lengkap per level ada di [docs/01-fitur.md](docs/01-fitur.md), dan pandua
 | P5   | Brute force monitor, firewall, ModSecurity, kebijakan 2FA dan password, update panel sekali klik, UI dua bahasa    |
 | P6   | App installer dan WordPress manager, Git deploy, Node.js/Python, DNSSEC, multi-server                              |
 
-Panel dirancang untuk menjual shared hosting (Admin → Reseller → User) di satu server; desain agent sudah disiapkan untuk multi-server. Rinciannya di [docs/05-roadmap.md](docs/05-roadmap.md).
+Panel dirancang untuk menjual shared hosting (Admin → Reseller → User) di satu server; desain agent sudah disiapkan untuk multi-server.
 
 ## Menjalankan secara lokal (Herd)
 

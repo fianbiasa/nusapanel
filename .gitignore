@@ -47,3 +47,6 @@ yarn-error.log
 
 # Release packages built by installer/build-release.sh
 /dist
+
+# Development notes (specs, architecture, roadmap) stay local, off GitHub.
+/docs/
