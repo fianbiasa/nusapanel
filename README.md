@@ -14,7 +14,7 @@
 
 Panel hosting self-hosted untuk server Ubuntu, gratis dan open source, dengan tiga level akses (Admin, Reseller, User). Targetnya fitur **minimal setara DirectAdmin** tanpa biaya lisensi.
 
-**Status:** beta, versi terbaru [v0.7.0](https://github.com/fianbiasa/rayxo/releases/latest). Fase P0–P3 di [roadmap](docs/05-roadmap.md) sudah selesai; backup dan migrasi (P4) belum ada.
+**Status:** beta, versi terbaru [v0.7.1](https://github.com/fianbiasa/rayxo/releases/latest). Fase P0–P3 di [roadmap](docs/05-roadmap.md) sudah selesai; backup dan migrasi (P4) belum ada.
 
 ## Yang sudah bisa dipakai
 
@@ -22,10 +22,10 @@ Panel hosting self-hosted untuk server Ubuntu, gratis dan open source, dengan ti
 - **SSL:** Let's Encrypt otomatis termasuk wildcard dan `mail.<domain>`, sertifikat sendiri, CSR, dan self-signed.
 - **Database:** MariaDB dengan phpMyAdmin sekali klik, import/export, periksa dan perbaiki tabel, akses dari luar server per IP.
 - **Email:** Postfix, Dovecot, Rspamd, dan Roundcube; forwarder, catch-all, autoresponder, filter, filter spam, DKIM/SPF/DMARC otomatis, batas kirim, antrean email, dan konfigurasi otomatis aplikasi email.
-- **DNS:** PowerDNS dengan template zone, editor record, dan nameserver sendiri per reseller.
+- **DNS:** PowerDNS dengan template zone (juga template sendiri per reseller), editor record, dan nameserver sendiri per reseller.
 - **File & akses:** file manager, FTP/FTPS, SFTP, SSH dalam jail dengan SSH key, cron job.
 - **Reseller:** paket reseller dengan overselling, akun dan paket sendiri, masuk sebagai pelanggan, pindah pemilik, branding (nama, warna, logo), dan domain login panel sendiri.
-- **Batas & statistik:** kuota disk dan inode, bandwidth dari log server dengan grafik harian, batas CPU/RAM/proses/IO per akun (cgroups), alamat IP sendiri per akun (shared atau dedicated).
+- **Batas & statistik:** kuota disk dan inode, grafik harian bandwidth, disk, CPU, dan RAM, batas CPU/RAM/proses/IO per akun (cgroups), alamat IP sendiri per akun (shared atau dedicated).
 - **Operasional:** REST API dengan login key, notifikasi email dan Telegram, tiket bantuan, pesan massal, monitor layanan dengan watchdog, process monitor, editor file konfigurasi, riwayat login, task, dan audit log.
 - **Keamanan akun:** setiap akun hosting adalah user Linux sendiri; login panel dengan 2FA atau passkey.
 
@@ -113,7 +113,7 @@ wget https://github.com/fianbiasa/rayxo/releases/latest/download/setup.sh
 bash setup.sh --admin-email kamu@domainmu.com
 ```
 
-`setup.sh` dari sebuah rilis otomatis mengunduh paket rilis yang sama dari GitHub dan memverifikasi checksum-nya. Versi tertentu: `--version 0.7.0`. Versi PHP untuk website (default 7.4 sampai 8.5): `--php-versions "8.2 8.3 8.4"`; versi yang sudah terpasang tidak dihapus.
+`setup.sh` dari sebuah rilis otomatis mengunduh paket rilis yang sama dari GitHub dan memverifikasi checksum-nya. Versi tertentu: `--version 0.7.1`. Versi PHP untuk website (default 7.4 sampai 8.5): `--php-versions "8.2 8.3 8.4"`; versi yang sudah terpasang tidak dihapus.
 
 **Syarat sebelum instalasi** (dicek `setup.sh` lewat DNS publik; instalasi berhenti kalau belum terpenuhi):
 
