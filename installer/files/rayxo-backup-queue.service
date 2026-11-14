@@ -1,0 +1,22 @@
+[Unit]
+Description=rayxo backup worker (automatic backups and their restores)
+After=network.target mariadb.service rayxod.service
+Wants=rayxod.service
+
+[Service]
+Type=simple
+User=rayxo
+Group=rayxo
+WorkingDirectory=/usr/local/rayxo/current/panel
+# Backups run here, one at a time, so a backup of hours never holds up the
+# tasks of the panel's own worker (rayxo-queue). Restarts hourly between
+# backups so it always runs the code of the current release.
+ExecStart=/usr/bin/php8.4 artisan queue:work --queue=backups --sleep=5 --max-time=3600
+Restart=always
+RestartSec=3
+# A backup running when the worker stops is reported as failed.
+KillSignal=SIGTERM
+TimeoutStopSec=15min
+
+[Install]
+WantedBy=multi-user.target

@@ -26,6 +26,9 @@ final class NotificationEvents
     /** A ticket was opened or answered. */
     public const TICKET = 'ticket';
 
+    /** Automatic backups were skipped for lack of space, or some failed. */
+    public const BACKUP = 'backup';
+
     /**
      * @var array<string, list<Role>>
      */
@@ -35,6 +38,7 @@ final class NotificationEvents
         self::QUOTA_EXCEEDED => [Role::Admin, Role::Reseller, Role::User],
         self::SSL_FAILED => [Role::Admin, Role::Reseller, Role::User],
         self::TICKET => [Role::Admin, Role::Reseller, Role::User],
+        self::BACKUP => [Role::Admin],
     ];
 
     /**

@@ -11,7 +11,8 @@ ExecStart=/usr/local/rayxo/bin/rayxod \
     --socket /run/rayxo/agent.sock \
     --allow-user rayxo \
     --socket-group rayxo \
-    --transfer-dir /var/lib/rayxo/transfer
+    --transfer-dir /var/lib/rayxo/transfer \
+    --backup-dir /var/lib/rayxo/backups
 # /run/rayxo is world-traversable; the socket itself is 0660 root:rayxo.
 RuntimeDirectory=rayxo
 RuntimeDirectoryMode=0755

@@ -34,11 +34,12 @@ const (
 // destination. Every path keeps its own name at the top of the archive;
 // links are stored as links.
 func (h *Home) Compress(paths []string, destination, format string) (Entry, error) {
-	return h.compress(paths, destination, format, MaxArchiveEntries)
+	return h.compress(paths, destination, format, MaxArchiveEntries, false)
 }
 
-// compress is Compress with its own bound on the number of entries.
-func (h *Home) compress(paths []string, destination, format string, maxEntries int) (Entry, error) {
+// compress is Compress with its own bound on the number of entries. A live
+// archive (a backup of a home in use) leaves out what it cannot read.
+func (h *Home) compress(paths []string, destination, format string, maxEntries int, live bool) (Entry, error) {
 	if err := h.checkSource(destination); err != nil {
 		return Entry{}, err
 	}
@@ -77,7 +78,7 @@ func (h *Home) compress(paths []string, destination, format string, maxEntries i
 	}
 
 	writer := newArchiveWriter(file, format)
-	packer := packer{home: h, writer: writer, skip: map[string]bool{temp: true, destination: true}, maxEntries: maxEntries}
+	packer := packer{home: h, writer: writer, skip: map[string]bool{temp: true, destination: true}, maxEntries: maxEntries, live: live}
 
 	for _, p := range paths {
 		if err = packer.add(p, path.Base(p)); err != nil {
@@ -122,6 +123,29 @@ type packer struct {
 	skip       map[string]bool
 	entries    int
 	maxEntries int
+	// live packs a home in use: what is deleted while it is packed, or
+	// what the account itself may not read, is left out and counted in
+	// skipped instead of stopping the archive.
+	live    bool
+	skipped int
+}
+
+// passOver reports whether a live archive leaves out the path err is about.
+func (p *packer) passOver(err error) bool {
+	if !p.live {
+		return false
+	}
+
+	var failure *Error
+
+	unreadable := errors.Is(err, fs.ErrNotExist) || errors.Is(err, fs.ErrPermission) ||
+		(errors.As(err, &failure) && (failure.Reason == ReasonNotFound || failure.Reason == ReasonPermission))
+
+	if unreadable {
+		p.skipped++
+	}
+
+	return unreadable
 }
 
 func (p *packer) add(src, name string) error {
@@ -136,6 +160,10 @@ func (p *packer) add(src, name string) error {
 
 	info, err := p.home.root.Lstat(src)
 	if err != nil {
+		if p.passOver(err) {
+			return nil
+		}
+
 		return fail(err, src)
 	}
 
@@ -143,6 +171,10 @@ func (p *packer) add(src, name string) error {
 	case info.Mode()&fs.ModeSymlink != 0:
 		target, err := p.home.root.Readlink(src)
 		if err != nil {
+			if p.passOver(err) {
+				return nil
+			}
+
 			return fail(err, src)
 		}
 
@@ -155,6 +187,10 @@ func (p *packer) add(src, name string) error {
 
 		names, err := p.home.names(src)
 		if err != nil {
+			if p.passOver(err) {
+				return nil
+			}
+
 			return err
 		}
 
@@ -169,6 +205,10 @@ func (p *packer) add(src, name string) error {
 	case info.Mode().IsRegular():
 		file, err := p.home.openRegular(src)
 		if err != nil {
+			if p.passOver(err) {
+				return nil
+			}
+
 			return fail(err, src)
 		}
 		defer file.Close()
@@ -262,6 +302,8 @@ func (z *zipWriter) Close() error {
 	return z.zip.Close()
 }
 
+// tarWriter writes a tar archive, compressed with gzip unless compressed
+// is nil (the stream a backup of the home is sent to the agent in).
 type tarWriter struct {
 	tar        *tar.Writer
 	compressed *gzip.Writer
@@ -300,9 +342,24 @@ func (t *tarWriter) addFile(name string, info fs.FileInfo, r io.Reader) error {
 		return err
 	}
 
-	_, err = io.CopyN(t.tar, r, info.Size())
+	// The header holds the size the file had: one that grew while it was
+	// read is cut there, and one that shrank (a log rotated meanwhile) is
+	// padded with zeros, as GNU tar does.
+	written, err := io.Copy(t.tar, io.LimitReader(r, info.Size()))
+	if err == nil && written < info.Size() {
+		_, err = io.CopyN(t.tar, zeros{}, info.Size()-written)
+	}
 
 	return err
+}
+
+// zeros reads as an endless run of zero bytes.
+type zeros struct{}
+
+func (zeros) Read(p []byte) (int, error) {
+	clear(p)
+
+	return len(p), nil
 }
 
 func (t *tarWriter) addLink(name, target string, info fs.FileInfo) error {
@@ -316,6 +373,10 @@ func (t *tarWriter) addLink(name, target string, info fs.FileInfo) error {
 
 func (t *tarWriter) Close() error {
 	err := t.tar.Close()
+	if t.compressed == nil {
+		return err
+	}
+
 	if closeErr := t.compressed.Close(); err == nil {
 		err = closeErr
 	}
@@ -404,13 +465,7 @@ func (h *Home) extract(archive, destination string, x extractor) (ExtractResult,
 		return result, err
 	}
 
-	if destination != "" {
-		if err := h.root.MkdirAll(destination, newDirMode); err != nil {
-			return result, fail(err, destination)
-		}
-	}
-
-	if err := h.checkFolder(destination); err != nil {
+	if err := h.prepareDestination(destination); err != nil {
 		return result, err
 	}
 
@@ -423,6 +478,18 @@ func (h *Home) extract(archive, destination string, x extractor) (ExtractResult,
 	}
 
 	return result, err
+}
+
+// prepareDestination creates the folder an archive is extracted into, and
+// checks that it is a folder of the home.
+func (h *Home) prepareDestination(destination string) error {
+	if destination != "" {
+		if err := h.root.MkdirAll(destination, newDirMode); err != nil {
+			return fail(err, destination)
+		}
+	}
+
+	return h.checkFolder(destination)
 }
 
 type extractor struct {
@@ -498,6 +565,11 @@ func (x *extractor) tar(file *os.File, format string) error {
 		source = bzip2.NewReader(file)
 	}
 
+	return x.tarStream(source)
+}
+
+// tarStream extracts the entries of an uncompressed tar stream.
+func (x *extractor) tarStream(source io.Reader) error {
 	reader := tar.NewReader(source)
 
 	for {

@@ -7,6 +7,7 @@ use App\Agent\AgentException;
 use App\Enums\TaskStatus;
 use App\Events\AgentTaskFinished;
 use App\Models\Task;
+use App\Services\ServerBackupService;
 use DateTimeInterface;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -38,18 +39,34 @@ class RunAgentTask implements ShouldQueue
     public const LONG_TASKS = [
         'backup.create' => 6 * 3600,
         'backup.restore' => 6 * 3600,
+        'backup.server_restore' => 6 * 3600,
     ];
+
+    /**
+     * Tasks that run on the backups queue, with the automatic backups,
+     * instead of holding up the panel's own worker.
+     *
+     * @var list<string>
+     */
+    public const BACKUP_QUEUE_TASKS = ['backup.server_restore'];
 
     public function __construct(public Task $task)
     {
         if (isset(self::LONG_TASKS[$task->action])) {
             $this->timeout = self::LONG_TASKS[$task->action] + 300;
         }
+
+        if (in_array($task->action, self::BACKUP_QUEUE_TASKS, true)) {
+            $this->onQueue(ServerBackupService::QUEUE);
+        }
     }
 
+    /**
+     * Long tasks may wait behind a run of backups on their queue.
+     */
     public function retryUntil(): DateTimeInterface
     {
-        return now()->addHour();
+        return isset(self::LONG_TASKS[$this->task->action]) ? now()->addDay() : now()->addHour();
     }
 
     /**

@@ -33,6 +33,8 @@ import (
 // Config is the agent's setup that methods need.
 type Config struct {
 	Files FilesConfig
+	// Backups is where the backups the panel makes of accounts are kept.
+	Backups BackupsConfig
 	// Services also runs the watchdog; nil makes one for real systemd.
 	Services *services.Manager
 	// Reconfigure runs setup.sh again, and PanelPort tries panel ports;
@@ -118,6 +120,10 @@ func Register(registry *rpc.Registry, config Config) {
 	}
 
 	for name, method := range backupMethods(sysuser.System{}, helper, databases) {
+		registry.Register(name, method)
+	}
+
+	for name, method := range serverBackupMethods(sysuser.System{}, helper, databases, config.Backups) {
 		registry.Register(name, method)
 	}
 

@@ -22,6 +22,8 @@ const statuses: Record<string, { label: string; tone: Tone; busy?: boolean }> =
         suspended: { label: 'Suspend', tone: 'warning' },
         failed: { label: 'Gagal', tone: 'danger' },
         cancelled: { label: 'Dibatalkan', tone: 'neutral' },
+        completed: { label: 'Selesai', tone: 'success' },
+        skipped: { label: 'Dilewati', tone: 'warning' },
     };
 
 const tones: Record<Tone, string> = {

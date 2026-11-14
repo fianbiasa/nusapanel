@@ -8,11 +8,15 @@ import {
     Trash2,
 } from 'lucide-react';
 import { useState } from 'react';
+import {
+    BackupChoice,
+    BackupRestoreDialog,
+} from '@/components/backup-restore-dialog';
+import type { InspectedBackup } from '@/components/backup-restore-dialog';
 import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
 import { Panel, tableStyles } from '@/components/panel';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
     Dialog,
     DialogClose,
@@ -22,8 +26,6 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
 import { formatBytes, formatDateTime } from '@/lib/format';
 import { destroy, restore, store } from '@/routes/backups';
@@ -31,61 +33,13 @@ import { download } from '@/routes/files';
 
 type Backup = { name: string; size: number; modified: number };
 
-type Inspected =
-    | {
-          name: string;
-          created_at: string | null;
-          files: boolean;
-          email: boolean;
-          databases: string[];
-          mailboxes: string[];
-          error?: undefined;
-      }
-    | { name: string; error: string };
-
 type Props = {
     backups: Backup[];
     error: string | null;
     busy: boolean;
     counts: { databases: number; domains: number };
-    inspected?: Inspected | null;
+    inspected?: InspectedBackup | null;
 };
-
-/** One labelled checkbox. */
-function Choice({
-    id,
-    checked,
-    onChange,
-    label,
-    hint,
-    disabled = false,
-}: {
-    id: string;
-    checked: boolean;
-    onChange: (checked: boolean) => void;
-    label: string;
-    hint?: string;
-    disabled?: boolean;
-}) {
-    return (
-        <div className="flex items-start gap-3">
-            <Checkbox
-                id={id}
-                checked={checked}
-                disabled={disabled}
-                onCheckedChange={(value) => onChange(value === true)}
-            />
-            <div className="grid gap-0.5">
-                <Label htmlFor={id} className="font-medium">
-                    {label}
-                </Label>
-                {hint && (
-                    <p className="text-xs text-muted-foreground">{hint}</p>
-                )}
-            </div>
-        </div>
-    );
-}
 
 export default function Backups({
     backups,
@@ -143,14 +97,14 @@ export default function Backups({
                 description="Setiap backup adalah salinan penuh dan ikut memakai kuota disk akunmu. Hapus backup lama yang tidak diperlukan lagi supaya disk tidak penuh."
             >
                 <div className="grid gap-4">
-                    <Choice
+                    <BackupChoice
                         id="backup-files"
                         checked={items.files}
                         onChange={(files) => setItems({ ...items, files })}
                         label="File website dan home"
                         hint={`Folder domains (${counts.domains} website) dan file lain di home, tanpa folder backups, trash, dan tmp.`}
                     />
-                    <Choice
+                    <BackupChoice
                         id="backup-databases"
                         checked={items.databases}
                         onChange={(databases) =>
@@ -159,7 +113,7 @@ export default function Backups({
                         label="Database"
                         hint={`${counts.databases} database MariaDB beserta user-nya.`}
                     />
-                    <Choice
+                    <BackupChoice
                         id="backup-email"
                         checked={items.email}
                         onChange={(email) => setItems({ ...items, email })}
@@ -277,11 +231,12 @@ export default function Backups({
                 )}
             </Panel>
 
-            <RestoreDialog
+            <BackupRestoreDialog
                 name={restoring}
                 inspected={
                     inspected && inspected.name === restoring ? inspected : null
                 }
+                action={restoring ? restore.url(restoring) : null}
                 onClose={() => setRestoring(null)}
             />
 
@@ -317,161 +272,5 @@ export default function Backups({
                 </DialogContent>
             </Dialog>
         </>
-    );
-}
-
-/** Choose what of a backup goes back into the account. */
-function RestoreDialog({
-    name,
-    inspected,
-    onClose,
-}: {
-    name: string | null;
-    inspected: Inspected | null;
-    onClose: () => void;
-}) {
-    const [choice, setChoice] = useState<{
-        for: string | null;
-        files: boolean;
-        email: boolean;
-        databases: string[];
-    }>({ for: null, files: false, email: false, databases: [] });
-    const [processing, setProcessing] = useState(false);
-    const [errors, setErrors] = useState<Record<string, string>>({});
-    const backup = inspected && 'files' in inspected ? inspected : null;
-
-    // A newly read backup starts with all it holds chosen.
-    if (backup && choice.for !== backup.name) {
-        setChoice({
-            for: backup.name,
-            files: backup.files,
-            email: backup.email,
-            databases: backup.databases,
-        });
-    }
-
-    const submit = () => {
-        if (!backup) {
-            return;
-        }
-
-        setProcessing(true);
-        router.post(
-            restore.url(backup.name),
-            {
-                files: choice.files,
-                email: choice.email,
-                databases: choice.databases,
-            },
-            {
-                preserveScroll: true,
-                onSuccess: () => onClose(),
-                onError: (failed) => setErrors(failed),
-                onFinish: () => setProcessing(false),
-            },
-        );
-    };
-
-    return (
-        <Dialog
-            open={name !== null}
-            onOpenChange={(open) => !open && onClose()}
-        >
-            <DialogContent className="rounded-2xl sm:max-w-lg">
-                <DialogHeader>
-                    <DialogTitle>Pulihkan backup</DialogTitle>
-                    <DialogDescription className="font-mono text-xs">
-                        {name}
-                    </DialogDescription>
-                </DialogHeader>
-
-                {inspected === null ? (
-                    <div className="grid gap-3">
-                        <Skeleton className="h-5 w-2/3" />
-                        <Skeleton className="h-5 w-1/2" />
-                        <Skeleton className="h-5 w-3/5" />
-                    </div>
-                ) : !backup ? (
-                    <p className="text-sm text-destructive">
-                        {inspected.error}
-                    </p>
-                ) : (
-                    backup && (
-                        <div className="grid gap-4">
-                            {backup.created_at && (
-                                <p className="text-sm text-muted-foreground">
-                                    Dibuat {formatDateTime(backup.created_at)}.
-                                </p>
-                            )}
-                            {backup.files && (
-                                <Choice
-                                    id="restore-files"
-                                    checked={choice.files}
-                                    onChange={(files) =>
-                                        setChoice({ ...choice, files })
-                                    }
-                                    label="File website dan home"
-                                    hint="File di backup menggantikan versinya yang sekarang; file yang dibuat setelah backup tetap ada."
-                                />
-                            )}
-                            {backup.email && (
-                                <Choice
-                                    id="restore-email"
-                                    checked={choice.email}
-                                    onChange={(email) =>
-                                        setChoice({ ...choice, email })
-                                    }
-                                    label="Email"
-                                    hint={`${backup.mailboxes.length} akun email. Akun email yang sudah dihapus dibuat lagi dengan password lamanya; email yang ada tetap ada.`}
-                                />
-                            )}
-                            {backup.databases.map((database) => (
-                                <Choice
-                                    key={database}
-                                    id={`restore-${database}`}
-                                    checked={choice.databases.includes(
-                                        database,
-                                    )}
-                                    onChange={(checked) =>
-                                        setChoice({
-                                            ...choice,
-                                            databases: checked
-                                                ? [
-                                                      ...choice.databases,
-                                                      database,
-                                                  ]
-                                                : choice.databases.filter(
-                                                      (name) =>
-                                                          name !== database,
-                                                  ),
-                                        })
-                                    }
-                                    label={`Database ${database}`}
-                                    hint="Isinya diganti isi backup. Database dan user-nya yang sudah dihapus dibuat lagi."
-                                />
-                            ))}
-                            <InputError
-                                message={
-                                    errors.backup ??
-                                    errors.items ??
-                                    errors.databases ??
-                                    errors.name
-                                }
-                            />
-                        </div>
-                    )
-                )}
-
-                <DialogFooter className="gap-2">
-                    <DialogClose asChild>
-                        <Button variant="outline">Batal</Button>
-                    </DialogClose>
-                    <Button onClick={submit} disabled={!backup || processing}>
-                        {processing ? <Spinner /> : <RotateCcw />}
-                        Pulihkan
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
     );
 }

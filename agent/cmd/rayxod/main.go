@@ -29,6 +29,7 @@ type config struct {
 	allowUser   string
 	socketGroup string
 	transferDir string
+	backupDir   string
 	callTimeout time.Duration
 	watchdog    time.Duration
 }
@@ -58,6 +59,7 @@ func main() {
 	flag.StringVar(&cfg.allowUser, "allow-user", "rayxo", "system user that may call the agent besides root")
 	flag.StringVar(&cfg.socketGroup, "socket-group", "rayxo", "group that owns the socket (empty keeps the current group)")
 	flag.StringVar(&cfg.transferDir, "transfer-dir", "/var/lib/rayxo/transfer", "folder, owned by root, that file manager uploads and downloads pass through")
+	flag.StringVar(&cfg.backupDir, "backup-dir", "/var/lib/rayxo/backups", "folder, owned by root and readable by the socket group, that keeps the backups the panel makes of accounts")
 	flag.DurationVar(&cfg.callTimeout, "call-timeout", 10*time.Minute, "maximum time one call may run")
 	flag.DurationVar(&cfg.watchdog, "watchdog-interval", time.Minute, "how often the watchdog starts services that should run again (0 turns it off)")
 	showVersion := flag.Bool("version", false, "print the version and exit")
@@ -129,6 +131,10 @@ func run(logger *slog.Logger, cfg config) error {
 			Executable:  executable,
 			TransferDir: cfg.transferDir,
 			PanelUID:    int(allowedUID),
+		},
+		Backups: actions.BackupsConfig{
+			Dir:      cfg.backupDir,
+			PanelGID: gid,
 		},
 		Services:    manager,
 		Reconfigure: changer,

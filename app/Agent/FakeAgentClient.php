@@ -47,6 +47,10 @@ final class FakeAgentClient implements AgentClient
             'usage.resources' => $this->resourceReport(),
             'backup.inspect' => $this->backupMeta((string) ($params['username'] ?? '')),
             'backup.delete' => ['simulated' => true],
+            'backup.server_create' => ['name' => $params['name'] ?? '', 'size' => 1_048_576 + crc32((string) ($params['name'] ?? '')) % 200_000_000, 'skipped' => 0, 'simulated' => true],
+            'backup.server_inspect' => $this->backupMeta((string) strstr((string) ($params['name'] ?? ''), '-', true)),
+            'backup.server_delete' => ['deleted' => $params['names'] ?? [], 'simulated' => true],
+            'backup.server_space' => ['total' => 160 * 1024 ** 3, 'free' => 112 * 1024 ** 3, 'reserve' => 8 * 1024 ** 3, 'simulated' => true],
             'mail.queue_list' => $this->mailQueue(),
             'mail.queue_retry' => ['id' => $params['id'] ?? '', 'simulated' => true],
             'mail.queue_delete' => ['done' => $params['ids'] ?? [], 'failed' => [], 'simulated' => true],
@@ -123,6 +127,7 @@ final class FakeAgentClient implements AgentClient
             ['pure-ftpd-mysql.service', 'Pure-FTPd', true, true],
             ['cron.service', 'Cron', true, true],
             ['rayxo-queue.service', 'Queue worker panel', false, true],
+            ['rayxo-backup-queue.service', 'Worker backup', false, true],
             ['rayxod.service', 'Agent rayxod', false, false],
         ];
 

@@ -77,6 +77,7 @@ func Catalog() []Service {
 		{Unit: "pure-ftpd-mysql.service", Label: "Pure-FTPd", CanControl: true, CanStop: true},
 		{Unit: "cron.service", Label: "Cron", CanControl: true, CanStop: true},
 		{Unit: "rayxo-queue.service", Label: "Queue worker panel", CanControl: true, Panel: true},
+		{Unit: "rayxo-backup-queue.service", Label: "Worker backup", CanControl: true},
 		{Unit: "rayxod.service", Label: "Agent rayxod"},
 	}
 }

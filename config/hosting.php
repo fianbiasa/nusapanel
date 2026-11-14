@@ -87,4 +87,20 @@ return [
         'chunk_bytes' => 8 * 1024 * 1024,
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Automatic backups
+    |--------------------------------------------------------------------------
+    |
+    | The agent keeps the backups the panel makes of every account in
+    | "dir", outside the homes. On a server it is /var/lib/rayxo/backups
+    | (owned by root and readable by the panel user, which sends downloads
+    | from it); the agent is started with the same folder.
+    |
+    */
+
+    'backups' => [
+        'dir' => env('RAYXO_BACKUP_DIR', storage_path('app/private/backups')),
+    ],
+
 ];

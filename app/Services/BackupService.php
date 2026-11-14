@@ -39,7 +39,11 @@ class BackupService
      */
     public const NAME_PATTERN = '[A-Za-z0-9][A-Za-z0-9._-]{0,150}\.tar\.gz';
 
-    private const TASKS = ['backup.create', 'backup.restore'];
+    /**
+     * The tasks during which no other backup or restore of the account may
+     * start; a restore of a backup the server keeps is one of them.
+     */
+    private const TASKS = ['backup.create', 'backup.restore', 'backup.server_restore'];
 
     public function __construct(
         private TaskDispatcher $tasks,
@@ -116,21 +120,32 @@ class BackupService
             'files' => $files,
             'email' => $email,
             'databases' => $databaseNames,
-            'manifest' => [
-                'format' => self::FORMAT,
-                'panel' => 'RAYXO',
-                'username' => $account->username,
-                'created_at' => now()->toIso8601String(),
-                'files' => $files,
-                'email' => $email,
-                'databases' => $databaseNames,
-            ],
+            'manifest' => $this->manifest($account, $files, $email, $databaseNames),
             'settings' => $this->settings($account),
         ], $account, $actor);
 
         $this->audit->record('backup.created', $account, ['name' => $name, 'files' => $files, 'email' => $email, 'databases' => $databaseNames], $actor);
 
         return $name;
+    }
+
+    /**
+     * The manifest at the start of a backup: what it holds, of whom.
+     *
+     * @param  list<string>  $databases
+     * @return array<string, mixed>
+     */
+    public function manifest(User $account, bool $files, bool $email, array $databases): array
+    {
+        return [
+            'format' => self::FORMAT,
+            'panel' => 'RAYXO',
+            'username' => $account->username,
+            'created_at' => now()->toIso8601String(),
+            'files' => $files,
+            'email' => $email,
+            'databases' => $databases,
+        ];
     }
 
     /**
@@ -150,6 +165,20 @@ class BackupService
             throw $this->failure($exception);
         }
 
+        return $this->describe($account, $name, $meta);
+    }
+
+    /**
+     * What the manifest and settings an agent read from backup name say,
+     * once they are checked to be a RAYXO backup of the account.
+     *
+     * @param  array<string, mixed>  $meta
+     * @return array{name: string, created_at: string|null, files: bool, email: bool, databases: list<string>, mailboxes: list<string>, settings: array<string, mixed>}
+     *
+     * @throws ValidationException
+     */
+    public function describe(User $account, string $name, array $meta): array
+    {
         $manifest = json_decode((string) ($meta['manifest'] ?? ''), true);
         $settings = json_decode((string) ($meta['settings'] ?? ''), true);
 
@@ -192,23 +221,9 @@ class BackupService
         $this->ensureReady($account);
 
         $backup = $this->inspect($account, $name);
-        $files = $files && $backup['files'];
-        $email = $email && $backup['email'];
-
-        if ($unknown = array_diff($databases, $backup['databases'])) {
-            throw ValidationException::withMessages(['databases' => __('The backup does not hold database :name.', ['name' => implode(', ', $unknown)])]);
-        }
-
-        if (! $files && ! $email && $databases === []) {
-            throw ValidationException::withMessages(['items' => __('Choose what to restore.')]);
-        }
 
         DB::transaction(function () use ($account, $name, $files, $email, $databases, $backup, $actor): void {
-            $this->bringBackDatabases($account, $databases, $backup['settings'], $actor);
-
-            if ($email) {
-                $this->bringBackMailboxes($account, $backup['settings'], $actor);
-            }
+            [$files, $email] = $this->prepareRestore($account, $backup, $files, $email, $databases, $actor);
 
             $this->tasks->dispatch('backup.restore', [
                 'username' => $account->username,
@@ -220,6 +235,40 @@ class BackupService
 
             $this->audit->record('backup.restored', $account, ['name' => $name, 'files' => $files, 'email' => $email, 'databases' => $databases], $actor);
         });
+    }
+
+    /**
+     * Check what is asked of backup (as describe() read it), then bring
+     * back the databases, their users and the mailboxes it holds that the
+     * account no longer has. Returns whether the files and the mail are
+     * restored: only when asked and the backup holds them.
+     *
+     * @param  array{files: bool, email: bool, databases: list<string>, settings: array<string, mixed>}  $backup
+     * @param  list<string>  $databases
+     * @return array{0: bool, 1: bool}
+     *
+     * @throws ValidationException
+     */
+    public function prepareRestore(User $account, array $backup, bool $files, bool $email, array $databases, User $actor): array
+    {
+        $files = $files && $backup['files'];
+        $email = $email && $backup['email'];
+
+        if ($unknown = array_diff($databases, $backup['databases'])) {
+            throw ValidationException::withMessages(['databases' => __('The backup does not hold database :name.', ['name' => implode(', ', $unknown)])]);
+        }
+
+        if (! $files && ! $email && $databases === []) {
+            throw ValidationException::withMessages(['items' => __('Choose what to restore.')]);
+        }
+
+        $this->bringBackDatabases($account, $databases, $backup['settings'], $actor);
+
+        if ($email) {
+            $this->bringBackMailboxes($account, $backup['settings'], $actor);
+        }
+
+        return [$files, $email];
     }
 
     /**
@@ -394,9 +443,11 @@ class BackupService
     }
 
     /**
+     * The databases of the account a backup dumps.
+     *
      * @return list<string>
      */
-    private function activeDatabases(User $account): array
+    public function activeDatabases(User $account): array
     {
         $names = [];
 
@@ -408,9 +459,12 @@ class BackupService
     }
 
     /**
+     * Refuse unless the account is an active hosting account with no other
+     * backup or restore going.
+     *
      * @throws ValidationException
      */
-    private function ensureReady(User $account): void
+    public function ensureReady(User $account): void
     {
         if (! $account->hasRole(Role::User) || $account->status !== AccountStatus::Active) {
             throw ValidationException::withMessages(['backup' => __('Backups can only be made and restored while the account is active.')]);

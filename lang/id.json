@@ -548,5 +548,22 @@
     "The change was not saved: :reason": "Perubahan tidak disimpan: :reason",
     "The file could not be saved. Try again in a moment.": "File tidak bisa disimpan. Coba lagi sebentar lagi.",
     "The file is saved and in use.": "File disimpan dan sudah dipakai.",
-    "The backup is back in place.": "Versi sebelumnya sudah dipulihkan."
+    "The backup is back in place.": "Versi sebelumnya sudah dipulihkan.",
+    "Choose what the backups hold.": "Pilih isi backup.",
+    "A backup run is still going.": "Backup semua akun masih berjalan.",
+    "Automatic backups were skipped": "Backup otomatis dilewati",
+    "The account no longer exists.": "Akun ini sudah tidak ada.",
+    "The backup did not finish.": "Backup tidak selesai.",
+    "Automatic backup of :count account(s) failed": "Backup otomatis :count akun gagal",
+    "Wait until this backup is done.": "Tunggu sampai backup ini selesai.",
+    "The server agent did not answer: :message": "Agent server tidak menjawab: :message",
+    "The backups need about :needed GB, but the disk has :free GB free and backups always leave :reserve GB. Free some space or keep fewer backups.": "Backup butuh sekitar :needed GB, tapi disk hanya punya :free GB kosong dan backup selalu menyisakan :reserve GB. Kosongkan sebagian disk atau kurangi jumlah backup yang disimpan.",
+    "Only a finished backup can be restored.": "Hanya backup yang sudah selesai yang bisa dipulihkan.",
+    "The account of this backup no longer exists.": "Akun pemilik backup ini sudah tidak ada.",
+    "The server disk does not have enough free space for backups.": "Disk server tidak punya cukup ruang kosong untuk backup.",
+    "The file of this backup is gone.": "File backup ini sudah tidak ada.",
+    "Automatic backups are on.": "Backup otomatis aktif.",
+    "Automatic backups are off.": "Backup otomatis dimatikan.",
+    "Backing up :count account(s). This page shows each one as it is done.": "Mem-backup :count akun. Halaman ini menampilkan tiap akun begitu selesai.",
+    "Restoring :name into :username. See Tasks for how it goes.": "Memulihkan :name ke akun :username. Lihat Tasks untuk perkembangannya."
 }

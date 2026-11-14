@@ -50,6 +50,11 @@ const (
 	OpBackupPack    = "backup_pack"
 	OpBackupExtract = "backup_extract"
 	OpBackupMeta    = "backup_meta"
+
+	// The home's side of the backups the agent keeps outside it: its
+	// files go out as a tar stream, and come back from one.
+	OpBackupStream = "backup_stream"
+	OpBackupUnpack = "backup_unpack"
 )
 
 // Request is what the agent sends the helper on stdin.
@@ -241,13 +246,13 @@ func (p SearchParams) Check() error {
 // NoParams are the params of operations on the whole trash.
 type NoParams struct{}
 
-// Check has nothing to check.
 // BackupPackParams are the params of OpBackupPack.
 type BackupPackParams struct {
 	Paths       []string `json:"paths"`
 	Destination string   `json:"destination"`
 }
 
+// Check checks the paths and the destination.
 func (p BackupPackParams) Check() error {
 	if err := checkPaths(p.Paths); err != nil {
 		return err
@@ -265,6 +270,7 @@ type BackupExtractParams struct {
 	Exclude     []string `json:"exclude"`
 }
 
+// Check checks the archive, the destination and the folder names.
 func (p BackupExtractParams) Check() error {
 	if err := CheckPath(p.Archive); err != nil {
 		return err
@@ -285,6 +291,33 @@ func (p BackupExtractParams) Check() error {
 	return nil
 }
 
+// BackupStreamParams are the params of OpBackupStream: the paths of the
+// home a backup holds.
+type BackupStreamParams struct {
+	Paths []string `json:"paths"`
+}
+
+// Check checks every path.
+func (p BackupStreamParams) Check() error {
+	return checkPaths(p.Paths)
+}
+
+// BackupUnpackParams are the params of OpBackupUnpack: the folder the
+// stream is extracted into ("" for the home).
+type BackupUnpackParams struct {
+	Destination string `json:"destination"`
+}
+
+// Check checks the destination.
+func (p BackupUnpackParams) Check() error {
+	if p.Destination == "" {
+		return nil
+	}
+
+	return CheckPath(p.Destination)
+}
+
+// Check has nothing to check.
 func (NoParams) Check() error {
 	return nil
 }
@@ -386,6 +419,22 @@ func Execute(home, op string, raw json.RawMessage, data *os.File) (any, error) {
 		})
 	case OpBackupMeta:
 		return run(raw, func(p PathParams) (any, error) { return h.BackupMeta(p.Path) })
+	case OpBackupStream:
+		return run(raw, func(p BackupStreamParams) (any, error) {
+			if data == nil {
+				return nil, errorf(ReasonInvalid, "the backup stream has nowhere to go")
+			}
+
+			return h.BackupStream(data, p.Paths)
+		})
+	case OpBackupUnpack:
+		return run(raw, func(p BackupUnpackParams) (any, error) {
+			if data == nil {
+				return nil, errorf(ReasonInvalid, "the backup stream has no data")
+			}
+
+			return h.BackupUnpack(data, p.Destination)
+		})
 	}
 
 	return nil, errorf(ReasonInvalid, "unknown operation %q", op)

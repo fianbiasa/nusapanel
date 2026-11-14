@@ -20,6 +20,7 @@ Schedule::command('rayxo:sync-send-limits')->everyFiveMinutes()->withoutOverlapp
 Schedule::command('rayxo:check-alerts')->everyFiveMinutes()->withoutOverlapping();
 Schedule::command('rayxo:collect-resources')->everyFiveMinutes()->withoutOverlapping();
 Schedule::command('rayxo:clean-transfers')->hourly()->withoutOverlapping();
+Schedule::command('rayxo:run-backups')->hourly()->withoutOverlapping();
 Schedule::command('rayxo:measure-domain-disk')->hourly()->withoutOverlapping();
 Schedule::command('model:prune', ['--model' => [WebmailSession::class, BandwidthUsage::class, DomainBandwidth::class, UsageSnapshot::class, ResourceUsage::class]])->hourly()->withoutOverlapping();
 Schedule::command('rayxo:recount-ftp-quotas')->dailyAt('03:40')->withoutOverlapping();

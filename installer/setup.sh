@@ -815,6 +815,10 @@ create_layout() {
     # the agent opens nothing in it that the panel user could redirect.
     install -d -m 0770 -o root -g "$PANEL_USER" "$DATA_DIR/transfer"
 
+    # Automatic backups of the accounts: only root (the agent) writes them;
+    # the panel user may read them, for downloads.
+    install -d -m 0750 -o root -g "$PANEL_USER" "$DATA_DIR/backups"
+
     local dir
     for dir in storage/app/private storage/app/public storage/framework/cache/data \
         storage/framework/sessions storage/framework/views storage/logs; do
@@ -1349,6 +1353,8 @@ write_env() {
         add_webmail_env
         # Installs from before the file manager.
         add_env_value RAYXO_TRANSFER_DIR "$DATA_DIR/transfer"
+        # Installs from before the automatic backups.
+        add_env_value RAYXO_BACKUP_DIR "$DATA_DIR/backups"
         # The panel's own addresses follow a new hostname or port.
         local old_host="${previous_hostname:-$server_hostname}"
         follow_env_value APP_URL "https://$old_host:$previous_panel_port" "https://$server_hostname:$PANEL_PORT"
@@ -1414,6 +1420,7 @@ ENV
     add_phpmyadmin_env
     add_webmail_env
     add_env_value RAYXO_TRANSFER_DIR "$DATA_DIR/transfer"
+    add_env_value RAYXO_BACKUP_DIR "$DATA_DIR/backups"
     info "Konfigurasi ditulis ke $ENV_FILE"
 }
 
@@ -2971,10 +2978,10 @@ install_services() {
 
     install -m 0644 "$release_dir"/systemd/*.service "$release_dir"/systemd/*.timer /etc/systemd/system/
     systemctl daemon-reload
-    quietly systemctl enable rayxod.service rayxo-queue.service rayxo-scheduler.timer
-    systemctl restart rayxod.service rayxo-queue.service
+    quietly systemctl enable rayxod.service rayxo-queue.service rayxo-backup-queue.service rayxo-scheduler.timer
+    systemctl restart rayxod.service rayxo-queue.service rayxo-backup-queue.service
     systemctl start rayxo-scheduler.timer
-    info "rayxod, queue worker dan scheduler berjalan"
+    info "rayxod, queue worker, worker backup dan scheduler berjalan"
 }
 
 # Websites set up by an older release keep their old web server config until
@@ -3080,6 +3087,8 @@ verify_install() {
 
     systemctl is-active --quiet rayxo-queue.service ||
         die "queue worker tidak berjalan (cek: journalctl -u rayxo-queue)"
+    systemctl is-active --quiet rayxo-backup-queue.service ||
+        die "worker backup tidak berjalan (cek: journalctl -u rayxo-backup-queue)"
 
     local status
     status="$(curl -sk -o /dev/null -w '%{http_code}' "https://127.0.0.1:$PANEL_PORT/login" || true)"

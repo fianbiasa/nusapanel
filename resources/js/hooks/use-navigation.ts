@@ -35,6 +35,7 @@ import { index as databasesIndex } from '@/routes/databases';
 import { index as dnsIndex } from '@/routes/dns';
 import { index as accountsIndex } from '@/routes/admin/accounts';
 import { index as auditLogsIndex } from '@/routes/admin/audit-logs';
+import { index as serverBackupsIndex } from '@/routes/admin/backups';
 import { index as ipAddressesIndex } from '@/routes/admin/ip-addresses';
 import { index as loginHistoryIndex } from '@/routes/admin/login-history';
 import { index as adminDnsIndex } from '@/routes/admin/dns';
@@ -180,6 +181,11 @@ export function useNavigation(): {
             href: serverSettingsIndex(),
             icon: SlidersHorizontal,
         };
+        const serverBackups: NavItem = {
+            title: 'Backup',
+            href: serverBackupsIndex(),
+            icon: Archive,
+        };
 
         sections.push(
             {
@@ -202,6 +208,7 @@ export function useNavigation(): {
                     processes,
                     mailQueue,
                     ipAddresses,
+                    serverBackups,
                     serverSettings,
                     systemFiles,
                     tasks,

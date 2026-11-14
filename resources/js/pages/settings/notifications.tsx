@@ -52,6 +52,11 @@ const eventLabels: Record<string, { title: string; description: string }> = {
         description:
             'Sertifikat gagal dibuat, atau habis dalam 7 hari dan belum diperpanjang.',
     },
+    backup: {
+        title: 'Backup otomatis',
+        description:
+            'Backup otomatis dilewati karena ruang disk kurang, atau ada akun yang gagal di-backup.',
+    },
 };
 
 export default function Notifications({
