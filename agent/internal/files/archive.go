@@ -34,6 +34,11 @@ const (
 // destination. Every path keeps its own name at the top of the archive;
 // links are stored as links.
 func (h *Home) Compress(paths []string, destination, format string) (Entry, error) {
+	return h.compress(paths, destination, format, MaxArchiveEntries)
+}
+
+// compress is Compress with its own bound on the number of entries.
+func (h *Home) compress(paths []string, destination, format string, maxEntries int) (Entry, error) {
 	if err := h.checkSource(destination); err != nil {
 		return Entry{}, err
 	}
@@ -72,7 +77,7 @@ func (h *Home) Compress(paths []string, destination, format string) (Entry, erro
 	}
 
 	writer := newArchiveWriter(file, format)
-	packer := packer{home: h, writer: writer, skip: map[string]bool{temp: true, destination: true}}
+	packer := packer{home: h, writer: writer, skip: map[string]bool{temp: true, destination: true}, maxEntries: maxEntries}
 
 	for _, p := range paths {
 		if err = packer.add(p, path.Base(p)); err != nil {
@@ -112,10 +117,11 @@ func (h *Home) Compress(paths []string, destination, format string) (Entry, erro
 
 // packer walks the home and adds what it finds to an archive.
 type packer struct {
-	home    *Home
-	writer  archiveWriter
-	skip    map[string]bool
-	entries int
+	home       *Home
+	writer     archiveWriter
+	skip       map[string]bool
+	entries    int
+	maxEntries int
 }
 
 func (p *packer) add(src, name string) error {
@@ -124,8 +130,8 @@ func (p *packer) add(src, name string) error {
 	}
 
 	p.entries++
-	if p.entries > MaxArchiveEntries {
-		return errorf(ReasonTooLarge, "an archive may hold at most %d files and folders", MaxArchiveEntries)
+	if p.entries > p.maxEntries {
+		return errorf(ReasonTooLarge, "an archive may hold at most %d files and folders", p.maxEntries)
 	}
 
 	info, err := p.home.root.Lstat(src)
@@ -366,6 +372,12 @@ func archiveFormat(name string) string {
 // Entry names that would lead out of destination are refused, and links
 // in the archive can never lead a later entry out of the home.
 func (h *Home) Extract(archive, destination string, overwrite bool) (ExtractResult, error) {
+	return h.extract(archive, destination, extractor{overwrite: overwrite, maxEntries: MaxArchiveEntries, maxBytes: MaxExtractBytes})
+}
+
+// extract is Extract with the settings of x: whether files are replaced,
+// the bounds, and which entries are taken.
+func (h *Home) extract(archive, destination string, x extractor) (ExtractResult, error) {
 	result := ExtractResult{Destination: destination}
 
 	format := archiveFormat(archive)
@@ -402,12 +414,12 @@ func (h *Home) Extract(archive, destination string, overwrite bool) (ExtractResu
 		return result, err
 	}
 
-	extractor := extractor{home: h, destination: destination, overwrite: overwrite, result: &result}
+	x.home, x.destination, x.result = h, destination, &result
 
 	if format == "zip" {
-		err = extractor.zip(file, info.Size())
+		err = x.zip(file, info.Size())
 	} else {
-		err = extractor.tar(file, format)
+		err = x.tar(file, format)
 	}
 
 	return result, err
@@ -420,6 +432,11 @@ type extractor struct {
 	result      *ExtractResult
 	entries     int
 	bytes       int64
+	maxEntries  int
+	maxBytes    int64
+	// take, when set, says which entries (by their cleaned name) are
+	// extracted; the others are passed over without being counted.
+	take func(name string) bool
 }
 
 func (x *extractor) zip(file *os.File, size int64) error {
@@ -517,12 +534,16 @@ func (x *extractor) tar(file *os.File, format string) error {
 
 // place extracts one entry.
 func (x *extractor) place(entry archiveEntry) error {
-	x.entries++
-	if x.entries > MaxArchiveEntries {
-		return errorf(ReasonTooLarge, "the archive holds more than %d files and folders", MaxArchiveEntries)
+	name, ok := entryName(entry.name)
+	if ok && x.take != nil && !x.take(name) {
+		return nil
 	}
 
-	name, ok := entryName(entry.name)
+	x.entries++
+	if x.entries > x.maxEntries {
+		return errorf(ReasonTooLarge, "the archive holds more than %d files and folders", x.maxEntries)
+	}
+
 	if !ok || entry.kind == TypeOther {
 		x.result.Refused++
 
@@ -629,8 +650,8 @@ func (l *limitedReader) Read(p []byte) (int, error) {
 	n, err := l.reader.Read(p)
 	l.extractor.bytes += int64(n)
 
-	if l.extractor.bytes > MaxExtractBytes {
-		return n, errorf(ReasonTooLarge, "the archive expands to more than %d GB", MaxExtractBytes>>30)
+	if l.extractor.bytes > l.extractor.maxBytes {
+		return n, errorf(ReasonTooLarge, "the archive expands to more than %d GB", l.extractor.maxBytes>>30)
 	}
 
 	return n, err

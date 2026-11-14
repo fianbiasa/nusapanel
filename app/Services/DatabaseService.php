@@ -65,7 +65,7 @@ class DatabaseService
                 ], $actor);
 
                 if ($newUser !== null) {
-                    $this->addUser($account, $newUser['name'], $newUser['password'], [$database], $actor);
+                    $this->addUser($account, $newUser['name'], DatabaseUser::hashPassword($newUser['password']), [$database], $actor);
                 }
 
                 return $database;
@@ -119,10 +119,36 @@ class DatabaseService
         $databases = $this->accountDatabases($account, $databaseIds);
 
         try {
-            return DB::transaction(fn (): DatabaseUser => $this->addUser($account, $name, $password, $databases, $actor));
+            return DB::transaction(fn (): DatabaseUser => $this->addUser($account, $name, DatabaseUser::hashPassword($password), $databases, $actor));
         } catch (UniqueConstraintViolationException) {
             throw ValidationException::withMessages([
                 'name' => __('This name is already in use.'),
+            ]);
+        }
+    }
+
+    /**
+     * Bring back a user from a backup, with the password it had (its
+     * stored hash) and access to the given databases of the account.
+     *
+     * @param  string  $name  The part after "<username>_", already validated.
+     * @param  list<int>  $databaseIds
+     *
+     * @throws ValidationException
+     */
+    public function restoreUser(User $account, string $name, string $passwordHash, array $databaseIds, User $actor): DatabaseUser
+    {
+        if (preg_match('/^\*[0-9A-F]{40}$/', $passwordHash) !== 1) {
+            throw ValidationException::withMessages(['backup' => __('The password of database user :name in the backup is damaged.', ['name' => $account->username.'_'.$name])]);
+        }
+
+        $databases = $this->accountDatabases($account, $databaseIds);
+
+        try {
+            return DB::transaction(fn (): DatabaseUser => $this->addUser($account, $name, $passwordHash, $databases, $actor));
+        } catch (UniqueConstraintViolationException) {
+            throw ValidationException::withMessages([
+                'backup' => __('This name is already in use.'),
             ]);
         }
     }
@@ -222,11 +248,11 @@ class DatabaseService
      *
      * @param  list<Database>  $databases
      */
-    private function addUser(User $account, string $name, string $password, array $databases, User $actor): DatabaseUser
+    private function addUser(User $account, string $name, string $passwordHash, array $databases, User $actor): DatabaseUser
     {
         $user = $account->databaseUsers()->make(['name' => $account->username.'_'.$name]);
         $user->forceFill([
-            'password_hash' => DatabaseUser::hashPassword($password),
+            'password_hash' => $passwordHash,
             'status' => DatabaseStatus::Pending,
         ])->save();
 

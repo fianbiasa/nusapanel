@@ -1,5 +1,6 @@
 import { usePage } from '@inertiajs/react';
 import {
+    Archive,
     Activity,
     ChartColumn,
     Boxes,
@@ -28,6 +29,7 @@ import {
     Users,
 } from 'lucide-react';
 import { dashboard } from '@/routes';
+import { index as backupsIndex } from '@/routes/backups';
 import { index as cronJobsIndex } from '@/routes/cron-jobs';
 import { index as databasesIndex } from '@/routes/databases';
 import { index as dnsIndex } from '@/routes/dns';
@@ -255,6 +257,11 @@ export function useNavigation(): {
             href: redirectsIndex(),
             icon: Milestone,
         };
+        const backups: NavItem = {
+            title: 'Backup',
+            href: backupsIndex(),
+            icon: Archive,
+        };
 
         sections.push({
             label: 'Menu',
@@ -269,6 +276,7 @@ export function useNavigation(): {
                 ssh,
                 cronJobs,
                 redirects,
+                backups,
                 ticketsItem,
             ],
         });

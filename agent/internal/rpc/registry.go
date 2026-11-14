@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"sort"
+	"time"
 )
 
 // HandlerFunc runs one agent method. Return an *Error for failures the caller
@@ -17,6 +18,11 @@ type Method struct {
 	// LockKey, when set, returns the account the call changes. Calls that
 	// return the same key run one at a time.
 	LockKey func(params json.RawMessage) (string, error)
+
+	// Timeout, when set, bounds the call instead of the server's
+	// CallTimeout: for the few methods that may run for hours, such as
+	// backups of large accounts.
+	Timeout time.Duration
 }
 
 // Registry is the closed set of methods the agent will run. There is no

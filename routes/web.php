@@ -17,6 +17,7 @@ use App\Http\Controllers\Admin\StatisticsController;
 use App\Http\Controllers\Admin\SystemFileController;
 use App\Http\Controllers\Admin\TaskController;
 use App\Http\Controllers\AnnouncementController;
+use App\Http\Controllers\BackupController;
 use App\Http\Controllers\CatchAllController;
 use App\Http\Controllers\CertificateRequestController;
 use App\Http\Controllers\CronJobController;
@@ -46,6 +47,7 @@ use App\Http\Controllers\SubdomainController;
 use App\Http\Controllers\TicketController;
 use App\Http\Controllers\UrlRedirectController;
 use App\Http\Controllers\WebmailController;
+use App\Services\BackupService;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Support\Facades\Route;
 
@@ -156,6 +158,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('dns/records/{dnsRecord}', [DnsController::class, 'update'])->name('dns.records.update');
         Route::delete('dns/records/{dnsRecord}', [DnsController::class, 'destroy'])->name('dns.records.destroy');
         Route::post('dns/{dnsZone}/reset', [DnsController::class, 'reset'])->name('dns.reset');
+        Route::get('backups', [BackupController::class, 'index'])->name('backups.index');
+        Route::post('backups', [BackupController::class, 'store'])->middleware('throttle:10,1,backups')->name('backups.store');
+        Route::post('backups/{name}/restore', [BackupController::class, 'restore'])->where('name', BackupService::NAME_PATTERN)->middleware('throttle:10,1,backups')->name('backups.restore');
+        Route::delete('backups/{name}', [BackupController::class, 'destroy'])->where('name', BackupService::NAME_PATTERN)->name('backups.destroy');
         Route::get('cron-jobs', [CronJobController::class, 'index'])->name('cron-jobs.index');
         Route::post('cron-jobs', [CronJobController::class, 'store'])->name('cron-jobs.store');
         Route::put('cron-jobs/email', [CronJobController::class, 'updateEmail'])->name('cron-jobs.email.update');

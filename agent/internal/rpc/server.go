@@ -207,7 +207,12 @@ func (s *Server) call(ctx context.Context, uid uint32, request Request) (respons
 		return response
 	}
 
-	callCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.CallTimeout)
+	timeout := s.CallTimeout
+	if method.Timeout > 0 {
+		timeout = method.Timeout
+	}
+
+	callCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
 	defer cancel()
 
 	started := time.Now()

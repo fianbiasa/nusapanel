@@ -45,6 +45,8 @@ final class FakeAgentClient implements AgentClient
             'mail.usage' => ['mailboxes' => [], 'simulated' => true],
             'usage.bandwidth' => ['web' => [], 'mail' => [], 'ftp' => [], 'cursor' => [], 'complete' => true, 'simulated' => true],
             'usage.resources' => $this->resourceReport(),
+            'backup.inspect' => $this->backupMeta((string) ($params['username'] ?? '')),
+            'backup.delete' => ['simulated' => true],
             'mail.queue_list' => $this->mailQueue(),
             'mail.queue_retry' => ['id' => $params['id'] ?? '', 'simulated' => true],
             'mail.queue_delete' => ['done' => $params['ids'] ?? [], 'failed' => [], 'simulated' => true],
@@ -306,6 +308,27 @@ final class FakeAgentClient implements AgentClient
             ->all();
 
         return ['databases' => $databases, 'simulated' => true];
+    }
+
+    /**
+     * The manifest and settings of a backup of the account, as if it had
+     * just been made with everything in it.
+     *
+     * @return array<string, mixed>
+     */
+    private function backupMeta(string $username): array
+    {
+        $databases = Database::query()
+            ->whereHas('account', fn ($query) => $query->where('username', $username))
+            ->orderBy('name')
+            ->pluck('name')
+            ->all();
+
+        return [
+            'manifest' => (string) json_encode(['format' => 1, 'username' => $username, 'created_at' => now()->toIso8601String(), 'files' => true, 'email' => true, 'databases' => $databases]),
+            'settings' => (string) json_encode(['format' => 1, 'mailboxes' => [], 'database_users' => []]),
+            'simulated' => true,
+        ];
     }
 
     /**

@@ -8,6 +8,8 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"slices"
+	"strings"
 )
 
 // HelperArg is the first argument that makes rayxod run as the files
@@ -43,6 +45,11 @@ const (
 	OpSearch     = "search"
 	OpDiskUsage  = "disk_usage"
 	OpSizes      = "sizes"
+
+	// Backups of the account's own home (see backup.go).
+	OpBackupPack    = "backup_pack"
+	OpBackupExtract = "backup_extract"
+	OpBackupMeta    = "backup_meta"
 )
 
 // Request is what the agent sends the helper on stdin.
@@ -235,6 +242,49 @@ func (p SearchParams) Check() error {
 type NoParams struct{}
 
 // Check has nothing to check.
+// BackupPackParams are the params of OpBackupPack.
+type BackupPackParams struct {
+	Paths       []string `json:"paths"`
+	Destination string   `json:"destination"`
+}
+
+func (p BackupPackParams) Check() error {
+	if err := checkPaths(p.Paths); err != nil {
+		return err
+	}
+
+	return CheckPath(p.Destination)
+}
+
+// BackupExtractParams are the params of OpBackupExtract: which top folders
+// of the archive are extracted, and where to.
+type BackupExtractParams struct {
+	Archive     string   `json:"archive"`
+	Destination string   `json:"destination"`
+	Include     []string `json:"include"`
+	Exclude     []string `json:"exclude"`
+}
+
+func (p BackupExtractParams) Check() error {
+	if err := CheckPath(p.Archive); err != nil {
+		return err
+	}
+
+	if p.Destination != "" {
+		if err := CheckPath(p.Destination); err != nil {
+			return err
+		}
+	}
+
+	for _, name := range append(slices.Clone(p.Include), p.Exclude...) {
+		if name == "" || strings.Contains(name, "/") || CheckPath(name) != nil {
+			return errorf(ReasonInvalid, "invalid folder name %q", name)
+		}
+	}
+
+	return nil
+}
+
 func (NoParams) Check() error {
 	return nil
 }
@@ -328,6 +378,14 @@ func Execute(home, op string, raw json.RawMessage, data *os.File) (any, error) {
 		return run(raw, func(p PathsParams) (any, error) { return h.DiskUsage(p.Paths), nil })
 	case OpSizes:
 		return run(raw, func(p PathParams) (any, error) { return h.Sizes(p.Path) })
+	case OpBackupPack:
+		return run(raw, func(p BackupPackParams) (any, error) { return h.BackupPack(p.Paths, p.Destination) })
+	case OpBackupExtract:
+		return run(raw, func(p BackupExtractParams) (any, error) {
+			return h.BackupExtract(p.Archive, p.Destination, p.Include, p.Exclude)
+		})
+	case OpBackupMeta:
+		return run(raw, func(p PathParams) (any, error) { return h.BackupMeta(p.Path) })
 	}
 
 	return nil, errorf(ReasonInvalid, "unknown operation %q", op)

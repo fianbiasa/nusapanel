@@ -28,7 +28,24 @@ class RunAgentTask implements ShouldQueue
 
     public int $timeout = 600;
 
-    public function __construct(public Task $task) {}
+    /**
+     * Tasks that may run for hours (a backup or restore of a large
+     * account), with how many seconds they may take; the agent bounds them
+     * the same way.
+     *
+     * @var array<string, int>
+     */
+    public const LONG_TASKS = [
+        'backup.create' => 6 * 3600,
+        'backup.restore' => 6 * 3600,
+    ];
+
+    public function __construct(public Task $task)
+    {
+        if (isset(self::LONG_TASKS[$task->action])) {
+            $this->timeout = self::LONG_TASKS[$task->action] + 300;
+        }
+    }
 
     public function retryUntil(): DateTimeInterface
     {
@@ -63,7 +80,7 @@ class RunAgentTask implements ShouldQueue
             $output = $agent->call(
                 $this->task->action,
                 $this->task->payload ?? [],
-                (int) config('agent.task_timeout'),
+                self::LONG_TASKS[$this->task->action] ?? (int) config('agent.task_timeout'),
             );
         } catch (AgentException $exception) {
             $this->task->markFailed($exception->getMessage());

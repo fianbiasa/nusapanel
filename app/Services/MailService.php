@@ -84,6 +84,31 @@ class MailService
      */
     public function createMailbox(User $account, int $domainId, string $localPart, string $password, ?int $quotaMb, User $actor): Mailbox
     {
+        return $this->addMailbox($account, $domainId, $localPart, Mailbox::hashPassword($password), $quotaMb, $actor);
+    }
+
+    /**
+     * Bring back a mailbox from a backup, with the password it had (its
+     * stored SHA512-CRYPT hash), on a domain of the account.
+     *
+     * @param  string  $localPart  Already validated.
+     *
+     * @throws ValidationException
+     */
+    public function restoreMailbox(User $account, int $domainId, string $localPart, string $passwordHash, ?int $quotaMb, User $actor): Mailbox
+    {
+        if (preg_match('#^\$6\$[./0-9A-Za-z]{1,16}\$[./0-9A-Za-z]{86}$#', $passwordHash) !== 1) {
+            throw ValidationException::withMessages(['backup' => __('The password of mailbox :address in the backup is damaged.', ['address' => $localPart])]);
+        }
+
+        return $this->addMailbox($account, $domainId, $localPart, $passwordHash, $quotaMb, $actor);
+    }
+
+    /**
+     * @throws ValidationException
+     */
+    private function addMailbox(User $account, int $domainId, string $localPart, string $passwordHash, ?int $quotaMb, User $actor): Mailbox
+    {
         $this->ensureAccountIsActive($account, 'local_part');
 
         $domain = collect($this->domainsOf($account))->firstWhere('id', $domainId);
@@ -93,13 +118,13 @@ class MailService
         }
 
         try {
-            return DB::transaction(function () use ($account, $domain, $localPart, $password, $quotaMb, $actor): Mailbox {
+            return DB::transaction(function () use ($account, $domain, $localPart, $passwordHash, $quotaMb, $actor): Mailbox {
                 $this->ensureLimitIsNotReached($account, $actor);
 
                 $mailDomain = $this->ensureMailDomain($domain, $account, $actor);
 
                 $mailbox = $mailDomain->mailboxes()->make(['local_part' => $localPart, 'quota_mb' => $quotaMb]);
-                $mailbox->forceFill(['password_hash' => Mailbox::hashPassword($password), 'status' => MailboxStatus::Active])->save();
+                $mailbox->forceFill(['password_hash' => $passwordHash, 'status' => MailboxStatus::Active])->save();
 
                 $this->audit->record('mailbox.created', $mailbox, [
                     'address' => "{$localPart}@{$domain->name}",
